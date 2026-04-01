@@ -5,7 +5,6 @@ from typing import Literal
 from pydantic_ai import ModelRetry, Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.agents.roles.code_review import CodeReviewAgentRole
 from devboard.agents.roles.codebase_investigation import CodebaseInvestigationAgentRole
@@ -109,17 +108,10 @@ async def execute_sub_agent_conversation(
             working_dir=working_dir,
         )
 
-        events = await execution_service.send_message_or_approval(prompt)
-
-        final_response = next(
-            (e for e in reversed(events) if isinstance(e, TextMessage) and e.role == MessageRole.AGENT),
-            None,
-        )
-        if final_response is None:
-            raise ValueError("Expected a TextMessage response from agent, but none was found in events")
+        result = await execution_service.send_message_or_approval(prompt)
 
         conversation_repo.commit()
-        return SubAgentResult(result=final_response.text_content, conversation_id=conversation.id)
+        return SubAgentResult(result=result.text_content, conversation_id=conversation.id)
     finally:
         _active_sub_agent_conversations.discard(conversation.id)
 

@@ -13,6 +13,9 @@ from devboard.mcp.mcp_tool_factory import MCPServerSetupFailure
 class ConcreteAgentExecution(AgentExecutionService):
     """Concrete subclass for testing the base class template method."""
 
+    async def _run_impl(self, message, extra_tools):
+        raise NotImplementedError  # not tested here
+
     async def _stream_events_impl(self, message_or_approvals, extra_tools):
         yield  # no-op: we only test the MCP setup failure path
 

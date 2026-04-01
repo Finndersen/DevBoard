@@ -201,6 +201,42 @@ class InternalAgent(BaseAgent):
 
         return
 
+    async def _build_message_history(self) -> list[ModelMessage]:
+        """Build full message history including initial system/context messages."""
+        initial_request = await self.build_system_and_context_messages()
+        dummy_response = ModelResponse(
+            parts=[TextPart(content="Understood, I will use the provided context and tools to answer your query.")]
+        )
+        return [initial_request, dummy_response] + self.conversation_history
+
+    async def run(self, prompt: str) -> TextMessage:
+        """Execute agent and return only the final text message without streaming intermediate events.
+
+        For non-interactive use only. Still updates conversation_history and last_run_result
+        so get_new_messages() works correctly.
+
+        Args:
+            prompt: The user prompt to send to the agent
+
+        Returns:
+            The final TextMessage from the agent
+        """
+        agent = self._create_agent()
+        message_history = await self._build_message_history()
+        result = await agent.run(user_prompt=prompt, message_history=message_history)
+
+        self.last_run_result = result
+        self.conversation_history.extend(result.new_messages())
+
+        assert isinstance(result.output, str), (
+            f"Expected text output for non-interactive run, got: {type(result.output)}"
+        )
+        return TextMessage(
+            role=MessageRole.AGENT,
+            text_content=result.output,
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
+
     async def stream_events(
         self,
         prompt_or_approvals: str | ToolApprovals,
@@ -213,37 +249,19 @@ class InternalAgent(BaseAgent):
         Yields:
             Conversation events as they are generated during agent execution
         """
-        # Build system prompt and context message dynamically each time
-        initial_request = await self.build_system_and_context_messages()
-        dummy_response = ModelResponse(
-            parts=[TextPart(content="Understood, I will use the provided context and tools to answer your query.")]
-        )
-        total_message_history: list[ModelMessage] = [
-            initial_request,
-            dummy_response,
-        ] + self.conversation_history
-
         agent = self._create_agent()
+        message_history = await self._build_message_history()
 
-        # Stream events from the agent
         if isinstance(prompt_or_approvals, ToolApprovals):
             deferred_results = self._convert_tool_approvals_to_deferred_results(prompt_or_approvals)
-            event_iterator = agent.run_stream_events(
-                deferred_tool_results=deferred_results,
-                message_history=total_message_history,
-            )
+            stream = agent.run_stream_events(deferred_tool_results=deferred_results, message_history=message_history)
         else:
-            event_iterator = agent.run_stream_events(
-                user_prompt=prompt_or_approvals,
-                message_history=total_message_history,
-            )
+            stream = agent.run_stream_events(user_prompt=prompt_or_approvals, message_history=message_history)
 
-        async for pydantic_event in event_iterator:
-            # Convert and yield event
+        async for pydantic_event in stream:
             for conv_event in self._convert_pydantic_event_to_conversation_events(pydantic_event):
                 yield conv_event
 
-        # Add final result event
         if self.last_run_result is None:
             raise ValueError("Agent execution did not produce a result")
 

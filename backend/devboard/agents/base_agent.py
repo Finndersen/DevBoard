@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 
 from pydantic_ai import Tool
 
-from devboard.agents.events import ConversationEvent
+from devboard.agents.events import ConversationEvent, TextMessage
 from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models.language_model import LanguageModelDB
@@ -65,22 +65,19 @@ class BaseAgent(ABC):
             return base_prompt + CUSTOM_INSTRUCTIONS_SEPARATOR + self.custom_instructions
         return base_prompt
 
-    async def run(self, prompt_or_approvals: str | ToolApprovals) -> list[ConversationEvent]:
-        """Execute agent with either a user message or tool approval results.
+    @abstractmethod
+    async def run(self, prompt: str) -> TextMessage:
+        """Execute agent and return only the final text message without streaming intermediate events.
+
+        For non-interactive use only (sub-agents, background runs). Agents with virtual tools
+        must use stream_events() for interactive workflows.
 
         Args:
-            prompt_or_approvals: Either a user message string or tool approval results
+            prompt: The user prompt to send to the agent
 
         Returns:
-            List of conversation events generated during agent execution
+            The final TextMessage from the agent
         """
-        events: list[ConversationEvent] = []
-
-        # Collect all events from stream
-        async for event in self.stream_events(prompt_or_approvals):
-            events.append(event)
-
-        return events
 
     @abstractmethod
     async def stream_events(self, prompt_or_approvals: str | ToolApprovals) -> AsyncIterator[ConversationEvent]:

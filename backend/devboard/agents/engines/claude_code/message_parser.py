@@ -171,6 +171,12 @@ class ClaudeResponseParser:
         re.DOTALL,
     )
 
+    # Pre-compiled fence pattern for code block detection
+    _fence_pattern = re.compile(r"^(.*?)```(?:json)?\s*\n([\s\S]*?)\n```([\s\S]*)$", re.DOTALL)
+
+    # Cached JSONDecoder instance
+    _json_decoder = json.JSONDecoder()
+
     @classmethod
     def _detect_virtual_tool_call(cls, text: str) -> VirtualToolCall | None:
         """Detect and parse a virtual tool call with optional preamble and postamble.
@@ -194,8 +200,7 @@ class ClaudeResponseParser:
         text = text.strip()
 
         # Match optional code fence: preamble before fence, JSON inside, postamble after
-        fence_pattern = re.compile(r"^(.*?)```(?:json)?\s*\n([\s\S]*?)\n```([\s\S]*)$", re.DOTALL)
-        fence_match = fence_pattern.match(text)
+        fence_match = cls._fence_pattern.match(text)
 
         if fence_match:
             preamble_raw = fence_match.group(1).strip()
@@ -213,7 +218,7 @@ class ClaudeResponseParser:
         # raw_decode extracts exactly one JSON value starting at brace_pos,
         # correctly handling any nesting depth without over-consuming
         try:
-            json_data, end_pos = json.JSONDecoder().raw_decode(json_region, brace_pos)
+            json_data, end_pos = cls._json_decoder.raw_decode(json_region, brace_pos)
         except json.JSONDecodeError:
             return None
 
@@ -267,6 +272,11 @@ class ClaudeResponseParser:
             One of: TextResponse, VirtualToolCall (valid or invalid), or VirtualToolResult
             Never raises exceptions - all errors create invalid VirtualToolCall instances
         """
+        # Fast path: both JSON tool calls ("tool_name":) and XML tool results (tool_name=) contain
+        # this substring, so its absence guarantees neither pattern can match.
+        if "tool_name" not in text:
+            return TextResponse(content=text)
+
         # Check for tool result XML marker first (takes precedence)
         tool_result_match = cls.TOOL_RESULT_PATTERN.search(text)
         if tool_result_match:

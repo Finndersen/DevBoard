@@ -186,7 +186,7 @@ class TestCreateCodebaseInvestigationTool:
             role=MessageRole.AGENT, text_content="Investigation result", timestamp=datetime.datetime.now()
         )
         mock_execution_service = AsyncMock()
-        mock_execution_service.send_message_or_approval.return_value = [final_message]
+        mock_execution_service.send_message_or_approval.return_value = final_message
 
         tool = make_investigation_tool(mock_codebases, mock_agent_config_service, mock_conversation_repo)
 
@@ -217,7 +217,7 @@ class TestCreateCodebaseInvestigationTool:
             role=MessageRole.AGENT, text_content="Follow-up result", timestamp=datetime.datetime.now()
         )
         mock_execution_service = AsyncMock()
-        mock_execution_service.send_message_or_approval.return_value = [final_message]
+        mock_execution_service.send_message_or_approval.return_value = final_message
 
         tool = make_investigation_tool(
             mock_codebases,
@@ -270,7 +270,7 @@ class TestCreateCodebaseInvestigationTool:
             role=MessageRole.AGENT, text_content="Investigation result", timestamp=datetime.datetime.now()
         )
         mock_execution_service = AsyncMock()
-        mock_execution_service.send_message_or_approval.return_value = [final_message]
+        mock_execution_service.send_message_or_approval.return_value = final_message
 
         tool = make_investigation_tool(mock_codebases, mock_agent_config_service, mock_conversation_repo)
 
@@ -319,7 +319,7 @@ class TestCreateCodebaseInvestigationTool:
 
         final_message = TextMessage(role=MessageRole.AGENT, text_content="Result", timestamp=datetime.datetime.now())
         mock_execution_service = AsyncMock()
-        mock_execution_service.send_message_or_approval.return_value = [final_message]
+        mock_execution_service.send_message_or_approval.return_value = final_message
 
         tool = make_investigation_tool(mock_codebases, mock_agent_config_service, mock_conversation_repo)
 
@@ -344,7 +344,7 @@ class TestCreateCodebaseInvestigationTool:
 
         final_message = TextMessage(role=MessageRole.AGENT, text_content="Result", timestamp=datetime.datetime.now())
         mock_execution_service = AsyncMock()
-        mock_execution_service.send_message_or_approval.return_value = [final_message]
+        mock_execution_service.send_message_or_approval.return_value = final_message
 
         tool = make_investigation_tool(mock_codebases, mock_agent_config_service, mock_conversation_repo)
 
@@ -562,7 +562,7 @@ class TestExecuteSubAgentConversation:
             role=MessageRole.AGENT, text_content="Sub-agent result", timestamp=datetime.datetime.now()
         )
         mock_execution_service = AsyncMock()
-        mock_execution_service.send_message_or_approval.return_value = [final_message]
+        mock_execution_service.send_message_or_approval.return_value = final_message
 
         with patch(
             "devboard.api.dependencies.factories.create_agent_execution_service",
@@ -625,7 +625,7 @@ class TestExecuteSubAgentConversation:
         """Test that conversation_id is removed from active set after successful execution."""
         final_message = TextMessage(role=MessageRole.AGENT, text_content="Done", timestamp=datetime.datetime.now())
         mock_execution_service = AsyncMock()
-        mock_execution_service.send_message_or_approval.return_value = [final_message]
+        mock_execution_service.send_message_or_approval.return_value = final_message
 
         with patch(
             "devboard.api.dependencies.factories.create_agent_execution_service",
@@ -701,7 +701,7 @@ class TestRunSubAgent:
             role=MessageRole.AGENT, text_content="Review result", timestamp=datetime.datetime.now()
         )
         mock_execution_service = AsyncMock()
-        mock_execution_service.send_message_or_approval.return_value = [final_message]
+        mock_execution_service.send_message_or_approval.return_value = final_message
 
         with patch(
             "devboard.api.dependencies.factories.create_agent_execution_service",
@@ -736,7 +736,7 @@ class TestRunSubAgent:
 
         final_message = TextMessage(role=MessageRole.AGENT, text_content="Done", timestamp=datetime.datetime.now())
         mock_execution_service = AsyncMock()
-        mock_execution_service.send_message_or_approval.return_value = [final_message]
+        mock_execution_service.send_message_or_approval.return_value = final_message
 
         # The created conversation needs parent_conversation_id=123 so execute_sub_agent_conversation passes validation
         mock_conv_repo.get_by_id.return_value.parent_conversation_id = 123
@@ -772,7 +772,7 @@ class TestRunSubAgent:
             role=MessageRole.AGENT, text_content="Resumed result", timestamp=datetime.datetime.now()
         )
         mock_execution_service = AsyncMock()
-        mock_execution_service.send_message_or_approval.return_value = [final_message]
+        mock_execution_service.send_message_or_approval.return_value = final_message
 
         with patch(
             "devboard.api.dependencies.factories.create_agent_execution_service",
@@ -871,7 +871,7 @@ class TestRunSubAgent:
 
         final_message = TextMessage(role=MessageRole.AGENT, text_content="Done", timestamp=datetime.datetime.now())
         mock_execution_service = AsyncMock()
-        mock_execution_service.send_message_or_approval.return_value = [final_message]
+        mock_execution_service.send_message_or_approval.return_value = final_message
 
         with patch(
             "devboard.api.dependencies.factories.create_agent_execution_service",
@@ -932,7 +932,7 @@ class TestRunSubAgent:
 
         final_message = TextMessage(role=MessageRole.AGENT, text_content="Done", timestamp=datetime.datetime.now())
         mock_execution_service = AsyncMock()
-        mock_execution_service.send_message_or_approval.return_value = [final_message]
+        mock_execution_service.send_message_or_approval.return_value = final_message
 
         sessions_before = set(_active_sub_agent_conversations)
 

@@ -14,6 +14,7 @@ from claude_agent_sdk import (
     ResultMessage,
     SystemMessage,
     TextBlock,
+    UserMessage,
 )
 from pydantic_ai import ModelRetry, Tool
 
@@ -38,6 +39,7 @@ from devboard.agents.events import (
     ConversationEvent,
     SystemEvent,
     SystemEventType,
+    TextMessage,
     ToolCall,
     ToolResult,
 )
@@ -213,59 +215,42 @@ class ClaudeCodeAgent(BaseAgent):
         """
         return self._virtual_tools.get(tool_name)
 
-    async def stream_events(
+    async def _stream_raw_messages(
         self,
-        prompt_or_approvals: str | ToolApprovals,
+        user_message: str,
         interrupt_event: asyncio.Event | None = None,
-    ) -> AsyncIterator[ConversationEvent]:
-        """Stream conversation events from agent execution.
+    ) -> AsyncGenerator[AssistantMessage | UserMessage | SystemEvent, None]:
+        """Stream raw SDK messages from Claude, handling API error retries internally.
 
-        Raises:
-            ValueError: If session_id missing when processing tool approvals,
-                       or if maximum retry attempts exceeded
+        Handles session_id updates, rate limit events, compaction notifications, and
+        API error retries. Yields raw AssistantMessage/UserMessage objects and SystemEvent
+        instances for system-level notifications.
+
+        Does NOT handle: tool approval processing or validation error retries.
+
+        Args:
+            user_message: The user message to send to Claude
+            interrupt_event: Optional asyncio.Event to signal graceful interrupt
+
+        Yields:
+            AssistantMessage or UserMessage (raw SDK objects) and SystemEvent for notifications
         """
-        # Check if this is tool approvals
-        if isinstance(prompt_or_approvals, ToolApprovals):
-            if not self.session_id:
-                raise ValueError("session_id required when processing tool approvals")
-
-            # Execute tools and format results
-            result_parts: list[str] = []
-            async for tool_event in self._process_tool_approvals(prompt_or_approvals):
-                if isinstance(tool_event, ToolResult):
-                    # Format result with outcome attribute
-                    result_parts.append(tool_event.result_content)
-
-                yield tool_event
-
-            # Send results back to Claude wrapped in XML markers
-            user_message = "\n".join(result_parts)
-        else:
-            user_message = prompt_or_approvals
-
-        current_message = user_message
-        # Create fresh client with current system prompt, document state, and session ID
         client = await self._create_client()
-
-        # Track API error retry attempts separately from validation error retries
+        current_message = user_message
         api_error_retry_count = 0
 
-        # Retry loop for handling virtual tool call validation errors
-        for attempt in range(MAX_RETRY_ATTEMPTS + 1):
-            # Capture the stream generator to ensure proper cleanup on exception
+        while True:
             stream_generator: AsyncGenerator[Message, None] = client.stream(  # type: ignore[assignment]
                 user_query=current_message, interrupt_event=interrupt_event
             )
             should_retry_api_error = False
             last_assistant_text: str | None = None
             try:
-                # Stream messages from the client
                 async for message in stream_generator:
                     if isinstance(message, ResultMessage):
                         # Check for retryable API error (check result content regardless of is_error flag)
                         if _should_retry_error_result(message.result) and api_error_retry_count < MAX_RETRY_ATTEMPTS:
                             api_error_retry_count += 1
-                            # Yield SystemEvent to notify about retry
                             yield SystemEvent(
                                 type=SystemEventType.API_ERROR_RETRY,
                                 data={
@@ -279,7 +264,6 @@ class ClaudeCodeAgent(BaseAgent):
                                 f"Retryable API error detected, retrying (attempt {api_error_retry_count}/{MAX_RETRY_ATTEMPTS})",
                                 error=message.result[:200] if message.result else None,
                             )
-                            # Set flag to retry with "continue" message
                             should_retry_api_error = True
                         else:
                             _verify_result_message(message.result, last_assistant_text)
@@ -326,35 +310,89 @@ class ClaudeCodeAgent(BaseAgent):
                         text_parts = [block.text for block in message.content if isinstance(block, TextBlock)]
                         if text_parts:
                             last_assistant_text = "\n".join(text_parts)
-
-                    # Convert normal Message events to ConversationEvent
-                    t0 = time.monotonic()
-                    conv_events = list(convert_claude_message_to_events(message, self._virtual_tools))
-                    convert_ms = (time.monotonic() - t0) * 1000
-                    if convert_ms > 20:
-                        logfire.warn(
-                            "Slow convert_claude_message_to_events",
-                            convert_ms=f"{convert_ms:.1f}",
-                            message_type=type(message).__name__,
-                        )
-                    for conv_event in conv_events:
-                        yield conv_event
+                        yield message
+                    elif isinstance(message, UserMessage):
+                        yield message
 
                 # Check if we need to retry due to API error
                 if should_retry_api_error:
                     current_message = "continue"
                     continue
 
+                # Success - exit loop
+                break
+
+            except BaseException:
+                # Ensure subprocess is terminated when the generator is abandoned for any other
+                # reason (GeneratorExit when the consumer closes this generator, unexpected exceptions, etc.)
+                await stream_generator.aclose()
+                raise
+
+    async def stream_events(
+        self,
+        prompt_or_approvals: str | ToolApprovals,
+        interrupt_event: asyncio.Event | None = None,
+    ) -> AsyncIterator[ConversationEvent]:
+        """Stream conversation events from agent execution.
+
+        Raises:
+            ValueError: If session_id missing when processing tool approvals,
+                       or if maximum retry attempts exceeded
+        """
+        # Check if this is tool approvals
+        if isinstance(prompt_or_approvals, ToolApprovals):
+            if not self.session_id:
+                raise ValueError("session_id required when processing tool approvals")
+
+            # Execute tools and format results
+            result_parts: list[str] = []
+            async for tool_event in self._process_tool_approvals(prompt_or_approvals):
+                if isinstance(tool_event, ToolResult):
+                    # Format result with outcome attribute
+                    result_parts.append(tool_event.result_content)
+
+                yield tool_event
+
+            # Send results back to Claude wrapped in XML markers
+            user_message = "\n".join(result_parts)
+        else:
+            user_message = prompt_or_approvals
+
+        current_message = user_message
+
+        # Retry loop for handling virtual tool call validation errors
+        for attempt in range(MAX_RETRY_ATTEMPTS + 1):
+            raw_stream: AsyncGenerator[AssistantMessage | UserMessage | SystemEvent, None] = self._stream_raw_messages(
+                current_message, interrupt_event
+            )  # type: ignore[assignment]
+            try:
+                async for raw_item in raw_stream:
+                    if isinstance(raw_item, SystemEvent):
+                        yield raw_item
+                        continue
+
+                    # AssistantMessage or UserMessage - convert to ConversationEvents
+                    t0 = time.monotonic()
+                    conv_events = list(convert_claude_message_to_events(raw_item, self._virtual_tools))
+                    convert_ms = (time.monotonic() - t0) * 1000
+                    if convert_ms > 20:
+                        logfire.warn(
+                            "Slow convert_claude_message_to_events",
+                            convert_ms=f"{convert_ms:.1f}",
+                            message_type=type(raw_item).__name__,
+                        )
+                    for conv_event in conv_events:
+                        yield conv_event
+
                 # Success - exit retry loop
                 break
 
             except InvalidVirtualToolCallError as e:
-                # Explicitly close the generator to prevent context manager cleanup in wrong async context
-                await stream_generator.aclose()
+                # Explicitly close the raw stream to ensure subprocess cleanup
+                await raw_stream.aclose()
 
                 # Validation failed during streaming - prepare retry message
                 if attempt < MAX_RETRY_ATTEMPTS:
-                    # Format error message for retry
                     current_message = format_tool_result(
                         tool_name=e.tool_name,
                         outcome=ToolCallOutcome.VALIDATION_ERROR,
@@ -369,10 +407,45 @@ class ClaudeCodeAgent(BaseAgent):
                     # Max retries exceeded
                     raise ValueError(f"Tool call validation failed after {MAX_RETRY_ATTEMPTS} attempts: {e}") from e
             except BaseException:
-                # Ensure subprocess is terminated when the generator is abandoned for any other
-                # reason (GeneratorExit when the consumer closes this generator, unexpected exceptions, etc.)
-                await stream_generator.aclose()
+                # Ensure subprocess is terminated when generator is abandoned
+                await raw_stream.aclose()
                 raise
+
+    async def run(self, prompt: str) -> TextMessage:
+        """Execute agent and return only the final text message without streaming intermediate events.
+
+        For non-interactive use only. Agents with virtual tools must use stream_events().
+
+        Args:
+            prompt: The user prompt to send to the agent
+
+        Returns:
+            The final TextMessage from the agent
+
+        Raises:
+            AssertionError: If agent has virtual tools configured, or if response does not
+                contain exactly one TextMessage
+            ValueError: If no AssistantMessage received from the agent
+        """
+        assert not self._virtual_tools, (
+            "run() is for non-interactive use; agents with virtual tools must use stream_events()"
+        )
+
+        last_assistant_message: AssistantMessage | None = None
+        # No explicit aclose() needed: stream is fully consumed by the for loop (unlike
+        # stream_events() which breaks out early). SystemEvents (retries, compaction) are
+        # intentionally ignored — non-interactive callers only need the final AssistantMessage.
+        async for raw_item in self._stream_raw_messages(prompt):
+            if isinstance(raw_item, AssistantMessage):
+                last_assistant_message = raw_item
+
+        if last_assistant_message is None:
+            raise ValueError("No AssistantMessage received from agent")
+
+        conv_events = list(convert_claude_message_to_events(last_assistant_message, {}))
+        text_messages = [e for e in conv_events if isinstance(e, TextMessage)]
+        assert len(text_messages) == 1, f"Expected exactly 1 TextMessage in agent response, got {len(text_messages)}"
+        return text_messages[0]
 
     async def _process_tool_approvals(
         self,

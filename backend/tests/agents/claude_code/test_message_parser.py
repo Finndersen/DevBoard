@@ -334,6 +334,86 @@ This might need a retry."""
         assert parsed.postamble is None
 
 
+class TestEarlyExitOptimization:
+    """Tests for the 'tool_name' early exit optimisation in parse_message_content()."""
+
+    def test_plain_text_takes_early_exit(self):
+        """Plain text without 'tool_name' should return TextResponse immediately."""
+        text = "I've analyzed the task and here's my recommendation."
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, TextResponse)
+        assert parsed.content == text
+
+    def test_code_block_without_tool_name_takes_early_exit(self):
+        """Code block without 'tool_name' should return TextResponse via early exit."""
+        text = "```python\ndef hello():\n    pass\n```"
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, TextResponse)
+        assert parsed.content == text
+
+    def test_json_without_tool_name_takes_early_exit(self):
+        """JSON object without 'tool_name' key should return TextResponse via early exit."""
+        text = '{"key": "value", "count": 42}'
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, TextResponse)
+        assert parsed.content == text
+
+    def test_tool_name_in_text_does_not_skip_detection(self):
+        """Text containing 'tool_name' as JSON key should still be parsed as VirtualToolCall."""
+        import json as _json
+
+        text = _json.dumps({"tool_name": "edit_task_specification", "arguments": {}})
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, VirtualToolCall)
+        assert parsed.tool_name == "edit_task_specification"
+
+    def test_tool_result_xml_still_parsed_when_tool_name_present(self):
+        """Tool result XML (which contains 'tool_name=') should still be parsed correctly."""
+        text = '<tool_call_result tool_name="my_tool" outcome="success">\nDone\n</tool_call_result>'
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, VirtualToolResult)
+        assert parsed.tool_name == "my_tool"
+        assert parsed.outcome == ToolCallOutcome.SUCCESS
+
+    def test_preamble_with_tool_name_in_json_still_detected(self):
+        """Message with preamble and 'tool_name' JSON key should still produce VirtualToolCall."""
+        import json as _json
+
+        tool_json = _json.dumps({"tool_name": "run_tests", "arguments": {"path": "."}})
+        text = f"Running tests now.\n\n{tool_json}"
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, VirtualToolCall)
+        assert parsed.tool_name == "run_tests"
+        assert parsed.preamble == "Running tests now."
+
+    def test_tool_name_substring_in_prose_is_safe_false_negative(self):
+        """Text containing 'tool_name' as prose (not JSON/XML) falls through to TextResponse.
+
+        The early exit is conservative: if 'tool_name' is present we do the full parse.
+        A false negative (skipping early exit when we could have taken it) is harmless —
+        the full parse still returns TextResponse when neither TOOL_RESULT_PATTERN nor
+        _detect_virtual_tool_call() matches.
+        """
+        text = "The variable tool_name is used in the function signature."
+
+        parsed = ClaudeResponseParser.parse_message_content(text)
+
+        assert isinstance(parsed, TextResponse)
+        assert parsed.content == text
+
+
 class TestTextResponseWithoutToolCall:
     """Tests for text responses that should not be parsed as tool calls."""
 

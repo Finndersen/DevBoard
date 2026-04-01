@@ -386,9 +386,16 @@ class TestRetryMechanism:
 
     @pytest.mark.asyncio
     @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
-    async def test_run_creates_new_client_each_time(self, mock_client_class, test_agent):
+    async def test_run_creates_new_client_each_time(self, mock_client_class):
         """Test that run() creates a new client on each call (for fresh system prompt)."""
-        # Create mock messages
+        model = LanguageModelDB(
+            provider=LLMProvider.ANTHROPIC,
+            name="claude-sonnet-4",
+            model_type=ModelType.STANDARD,
+            full_name="claude-sonnet-4-20250514",
+        )
+        agent = ClaudeCodeAgent(role=MockAgentRole(), model=model)
+
         text_content = "Success"
         assistant_msg = AssistantMessage(
             content=[TextBlock(text=text_content)],
@@ -397,7 +404,6 @@ class TestRetryMechanism:
         )
         result_msg = create_mock_result(text_content)
 
-        # Create mock client instance with stream method
         mock_client = MagicMock()
 
         async def mock_stream(user_query, **kwargs):
@@ -407,9 +413,7 @@ class TestRetryMechanism:
         mock_client.stream = mock_stream
         mock_client_class.return_value = mock_client
 
-        # Call run twice (using new parameter name)
-        await test_agent.run(prompt_or_approvals="Message 1")
-        await test_agent.run(prompt_or_approvals="Message 2")
+        await agent.run("Message 1")
+        await agent.run("Message 2")
 
-        # Verify client was created twice
         assert mock_client_class.call_count == 2

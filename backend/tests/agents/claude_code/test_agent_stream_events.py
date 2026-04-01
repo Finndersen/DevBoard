@@ -1345,3 +1345,92 @@ class TestStreamEventsThinkingBlock:
         assert isinstance(events[1], TextMessage)
         assert events[1].text_content == "Here is my answer."
         assert events[1].role == MessageRole.AGENT
+
+
+class TestClaudeCodeAgentRun:
+    """Tests for ClaudeCodeAgent.run() — non-interactive, returns final TextMessage only."""
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_run_returns_text_message(self, mock_client_class, agent_with_function_tool):
+        """Test that run() returns the final TextMessage for a simple text response."""
+        messages = create_mock_text_stream("The answer is 42.")
+        setup_mock_client(mock_client_class, messages)
+
+        result = await agent_with_function_tool.run("What is the answer?")
+
+        assert isinstance(result, TextMessage)
+        assert result.text_content == "The answer is 42."
+        assert result.role == MessageRole.AGENT
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_run_asserts_no_virtual_tools(self, mock_client_class, agent_with_virtual_tool):
+        """Test that run() raises AssertionError when agent has virtual tools configured."""
+        with pytest.raises(AssertionError, match="run\\(\\) is for non-interactive use"):
+            await agent_with_virtual_tool.run("Test prompt")
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_run_only_converts_final_assistant_message(self, mock_client_class, agent_with_function_tool):
+        """Test that run() only converts the last AssistantMessage (skips intermediate ones)."""
+        tool_use = create_mock_tool_use_block("search_code", "tool-1", {"query": "test"})
+        intermediate_assistant = AssistantMessage(content=[tool_use], model="claude-sonnet-4", parent_tool_use_id=None)
+        tool_result = ToolResultBlock(tool_use_id="tool-1", content="Results found", is_error=False)
+        user_msg = UserMessage(content=[tool_result])
+
+        final_messages = create_mock_text_stream("Analysis complete.")
+        setup_mock_client(mock_client_class, [intermediate_assistant, user_msg] + final_messages)
+
+        result = await agent_with_function_tool.run("Analyze code")
+
+        # Should return the final TextMessage from the last AssistantMessage
+        assert isinstance(result, TextMessage)
+        assert result.text_content == "Analysis complete."
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_run_captures_session_id(self, mock_client_class, agent_with_function_tool):
+        """Test that run() still captures session_id from SystemMessage."""
+        new_session_id = "run-session-789"
+        messages = create_mock_text_stream("Response", session_id=new_session_id)
+        setup_mock_client(mock_client_class, messages)
+
+        assert agent_with_function_tool.session_id is None
+
+        await agent_with_function_tool.run("Test prompt")
+
+        assert agent_with_function_tool.session_id == new_session_id
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_run_raises_if_no_assistant_message(self, mock_client_class, agent_with_function_tool):
+        """Test that run() raises ValueError if no AssistantMessage received."""
+        session_id = "test-session-123"
+        # Stream with only SystemMessage and ResultMessage, no AssistantMessage
+        messages = [
+            SystemMessage(subtype="session_start", data={"session_id": session_id}),
+            create_mock_result_message("", session_id=session_id),
+        ]
+        setup_mock_client(mock_client_class, messages)
+
+        with pytest.raises(ValueError, match="No AssistantMessage received from agent"):
+            await agent_with_function_tool.run("Test prompt")
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_run_asserts_exactly_one_text_message(self, mock_client_class, agent_with_function_tool):
+        """Test that run() raises AssertionError if the final AssistantMessage has no TextBlock."""
+        # An AssistantMessage with only a tool use block (no text) has no TextMessage in conv_events
+        tool_use = create_mock_tool_use_block("some_tool", "tool-1", {})
+        assistant_msg = AssistantMessage(content=[tool_use], model="claude-sonnet-4", parent_tool_use_id=None)
+        session_id = "test-session-123"
+        messages = [
+            SystemMessage(subtype="session_start", data={"session_id": session_id}),
+            assistant_msg,
+            create_mock_result_message("", session_id=session_id),
+        ]
+        setup_mock_client(mock_client_class, messages)
+
+        with pytest.raises(AssertionError, match="Expected exactly 1 TextMessage"):
+            await agent_with_function_tool.run("Test prompt")

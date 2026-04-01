@@ -10,7 +10,7 @@ import logfire
 from pydantic_ai import Tool
 
 from devboard.agents.conversation_history import ConversationHistoryService
-from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
+from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType, TextMessage
 from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models import Conversation
@@ -85,30 +85,35 @@ class AgentExecutionService(ABC):
 
     async def send_message_or_approval(
         self,
-        message_or_approvals: str | ToolApprovals,
-    ) -> list[ConversationEvent]:
-        """Send a message or process tool approvals through the agent.
+        message: str,
+    ) -> TextMessage:
+        """Send a message through the agent and return the final text response.
 
-        Wraps the streaming method to collect all events into a list.
+        For non-interactive use only (sub-agents, background runs). Uses agent.run()
+        to efficiently return only the final message without streaming.
 
         Args:
-            message_or_approvals: Either a user message string or ToolApprovals model
+            message: The user message string to send to the agent
 
         Returns:
-            List of conversation events generated during agent execution
+            The final TextMessage from the agent
         """
-        is_approval = isinstance(message_or_approvals, ToolApprovals)
-
         with logfire.span(
             "agent_execution.send_message_or_approval",
             conversation_id=self.conversation.id,
-            is_approval=is_approval,
         ):
-            # Collect all events from the stream
-            events: list[ConversationEvent] = []
-            async for event in self.stream_events_for_message_or_approval(message_or_approvals):
-                events.append(event)
-            return events
+            mcp_tool_configs = self._agent_config_service.get_enabled_mcp_tools(self.conversation.agent_role)
+            async with MCPToolFactory(mcp_tool_configs, oauth_service=self._oauth_service) as mcp_factory:
+                # MCP failures are logged (not returned) here because sub-agents have no UI
+                # to surface SystemEvents; the streaming path yields them as SystemEvents instead.
+                for failure in mcp_factory.setup_failures:
+                    logfire.warning(
+                        f"MCP server '{failure.server_name}' failed to connect: {failure.error}",
+                        server_name=failure.server_name,
+                        error=failure.error,
+                    )
+                extra_tools = self._additional_tools + mcp_factory.get_tools()
+                return await self._run_impl(message, extra_tools)
 
     async def stream_events_for_message_or_approval(
         self,
@@ -149,6 +154,25 @@ class AgentExecutionService(ABC):
                 extra_tools = self._additional_tools + mcp_factory.get_tools()
                 async for event in self._stream_events_impl(message_or_approvals, extra_tools):
                     yield event
+
+    @abstractmethod
+    async def _run_impl(
+        self,
+        message: str,
+        extra_tools: list[Tool],
+    ) -> TextMessage:
+        """Engine-specific non-streaming execution.
+
+        Subclasses implement this method to call agent.run() and return the final message.
+        MCP tool lifecycle is managed by the parent `send_message_or_approval()`.
+
+        Args:
+            message: The user message string to send to the agent
+            extra_tools: MCP server tools for the role plus any others added dynamically for the run
+
+        Returns:
+            The final TextMessage from the agent
+        """
 
     @abstractmethod
     async def _stream_events_impl(

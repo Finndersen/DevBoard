@@ -101,6 +101,28 @@ def setup_mock_pydantic_agent(mock_agent_class, events_to_yield):
     return mock_agent
 
 
+def setup_mock_pydantic_agent_run(mock_agent_class, output: str | DeferredToolRequests, new_messages=None):
+    """Helper to set up a mock PydanticAI Agent for non-streaming run().
+
+    Args:
+        mock_agent_class: The patched Agent class
+        output: The result output (str or DeferredToolRequests)
+        new_messages: Optional list of new messages returned by result.new_messages()
+
+    Returns:
+        Tuple of (mock_agent, mock_result)
+    """
+    mock_agent = Mock()
+    mock_result = create_mock_agent_run_result(output, new_messages)
+
+    async def mock_run(*args, **kwargs):
+        return mock_result
+
+    mock_agent.run = mock_run
+    mock_agent_class.return_value = mock_agent
+    return mock_agent, mock_result
+
+
 @pytest.fixture
 def mock_model() -> LanguageModelDB:
     """Create a mock language model."""
@@ -453,3 +475,114 @@ class TestStreamEventsEdgeCases:
         assert len(events) == 1
         assert isinstance(events[0], TextMessage)
         assert events[0].text_content == ""
+
+
+class TestRunMethod:
+    """Tests for InternalAgent.run() non-streaming method."""
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.internal.agent.Agent")
+    async def test_run_returns_text_message(self, mock_agent_class, agent_with_function_tool):
+        """Test that run() returns a TextMessage for string output."""
+        setup_mock_pydantic_agent_run(mock_agent_class, "Hello from agent")
+
+        result = await agent_with_function_tool.run("Test prompt")
+
+        assert isinstance(result, TextMessage)
+        assert result.role == MessageRole.AGENT
+        assert result.text_content == "Hello from agent"
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.internal.agent.Agent")
+    async def test_run_raises_for_deferred_tools(self, mock_agent_class, agent_with_approval_tool):
+        """Test that run() raises AssertionError for DeferredToolRequests (non-interactive only)."""
+        tool_call = ToolCallPart(
+            tool_call_id="call-123",
+            tool_name="edit_file",
+            args={"path": "/test.py", "content": "new content"},
+        )
+        deferred_requests = DeferredToolRequests(approvals=[tool_call])
+
+        setup_mock_pydantic_agent_run(mock_agent_class, deferred_requests)
+
+        with pytest.raises(AssertionError, match="Expected text output for non-interactive run"):
+            await agent_with_approval_tool.run("Edit the file")
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.internal.agent.Agent")
+    async def test_run_updates_conversation_history(self, mock_agent_class, agent_with_function_tool):
+        """Test that run() updates conversation_history with new messages."""
+        new_msg = ModelRequest(parts=[UserPromptPart(content="User query")])
+        setup_mock_pydantic_agent_run(mock_agent_class, "Response", new_messages=[new_msg])
+
+        assert len(agent_with_function_tool.conversation_history) == 0
+
+        await agent_with_function_tool.run("Test prompt")
+
+        assert len(agent_with_function_tool.conversation_history) == 1
+        assert agent_with_function_tool.conversation_history[0] == new_msg
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.internal.agent.Agent")
+    async def test_get_new_messages_works_after_run(self, mock_agent_class, agent_with_function_tool):
+        """Test that get_new_messages() returns correct messages after run()."""
+        new_msg = ModelRequest(parts=[UserPromptPart(content="User query")])
+        setup_mock_pydantic_agent_run(mock_agent_class, "Response", new_messages=[new_msg])
+
+        await agent_with_function_tool.run("Test prompt")
+
+        new_messages = agent_with_function_tool.get_new_messages()
+        assert len(new_messages) == 1
+        assert new_messages[0] == new_msg
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.internal.agent.Agent")
+    async def test_run_accumulates_conversation_history_across_calls(self, mock_agent_class, agent_with_function_tool):
+        """Test that run() accumulates conversation history across multiple calls."""
+        msg1 = ModelRequest(parts=[UserPromptPart(content="First message")])
+        msg2 = ModelRequest(parts=[UserPromptPart(content="Second message")])
+
+        mock_agent = Mock()
+        call_count = 0
+
+        async def mock_run(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return create_mock_agent_run_result("Response 1", new_messages=[msg1])
+            else:
+                return create_mock_agent_run_result("Response 2", new_messages=[msg2])
+
+        mock_agent.run = mock_run
+        mock_agent_class.return_value = mock_agent
+
+        await agent_with_function_tool.run("First prompt")
+        await agent_with_function_tool.run("Second prompt")
+
+        assert len(agent_with_function_tool.conversation_history) == 2
+        assert agent_with_function_tool.conversation_history[0] == msg1
+        assert agent_with_function_tool.conversation_history[1] == msg2
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.internal.agent.Agent")
+    async def test_run_passes_system_context_in_message_history(self, mock_agent_class, agent_with_function_tool):
+        """Test that run() passes system context in message_history to agent."""
+        call_kwargs = None
+
+        async def mock_run(*args, **kwargs):
+            nonlocal call_kwargs
+            call_kwargs = kwargs
+            return create_mock_agent_run_result("Response")
+
+        mock_agent = Mock()
+        mock_agent.run = mock_run
+        mock_agent_class.return_value = mock_agent
+
+        await agent_with_function_tool.run("Test prompt")
+
+        assert call_kwargs is not None
+        assert "message_history" in call_kwargs
+        message_history = call_kwargs["message_history"]
+        assert len(message_history) >= 2
+        assert isinstance(message_history[0], ModelRequest)
+        assert isinstance(message_history[1], ModelResponse)

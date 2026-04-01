@@ -8,7 +8,7 @@ from pydantic_ai.messages import ModelMessage
 
 from devboard.agents.engines.internal.agent import InternalAgent
 from devboard.agents.engines.internal.conversation_history import convert_messages_to_pydantic
-from devboard.agents.events import ConversationEvent
+from devboard.agents.events import ConversationEvent, TextMessage
 from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.api.schemas.agent_conversation import ToolApprovals
@@ -32,6 +32,27 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
     def conversation_id(self) -> int:
         """Get the conversation ID from the conversation instance."""
         return self.conversation.id
+
+    async def _run_impl(
+        self,
+        message: str,
+        extra_tools: list[Tool],
+    ) -> TextMessage:
+        """Non-streaming execution via InternalAgent.run().
+
+        Loads history, validates integrity, runs to completion, stores new messages.
+        """
+        existing_messages = self._get_message_history()
+        if existing_messages and existing_messages[-1].message_type == MessageType.TOOL_CALL:
+            delete_count = self.conversation_repo.delete_tool_approval_messages(self.conversation.id)
+            existing_messages = existing_messages[:-delete_count]
+            logfire.warning(f"Deleted {delete_count} messages due to missing tool approvals")
+
+        message_history = convert_messages_to_pydantic(existing_messages)
+        agent = self._get_agent(conversation_history=message_history, extra_tools=extra_tools)
+        result = await agent.run(message)
+        self._store_new_messages(agent.get_new_messages())
+        return result
 
     async def _stream_events_impl(
         self,

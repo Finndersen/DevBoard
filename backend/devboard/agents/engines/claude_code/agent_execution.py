@@ -7,7 +7,7 @@ import logfire
 from pydantic_ai import Tool
 
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
-from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType
+from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType, TextMessage
 from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.api.schemas.agent_conversation import ToolApprovals
@@ -35,6 +35,33 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
     def session_id(self) -> str | None:
         """Get the current Claude session ID from the conversation."""
         return self.conversation.external_session_id
+
+    async def _run_impl(
+        self,
+        message: str,
+        extra_tools: list[Tool],
+    ) -> TextMessage:
+        """Non-streaming execution via ClaudeCodeAgent.run().
+
+        Updates session_id in the database after the run completes.
+        """
+        agent = self._get_agent(extra_tools=extra_tools)
+
+        try:
+            result = await agent.run(message)
+        except FileNotFoundError:
+            logfire.warn(f"Session file not found during run for conversation {self.conversation.id}")
+            raise
+
+        if agent.session_id != self.conversation.external_session_id:
+            logfire.info(
+                f"Updating conversation {self.conversation.id} Session ID from "
+                f"{self.conversation.external_session_id} to {agent.session_id}"
+            )
+            self.conversation_repo.update_external_session_id(self.conversation, agent.session_id)
+            self.conversation_repo.commit()
+
+        return result
 
     async def _stream_events_impl(
         self,
