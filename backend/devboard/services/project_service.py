@@ -14,6 +14,7 @@ from devboard.db.repositories.document import DocumentRepository
 from devboard.db.repositories.project import ProjectRepository
 from devboard.services.conversation_service import ConversationService
 from devboard.services.project_directory import ensure_project_directory
+from devboard.services.system_event_emitter import SystemEventEmitter
 
 
 class ProjectService:
@@ -24,6 +25,7 @@ class ProjectService:
         conversation_service: ConversationService,
         document_repo: DocumentRepository,
         project_repo: ProjectRepository,
+        system_event_emitter: SystemEventEmitter,
     ):
         """Initialize service.
 
@@ -31,10 +33,12 @@ class ProjectService:
             conversation_service: Service for conversation operations
             document_repo: Repository for document operations
             project_repo: Repository for project operations
+            system_event_emitter: Emitter for system lifecycle events
         """
         self.conversation_service = conversation_service
         self.document_repo = document_repo
         self.project_repo = project_repo
+        self.system_event_emitter = system_event_emitter
 
     def create_project(
         self,
@@ -75,5 +79,7 @@ class ProjectService:
             parent_entity_id=project.id,
             agent_role=AgentRoleType.PROJECT,
         )
+
+        self.system_event_emitter.emit_project_created(project)
 
         return project

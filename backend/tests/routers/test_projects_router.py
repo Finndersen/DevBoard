@@ -16,6 +16,7 @@ from devboard.db.repositories import (
     ConversationRepository,
     CustomFieldRepository,
     DocumentRepository,
+    LogEntryRepository,
     ProjectRepository,
     TaskRepository,
 )
@@ -582,3 +583,77 @@ class TestProjectTasksRouter:
         response = client.post("/api/projects/999/tasks", json=api_task_data)
         assert response.status_code == 404
         assert response.json()["detail"] == "Project not found"
+
+
+class TestProjectEventEmission:
+    """Test that project lifecycle events are emitted as log entries."""
+
+    def _create_project(self, db_session):
+        """Helper to create a project directly in the DB."""
+        document_repo = DocumentRepository(db_session)
+        project_repo = ProjectRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(
+            name="Event Test Project",
+            description="A project for event testing",
+            specification=spec_doc,
+        )
+        db_session.commit()
+        return project
+
+    def test_patch_emits_project_updated_event(self, client, db_session):
+        """PATCH /projects/{id} emits a project.updated log entry."""
+        project = self._create_project(db_session)
+        log_entry_repo = LogEntryRepository(db_session)
+
+        response = client.patch(f"/api/projects/{project.id}", json={"name": "New Name"})
+        assert response.status_code == 200
+
+        entries = log_entry_repo.query(type_pattern="project.updated")
+        assert len(entries) >= 1
+        entry = next(e for e in entries if e.project_id == project.id)
+        assert entry.type == "project.updated"
+        assert entry.entry_metadata is not None
+        assert entry.entry_metadata["changed_fields"] == ["name"]
+
+    def test_patch_changed_fields_includes_specification(self, client, db_session):
+        """PATCH with specification update lists 'specification' in changed_fields."""
+        project = self._create_project(db_session)
+        log_entry_repo = LogEntryRepository(db_session)
+
+        response = client.patch(f"/api/projects/{project.id}", json={"specification": "New spec content"})
+        assert response.status_code == 200
+
+        entries = log_entry_repo.query(type_pattern="project.updated")
+        entry = next(e for e in entries if e.project_id == project.id)
+        assert entry.entry_metadata is not None
+        assert "specification" in entry.entry_metadata["changed_fields"]
+
+    def test_delete_emits_project_deleted_event(self, client, db_session):
+        """DELETE /projects/{id} emits a project.deleted log entry before deletion."""
+        project = self._create_project(db_session)
+        project_id = project.id
+        project_name = project.name
+        log_entry_repo = LogEntryRepository(db_session)
+
+        response = client.delete(f"/api/projects/{project_id}")
+        assert response.status_code == 200
+
+        entries = log_entry_repo.query(type_pattern="project.deleted")
+        assert len(entries) >= 1
+        entry = next(
+            e for e in entries if e.entry_metadata is not None and e.entry_metadata.get("project_name") == project_name
+        )
+        assert entry.type == "project.deleted"
+        assert entry.entry_metadata == {"project_name": project_name}
+
+    def test_delete_not_found_does_not_emit_event(self, client, db_session):
+        """DELETE /projects/{id} for nonexistent project returns 404 without emitting."""
+        log_entry_repo = LogEntryRepository(db_session)
+        entries_before = log_entry_repo.query(type_pattern="project.deleted")
+
+        response = client.delete("/api/projects/99999")
+        assert response.status_code == 404
+
+        entries_after = log_entry_repo.query(type_pattern="project.deleted")
+        assert len(entries_after) == len(entries_before)

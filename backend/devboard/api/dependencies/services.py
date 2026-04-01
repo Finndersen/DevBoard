@@ -46,6 +46,7 @@ from devboard.services.log_entry_service import LogEntryService
 from devboard.services.mcp_service import MCPService
 from devboard.services.oauth_service import OAuthService
 from devboard.services.project_service import ProjectService
+from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 from devboard.services.template_service import TemplateService
@@ -136,11 +137,19 @@ def get_workspace_service(
     )
 
 
+def get_system_event_emitter(
+    log_entry_repo: LogEntryRepository = Depends(get_log_entry_repository),
+) -> SystemEventEmitter:
+    """Get SystemEventEmitter instance."""
+    return SystemEventEmitter(log_entry_repo=log_entry_repo)
+
+
 def get_task_service(
     conversation_service: ConversationService = Depends(get_conversation_service),
     document_repo: DocumentRepository = Depends(get_document_repository),
     task_repo: TaskRepository = Depends(get_task_repository),
     custom_field_repo: CustomFieldRepository = Depends(get_custom_field_repository),
+    system_event_emitter: SystemEventEmitter = Depends(get_system_event_emitter),
 ):
     """Get TaskService instance."""
     return TaskService(
@@ -148,6 +157,7 @@ def get_task_service(
         document_repo=document_repo,
         task_repo=task_repo,
         custom_field_repo=custom_field_repo,
+        system_event_emitter=system_event_emitter,
     )
 
 
@@ -162,12 +172,14 @@ def get_project_service(
     conversation_service: ConversationService = Depends(get_conversation_service),
     document_repo: DocumentRepository = Depends(get_document_repository),
     project_repo: ProjectRepository = Depends(get_project_repository),
+    system_event_emitter: SystemEventEmitter = Depends(get_system_event_emitter),
 ):
     """Get ProjectService instance."""
     return ProjectService(
         conversation_service=conversation_service,
         document_repo=document_repo,
         project_repo=project_repo,
+        system_event_emitter=system_event_emitter,
     )
 
 

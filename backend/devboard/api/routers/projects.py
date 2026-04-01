@@ -14,6 +14,7 @@ from devboard.api.dependencies.repositories import (
 from devboard.api.dependencies.services import (
     get_conversation_service,
     get_project_service,
+    get_system_event_emitter,
     get_task_service,
 )
 from devboard.api.schemas import (
@@ -40,6 +41,7 @@ from devboard.db.repositories import (
 from devboard.db.repositories.conversation import NoActiveConversationError
 from devboard.services.conversation_service import ConversationService
 from devboard.services.project_service import ProjectService
+from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_service import TaskService
 
 router = APIRouter()
@@ -128,9 +130,11 @@ async def update_project(
     project_update: ProjectUpdate,
     project: Project = Depends(get_verified_project),
     document_repo: DocumentRepository = Depends(get_document_repository),
+    system_event_emitter: SystemEventEmitter = Depends(get_system_event_emitter),
 ):
     """Update a project and its specification content."""
     update_data = project_update.model_dump(exclude_unset=True)
+    changed_fields = list(update_data.keys())
 
     # Handle specification content update separately
     specification = update_data.pop("specification", None)
@@ -153,6 +157,8 @@ async def update_project(
     for field, value in update_data.items():
         setattr(project, field, value)
 
+    system_event_emitter.emit_project_updated(project, changed_fields)
+
     return project
 
 
@@ -160,12 +166,17 @@ async def update_project(
 async def delete_project(
     project_id: int,
     project_repo: ProjectRepository = Depends(get_project_repository),
+    system_event_emitter: SystemEventEmitter = Depends(get_system_event_emitter),
 ):
     """Delete a project."""
-    deleted = project_repo.delete_by_id(project_id)
-    if not deleted:
+    project = project_repo.get_by_id(project_id)
+    if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    project_name = project.name
+    system_event_emitter.emit_project_deleted(project_id, project_name)
+
+    project_repo.delete_by_id(project_id)
     project_repo.db.commit()
     return {"message": "Project deleted successfully", "success": True}
 

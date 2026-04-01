@@ -7,6 +7,7 @@ import pytest
 
 from devboard.db.models.codebase import MergeMethod
 from devboard.db.models.task import InvalidStatusTransitionError, Task, TaskStatus
+from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_git_service import MergeOutcome, MergeResult
 from devboard.services.task_service import TaskService
 
@@ -51,13 +52,22 @@ def mock_custom_field_repo():
 
 
 @pytest.fixture
-def task_service(mock_conversation_service, mock_document_repo, mock_task_repo, mock_custom_field_repo):
+def mock_system_event_emitter():
+    """Mock SystemEventEmitter."""
+    return MagicMock(spec=SystemEventEmitter)
+
+
+@pytest.fixture
+def task_service(
+    mock_conversation_service, mock_document_repo, mock_task_repo, mock_custom_field_repo, mock_system_event_emitter
+):
     """Create TaskService instance with mocked dependencies."""
     return TaskService(
         conversation_service=mock_conversation_service,
         document_repo=mock_document_repo,
         task_repo=mock_task_repo,
         custom_field_repo=mock_custom_field_repo,
+        system_event_emitter=mock_system_event_emitter,
     )
 
 
@@ -520,3 +530,100 @@ class TestUpdateTask:
         task_service.update_task(task, title="New Title")
 
         assert task.updated_at > old_time
+
+
+class TestEventEmission:
+    """Tests verifying SystemEventEmitter is called at the right lifecycle hooks."""
+
+    @pytest.mark.asyncio
+    async def test_create_task_emits_task_created(self, task_service, mock_task_repo, mock_system_event_emitter):
+        """create_task calls emit_task_created with the created task."""
+        mock_task = MagicMock(spec=Task)
+        mock_task.id = 1
+        mock_task_repo.create.return_value = mock_task
+        task_service.custom_field_repo.get_mandatory_fields.return_value = []
+
+        with patch(
+            "devboard.services.task_service.TaskGitService.create_task_branch",
+            new_callable=AsyncMock,
+        ):
+            result = await task_service.create_task(
+                project_id=1,
+                title="My Task",
+                base_branch="main",
+                codebase_id=10,
+            )
+
+        mock_system_event_emitter.emit_task_created.assert_called_once_with(result)
+
+    def test_transition_to_complete_emits_transition(self, task_service, mock_system_event_emitter):
+        """transition_to_complete emits task.completed with method='transition'."""
+        task = MagicMock(spec=Task)
+        task.verify_status_transition.return_value = None
+
+        task_service.transition_to_complete(task)
+
+        mock_system_event_emitter.emit_task_completed.assert_called_once_with(task, method="manual")
+
+    @pytest.mark.asyncio
+    async def test_complete_task_with_local_merge_emits_local_merge(self, task_service, mock_system_event_emitter):
+        """complete_task_with_local_merge emits task.completed with method='local_merge'."""
+        task = MagicMock(spec=Task)
+        task.id = 10
+        task.branch_name = "feature/test"
+        task.change_summary = None
+        task.verify_status_transition.return_value = None
+
+        mock_merge_result = MergeResult(
+            outcome=MergeOutcome.SUCCESS,
+            merge_method=MergeMethod.SQUASH,
+            message="Merged",
+            merge_commit="abc123",
+        )
+
+        with patch(
+            "devboard.services.task_service.TaskGitService.merge_task_feature_branch",
+            new_callable=AsyncMock,
+            return_value=mock_merge_result,
+        ):
+            await task_service.complete_task_with_local_merge(task, "Summary")
+
+        mock_system_event_emitter.emit_task_completed.assert_called_once_with(task, method="local_merge")
+
+    @pytest.mark.asyncio
+    async def test_complete_pr_task_emits_pr_merge(self, task_service, mock_system_event_emitter):
+        """complete_pr_task emits task.completed with method='pr_merge'."""
+        task = MagicMock(spec=Task)
+        task.id = 11
+        task.github_pr_number = 42
+        task.branch_name = "feature/pr-branch"
+        task.change_summary = None
+        task.codebase = MagicMock()
+        task.codebase.local_path = "/repo"
+        task.verify_status_transition.return_value = None
+
+        with patch("devboard.services.task_service.GitRepoIntegration") as mock_git_cls:
+            mock_git = mock_git_cls.return_value
+            mock_git.delete_branch = AsyncMock()
+            await task_service.complete_pr_task(task, "PR summary")
+
+        mock_system_event_emitter.emit_task_completed.assert_called_once_with(task, method="pr_merge")
+
+    @pytest.mark.asyncio
+    async def test_delete_task_emits_task_deleted_before_deletion(
+        self, task_service, mock_task_repo, mock_system_event_emitter
+    ):
+        """delete_task emits task.deleted before the hard delete."""
+        task = MagicMock(spec=Task)
+        task.id = 20
+        task.specification_id = None
+        task.implementation_plan_id = None
+
+        call_order = []
+        mock_system_event_emitter.emit_task_deleted.side_effect = lambda t: call_order.append("emit")
+        mock_task_repo.delete.side_effect = lambda t: call_order.append("delete")
+
+        await task_service.delete_task(task)
+
+        mock_system_event_emitter.emit_task_deleted.assert_called_once_with(task)
+        assert call_order.index("emit") < call_order.index("delete")

@@ -21,6 +21,7 @@ from devboard.db.repositories.document import DocumentRepository
 from devboard.db.repositories.task import TaskRepository
 from devboard.integrations.git import GitRepoIntegration
 from devboard.services.conversation_service import ConversationService
+from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_git_service import MergeOutcome, MergeResult, TaskGitService
 
 RECENT_COMPLETED_TASKS_LIMIT = 5
@@ -39,11 +40,13 @@ class TaskService:
         document_repo: DocumentRepository,
         task_repo: TaskRepository,
         custom_field_repo: CustomFieldRepository,
+        system_event_emitter: SystemEventEmitter,
     ):
         self.conversation_service = conversation_service
         self.document_repo = document_repo
         self.task_repo = task_repo
         self.custom_field_repo = custom_field_repo
+        self.system_event_emitter = system_event_emitter
 
     def _touch_updated_at(self, task: Task) -> None:
         task.updated_at = datetime.now(UTC)
@@ -127,6 +130,8 @@ class TaskService:
             agent_role=AgentRoleType.TASK_PLANNING,
         )
 
+        self.system_event_emitter.emit_task_created(task)
+
         return task
 
     def transition_to_implementing(self, task: Task) -> Task:
@@ -174,10 +179,13 @@ class TaskService:
         # Explicitly delete structured plan (also cascade-deleted by ORM, belt-and-suspenders)
         self.task_repo.delete_implementation_plan_structured(task)
 
-        # 2. Delete the task itself
+        # 2. Emit deleted event before hard delete (entity is still available for metadata)
+        self.system_event_emitter.emit_task_deleted(task)
+
+        # 3. Delete the task itself
         self.task_repo.delete(task)
 
-        # 3. Delete git branch if requested
+        # 4. Delete git branch if requested
         if delete_branch:
             try:
                 await TaskGitService.delete_task_branch(task, force=True)
@@ -224,6 +232,14 @@ class TaskService:
 
         return task
 
+    def _apply_complete_status(self, task: Task) -> Task:
+        """Validate and apply COMPLETE status without emitting an event."""
+        task.verify_status_transition(TaskStatus.COMPLETE)
+        task.status = TaskStatus.COMPLETE
+        self._touch_updated_at(task)
+        self.task_repo.update(task)
+        return task
+
     def transition_to_complete(self, task: Task) -> Task:
         """Transition task from IMPLEMENTING or PR_OPEN to COMPLETE status.
 
@@ -239,12 +255,8 @@ class TaskService:
         Raises:
             InvalidStatusTransitionError: If transition is not valid
         """
-        task.verify_status_transition(TaskStatus.COMPLETE)
-
-        # Update task status
-        task.status = TaskStatus.COMPLETE
-        self._touch_updated_at(task)
-        self.task_repo.update(task)
+        self._apply_complete_status(task)
+        self.system_event_emitter.emit_task_completed(task, method="manual")
         return task
 
     async def complete_task_with_local_merge(self, task: Task, change_summary: str) -> MergeResult:
@@ -285,7 +297,8 @@ class TaskService:
         else:
             self.document_repo.update_content(task.change_summary, change_summary)
 
-        self.transition_to_complete(task)
+        self._apply_complete_status(task)
+        self.system_event_emitter.emit_task_completed(task, method="local_merge")
         self.task_repo.commit()
         return merge_result
 
@@ -327,7 +340,8 @@ class TaskService:
             logfire.warning(f"Failed to delete local branch {task.branch_name}: {e}")
 
         # Transition to COMPLETE
-        self.transition_to_complete(task)
+        self._apply_complete_status(task)
+        self.system_event_emitter.emit_task_completed(task, method="pr_merge")
         self.task_repo.commit()
 
     def update_task(

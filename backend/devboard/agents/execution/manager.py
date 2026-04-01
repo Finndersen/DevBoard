@@ -22,7 +22,9 @@ from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.database import SessionLocal, get_db
 from devboard.db.models import Codebase, Conversation, Project, Task, TaskStatus
 from devboard.db.repositories import ConversationRepository
+from devboard.db.repositories.log_entry import LogEntryRepository
 from devboard.services.project_directory import ensure_project_directory
+from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_git.service import TaskBranchNotFoundException
 from devboard.services.workspace.types import AllSlotsLockedException, BranchInUseException, SetupCommandError
 
@@ -79,6 +81,7 @@ class ConversationExecutionManager:
                         )
                     )
                     self._executions.pop(conversation_id, None)
+                    await _emit_agent_run_event(conversation_id, execution.status, execution.error)
         finally:
             otel_context.detach(token)
 
@@ -193,6 +196,44 @@ class ConversationExecutionManager:
             logfire.info(f"Interrupt requested for conversation {conversation_id}")
             return True
         return False
+
+
+async def _emit_agent_run_event(
+    conversation_id: int,
+    status: ExecutionStatus,
+    error: str | None,
+) -> None:
+    """Emit an agent_run.completed LogEntry after execution finishes.
+
+    Opens its own DB session since _run_wrapper has no session context.
+    Errors are logged but not propagated — emission is a best-effort side effect.
+    """
+    db = SessionLocal()
+    try:
+        conversation = ConversationRepository(db).get_by_id(conversation_id)
+        if not conversation:
+            return
+        project_id: int | None = None
+        task_id: int | None = None
+        parent = conversation.get_parent_entity()
+        if isinstance(parent, Task):
+            task_id = parent.id
+            project_id = parent.project_id
+        elif isinstance(parent, Project):
+            project_id = parent.id
+        SystemEventEmitter(LogEntryRepository(db)).emit_agent_run_completed(
+            conversation_id=conversation_id,
+            agent_role=conversation.agent_role.value,
+            status=status.value,
+            project_id=project_id,
+            task_id=task_id,
+            error=error,
+        )
+        await asyncio.to_thread(db.commit)
+    except Exception:
+        logfire.exception(f"Failed to emit agent_run.completed for conversation {conversation_id}")
+    finally:
+        await asyncio.to_thread(db.close)
 
 
 async def _drain_events(
