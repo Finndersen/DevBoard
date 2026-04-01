@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
-import type { ConversationEvent, ToolResult, SystemEventType, MetaMessageType, LocalCommand } from '../../lib/api'
+import type { ConversationEvent, ConversationMessage, MetaMessage, ToolResult, SystemEventType, MetaMessageType, LocalCommand } from '../../lib/api'
 import {
   getUserMessageClasses,
   formatEventTiming,
   formatDelay,
 } from '../../styles/messageStyles'
+import Alert from '../ui/Alert'
 import { Markdown, Modal } from '../ui'
 import ToolCallDisplay from './ToolCallDisplay'
 import { getToolDisplayLabel, formatToolDisplayLabel } from '../../utils/toolDisplayLabels'
@@ -115,7 +116,7 @@ function getSystemEventLabel(type: SystemEventType, data?: Record<string, unknow
     case 'conversation_updated':
       return null // Don't show conversation_updated events
     case 'stream_error':
-      return `Error: ${(data?.message as string) ?? 'Unknown error'}`
+      return null // Rendered as a full Alert component below
     case 'compacting_conversation':
       return 'Compacting conversation...'
     case 'rate_limit': {
@@ -131,6 +132,103 @@ function getSystemEventLabel(type: SystemEventType, data?: Record<string, unknow
     default:
       return null
   }
+}
+
+function MessageEventDisplay({ message, isLatest, highlightRing, previousEventTimestamp }: { message: ConversationMessage; isLatest: boolean; highlightRing: string; previousEventTimestamp?: string | null }) {
+  const isUser = message.role === 'user'
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [needsExpansion, setNeedsExpansion] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isLatest || !contentRef.current) {
+      setNeedsExpansion(false)
+      return
+    }
+
+    const height = contentRef.current.scrollHeight
+    setNeedsExpansion(height > MAX_COLLAPSED_HEIGHT)
+  }, [message.text_content, isLatest])
+
+  if (isUser) {
+    return (
+      <div className={`${getUserMessageClasses()} ${highlightRing} relative flex group`}>
+        <div className="w-0.5 flex-shrink-0 rounded-full bg-blue-400 dark:bg-blue-500 mr-3" />
+        <div className="flex-1 min-w-0">
+          <div className="relative">
+            <div
+              ref={contentRef}
+              className={`overflow-hidden transition-all duration-300 ${
+                !isExpanded && needsExpansion ? 'max-h-60' : ''
+              }`}
+              style={{
+                maxHeight: !isExpanded && needsExpansion ? `${MAX_COLLAPSED_HEIGHT}px` : undefined
+              }}
+            >
+              <Markdown forceWhiteText={false}>
+                {message.text_content}
+              </Markdown>
+            </div>
+            {needsExpansion && !isExpanded && (
+              <div className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none bg-gradient-to-t from-gray-100 dark:from-[rgba(255,255,255,0.06)] to-transparent" />
+            )}
+          </div>
+          {needsExpansion && (
+            <div className="flex justify-center mt-1">
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-xs font-medium hover:underline text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                {isExpanded ? '▲ Show less' : '▼ Show more'}
+              </button>
+            </div>
+          )}
+        </div>
+        <span className="absolute bottom-1 right-1.5 bg-gray-100/85 dark:bg-gray-900/88 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`relative w-full text-sm ${highlightRing} group`}>
+      <Markdown>{message.text_content}</Markdown>
+      <span className="absolute bottom-1 right-1.5 bg-gray-100/85 dark:bg-gray-900/88 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
+      </span>
+    </div>
+  )
+}
+
+function MetaMessageDisplay({ message, highlightRing }: { message: MetaMessage; highlightRing: string }) {
+  const metaLabels: Record<MetaMessageType, string> = {
+    compact_summary: 'Conversation compacted',
+    skill_content: 'Skill activated',
+  }
+  const label = metaLabels[message.meta_type]
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
+  return (
+    <div className="flex w-full justify-center my-1">
+      <button
+        onClick={() => setIsModalOpen(true)}
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-blue-500/10 border border-blue-500/30 text-blue-400 hover:bg-blue-500/25 hover:border-blue-400/60 hover:text-blue-300 transition-colors cursor-pointer ${highlightRing}`}
+        title="Click to view details"
+      >
+        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+        </svg>
+        <span>{label}</span>
+        <svg className="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+      </button>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={label} maxWidth="6xl">
+        <Markdown>{message.text_content}</Markdown>
+      </Modal>
+    </div>
+  )
 }
 
 interface ConversationMessageProps {
@@ -149,72 +247,7 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
   const highlightRing = isHighlighted ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''
   // Handle different event types
   if (message.event_type === 'message') {
-    const isUser = message.role === 'user'
-    const [isExpanded, setIsExpanded] = useState(false)
-    const [needsExpansion, setNeedsExpansion] = useState(false)
-    const contentRef = useRef<HTMLDivElement>(null)
-
-    useEffect(() => {
-      // Don't check for expansion if this is the latest message
-      if (isLatest || !contentRef.current) {
-        setNeedsExpansion(false)
-        return
-      }
-
-      const height = contentRef.current.scrollHeight
-      setNeedsExpansion(height > MAX_COLLAPSED_HEIGHT)
-    }, [message.text_content, isLatest])
-
-    if (isUser) {
-      return (
-        <div className={`${getUserMessageClasses()} ${highlightRing} relative flex group`}>
-          <div className="w-0.5 flex-shrink-0 rounded-full bg-blue-400 dark:bg-blue-500 mr-3" />
-          <div className="flex-1 min-w-0">
-            <div className="relative">
-              <div
-                ref={contentRef}
-                className={`overflow-hidden transition-all duration-300 ${
-                  !isExpanded && needsExpansion ? 'max-h-60' : ''
-                }`}
-                style={{
-                  maxHeight: !isExpanded && needsExpansion ? `${MAX_COLLAPSED_HEIGHT}px` : undefined
-                }}
-              >
-                <Markdown forceWhiteText={false}>
-                  {message.text_content}
-                </Markdown>
-              </div>
-              {needsExpansion && !isExpanded && (
-                <div className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none bg-gradient-to-t from-gray-100 dark:from-[rgba(255,255,255,0.06)] to-transparent" />
-              )}
-            </div>
-            {needsExpansion && (
-              <div className="flex justify-center mt-1">
-                <button
-                  onClick={() => setIsExpanded(!isExpanded)}
-                  className="text-xs font-medium hover:underline text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                >
-                  {isExpanded ? '▲ Show less' : '▼ Show more'}
-                </button>
-              </div>
-            )}
-          </div>
-          <span className="absolute bottom-1 right-1.5 bg-gray-100/85 dark:bg-gray-900/88 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
-            {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
-          </span>
-        </div>
-      )
-    }
-
-    // Agent message — plain text, no bubble
-    return (
-      <div className={`relative w-full text-sm ${highlightRing} group`}>
-        <Markdown>{message.text_content}</Markdown>
-        <span className="absolute bottom-1 right-1.5 bg-gray-100/85 dark:bg-gray-900/88 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
-          {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
-        </span>
-      </div>
-    )
+    return <MessageEventDisplay message={message} isLatest={isLatest} highlightRing={highlightRing} previousEventTimestamp={previousEventTimestamp} />
   }
 
   if (message.event_type === 'tool_call') {
@@ -277,6 +310,19 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
 
   // System events - render as inline badges (only for specific event types)
   if (message.event_type === 'system') {
+    if (message.type === 'stream_error') {
+      const errorMessage = (message.data?.message as string) ?? 'An unknown error occurred'
+      const errorCode = message.data?.error_code as string | undefined
+      return (
+        <div className="w-full px-4 my-2">
+          <Alert variant="error" title="Agent error">
+            <p>{errorMessage}</p>
+            {errorCode && <p className="mt-1 opacity-70 text-xs font-mono">{errorCode}</p>}
+          </Alert>
+        </div>
+      )
+    }
+
     const label = getSystemEventLabel(message.type, message.data)
 
     // Only render badge if we have a label for this event type
@@ -318,33 +364,7 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
 
   // Meta messages (compact summaries, skill content) - render as clickable indicator that opens a modal
   if (message.event_type === 'meta_message') {
-    const metaLabels: Record<MetaMessageType, string> = {
-      compact_summary: 'Conversation compacted',
-      skill_content: 'Skill activated',
-    }
-    const label = metaLabels[message.meta_type]
-    const [isModalOpen, setIsModalOpen] = useState(false)
-
-    return (
-      <div className="flex w-full justify-center my-1">
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-blue-500/10 border border-blue-500/30 text-blue-400 hover:bg-blue-500/25 hover:border-blue-400/60 hover:text-blue-300 transition-colors cursor-pointer ${highlightRing}`}
-          title="Click to view details"
-        >
-          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-          </svg>
-          <span>{label}</span>
-          <svg className="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-          </svg>
-        </button>
-        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={label} maxWidth="6xl">
-          <Markdown>{message.text_content}</Markdown>
-        </Modal>
-      </div>
-    )
+    return <MetaMessageDisplay message={message} highlightRing={highlightRing} />
   }
 
   // Thinking events - render as subtle muted italic annotation
