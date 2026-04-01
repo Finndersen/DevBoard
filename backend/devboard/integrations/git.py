@@ -1335,11 +1335,12 @@ class GitRepoIntegration:
         await self.run_git_command(["merge", "--ff-only", source])
         return await self.run_git_command(["rev-parse", "HEAD"])
 
-    async def commit(self, message: str) -> str:
+    async def commit(self, message: str, no_verify: bool = False) -> str:
         """Create a commit with staged changes.
 
         Args:
             message: Commit message
+            no_verify: Skip pre-commit and commit-msg hooks (use when squashing already-verified commits)
 
         Returns:
             Hash of the new commit
@@ -1347,5 +1348,45 @@ class GitRepoIntegration:
         Raises:
             ShellCommandExecutionError: If commit fails
         """
-        await self.run_git_command(["commit", "-m", message])
+        args = ["commit", "-m", message]
+        if no_verify:
+            args.append("--no-verify")
+        await self.run_git_command(args)
+        return await self.run_git_command(["rev-parse", "HEAD"])
+
+    async def soft_reset(self, commit: str) -> None:
+        """Reset HEAD to a commit, keeping all changes staged.
+
+        Args:
+            commit: Commit hash or ref to reset to
+
+        Raises:
+            ShellCommandExecutionError: If reset fails
+        """
+        await self.run_git_command(["reset", "--soft", commit])
+
+    async def rebase_onto(self, onto: str) -> str:
+        """Rebase the currently checked-out branch onto the given ref.
+
+        Unlike rebase_branch, this operates on the current branch in-place,
+        making it safe to use from within a worktree.
+
+        Args:
+            onto: Branch or ref to rebase onto
+
+        Returns:
+            New HEAD commit hash after successful rebase
+
+        Raises:
+            RebaseConflictError: If rebase encounters conflicts
+            ShellCommandExecutionError: If rebase fails for other reasons
+        """
+        try:
+            await self.run_git_command(["rebase", onto])
+        except ShellCommandExecutionError as e:
+            error_msg = str(e).lower()
+            if "conflict" in error_msg or "could not apply" in error_msg:
+                await self.run_git_command(["rebase", "--abort"], raise_on_error=False)
+                raise RebaseConflictError(f"Rebase onto {onto} encountered conflicts") from e
+            raise
         return await self.run_git_command(["rev-parse", "HEAD"])
