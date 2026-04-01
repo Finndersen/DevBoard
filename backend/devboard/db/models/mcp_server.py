@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel
-from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Enum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -58,7 +58,7 @@ class MCPServerConfig(Base):
     config_json: Mapped[dict[str, Any]] = mapped_column(JSON)
 
     # Verification status fields
-    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_verified_at: Mapped[datetime | None] = mapped_column(nullable=True)
     last_verified_success: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     last_verified_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
