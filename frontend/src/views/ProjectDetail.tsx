@@ -16,6 +16,7 @@ import { useViewTitle } from '../hooks/useViewTitle'
 import { useToolResultHandler } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
 import { useUIStore } from '../stores/uiStore'
+import { useConversationStore } from '../stores/conversationStore'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { useNotificationStore } from '../stores/notificationStore'
 import { useIsNarrowContainer } from '../hooks/useMediaQuery'
@@ -31,6 +32,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const location = useLocation()
   const { setProject: setStoreProject } = useDataStore()
   const { addNotification } = useNotificationStore()
+  const removeConversation = useConversationStore(s => s.removeConversation)
 
   // Update tab title when project data is loaded
   useViewTitle('project', id)
@@ -256,6 +258,8 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const handleDeleteConversation = useCallback(async (conversationId: number) => {
     try {
       await apiClient.deleteConversation(conversationId)
+      removeConversation(conversationId)
+      invalidateConversations()
       // If we deleted the active conversation, switch to most recent
       if (conversationId === activeConversationId) {
         // Refetch project to get the new default
@@ -268,7 +272,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
       console.error('Failed to delete conversation:', error)
       addNotification({ type: 'error', message: 'Failed to delete conversation' })
     }
-  }, [activeConversationId, id, addNotification, setProject, updateConversationUrl])
+  }, [activeConversationId, id, addNotification, setProject, updateConversationUrl, removeConversation, invalidateConversations])
 
   // Handle renaming a conversation
   const handleRenameConversation = useCallback(async (conversationId: number, title: string) => {

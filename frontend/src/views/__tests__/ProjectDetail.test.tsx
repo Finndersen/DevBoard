@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { screen, waitFor, render as rtlRender } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { BrowserRouter } from 'react-router-dom'
@@ -9,6 +9,8 @@ import { PendingMessagesProvider } from '../../contexts/PendingMessagesContext'
 import { DarkModeProvider } from '../../contexts/DarkModeContext'
 import ConversationEventHandlerProvider from '../../components/chat/ConversationEventHandlerProvider'
 import ProjectDetail from '../ProjectDetail'
+import { useUIStore } from '../../stores/uiStore'
+import { useConversationStore } from '../../stores/conversationStore'
 
 vi.mock('../../contexts/ViewContext', () => ({
   useViewContext: () => ({ viewId: 'test-view', viewType: 'project', entityId: '1' })
@@ -214,5 +216,135 @@ describe('ProjectDetail', () => {
     await waitFor(() => {
       expect(screen.getByPlaceholderText('Ask a question about this project...')).toBeInTheDocument()
     }, { timeout: 3000 })
+  })
+
+  describe('handleDeleteConversation', () => {
+    const mockConv1 = {
+      id: 1,
+      title: 'Conversation 1',
+      agent_role: 'project',
+      engine: 'internal',
+      model_id: 'openai:gpt-4',
+      parent_entity_type: 'project',
+      parent_entity_id: 1,
+      is_active: true,
+      last_activity_at: '2024-01-01T00:00:00Z',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    }
+    const mockConv2 = {
+      id: 2,
+      title: 'Conversation 2',
+      agent_role: 'project',
+      engine: 'internal',
+      model_id: 'openai:gpt-4',
+      parent_entity_type: 'project',
+      parent_entity_id: 1,
+      is_active: true,
+      last_activity_at: '2024-01-02T00:00:00Z',
+      created_at: '2024-01-02T00:00:00Z',
+      updated_at: '2024-01-02T00:00:00Z',
+    }
+
+    let mockRemoveConversation: ReturnType<typeof vi.fn>
+    let mockInvalidateConversations: ReturnType<typeof vi.fn>
+    let originalRemoveConversation: (conversationId: number) => void
+    let originalInvalidateConversations: () => void
+
+    beforeEach(() => {
+      mockRemoveConversation = vi.fn()
+      mockInvalidateConversations = vi.fn()
+
+      originalRemoveConversation = useConversationStore.getState().removeConversation
+      originalInvalidateConversations = useUIStore.getState().invalidateConversations
+
+      useConversationStore.setState({ removeConversation: mockRemoveConversation })
+      useUIStore.setState({ invalidateConversations: mockInvalidateConversations })
+
+      server.use(
+        http.get('*/api/projects/1/conversations', () => {
+          return HttpResponse.json([mockConv1, mockConv2])
+        }),
+        http.delete('*/api/conversations/:id', () => new HttpResponse(null, { status: 204 }))
+      )
+    })
+
+    afterEach(() => {
+      useConversationStore.setState({ removeConversation: originalRemoveConversation })
+      useUIStore.setState({ invalidateConversations: originalInvalidateConversations })
+    })
+
+    it('deleting a non-active conversation calls invalidateConversations and removeConversation', async () => {
+      const user = userEvent.setup()
+
+      renderProjectDetail()
+      await waitFor(() => expect(screen.getByText('Test Project')).toBeInTheDocument())
+
+      // Open conversation selector dropdown (trigger shows active conversation title)
+      const selectorButton = await screen.findByRole('button', { name: /conversation 1/i })
+      await user.click(selectorButton)
+
+      // Click delete on conversation 2 (non-active, second in list)
+      const deleteButtons = await screen.findAllByTitle('Delete')
+      await user.click(deleteButtons[1])
+
+      await waitFor(() => {
+        expect(mockRemoveConversation).toHaveBeenCalledWith(2)
+        expect(mockInvalidateConversations).toHaveBeenCalled()
+      })
+    })
+
+    it('deleting the active conversation invalidates, cleans store, and switches to default', async () => {
+      const user = userEvent.setup()
+      const mockProjectAfterDelete = createMockProject({ id: 1, name: 'Test Project', default_conversation_id: 2 })
+
+      let projectFetchCount = 0
+      server.use(
+        http.get('*/api/projects/:id', () => {
+          projectFetchCount++
+          if (projectFetchCount > 1) return HttpResponse.json(mockProjectAfterDelete)
+          return HttpResponse.json(mockProject)
+        })
+      )
+
+      renderProjectDetail()
+      await waitFor(() => expect(screen.getByText('Test Project')).toBeInTheDocument())
+
+      // Open selector and delete the active conversation (id=1)
+      const selectorButton = await screen.findByRole('button', { name: /conversation 1/i })
+      await user.click(selectorButton)
+
+      const deleteButtons = await screen.findAllByTitle('Delete')
+      await user.click(deleteButtons[0])
+
+      await waitFor(() => {
+        expect(mockRemoveConversation).toHaveBeenCalledWith(1)
+        expect(mockInvalidateConversations).toHaveBeenCalled()
+      })
+    })
+
+    it('failed deletion does not call invalidateConversations or removeConversation', async () => {
+      const user = userEvent.setup()
+
+      server.use(
+        http.delete('*/api/conversations/:id', () => new HttpResponse(null, { status: 500 }))
+      )
+
+      renderProjectDetail()
+      await waitFor(() => expect(screen.getByText('Test Project')).toBeInTheDocument())
+
+      const selectorButton = await screen.findByRole('button', { name: /conversation 1/i })
+      await user.click(selectorButton)
+
+      const deleteButtons = await screen.findAllByTitle('Delete')
+      await user.click(deleteButtons[0])
+
+      // Give async handler time to complete and confirm no calls were made
+      await waitFor(() => expect(screen.getByText('Test Project')).toBeInTheDocument())
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      expect(mockInvalidateConversations).not.toHaveBeenCalled()
+      expect(mockRemoveConversation).not.toHaveBeenCalled()
+    })
   })
 })
