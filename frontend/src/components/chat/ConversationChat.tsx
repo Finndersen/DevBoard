@@ -35,6 +35,7 @@ interface ConversationChatProps {
   onInitialMessageSent?: () => void
   workingDir?: string
   isDisabled?: boolean
+  disabledMessage?: string
   engine?: string
 }
 
@@ -48,6 +49,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
   onInitialMessageSent,
   workingDir,
   isDisabled = false,
+  disabledMessage,
   engine
 }, ref) => {
   // Track conversationId changes for debugging
@@ -269,7 +271,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
       <div className="border-t border-gray-200 dark:border-gray-600 p-3 flex-shrink-0">
         {isDisabled ? (
           <div className="text-center text-gray-500 dark:text-gray-400 py-3 text-sm">
-            Chat disabled — task is complete
+            {disabledMessage ?? "Chat disabled — task is complete"}
           </div>
         ) : (
           <>

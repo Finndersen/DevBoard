@@ -56,6 +56,7 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
   onNewConversation,
 }, ref) => {
   const [conversation, setConversation] = useState<ConversationResponse | null>(null)
+  const [sessionExpired, setSessionExpired] = useState(false)
   const conversationChatRef = useRef<ConversationChatHandle>(null)
 
   // Forward the ref to ConversationChat
@@ -78,6 +79,7 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
     // Handle session_expired - clear session ID
     if (event.type === 'session_expired') {
       setConversation(prev => prev ? { ...prev, external_session_id: null } : null)
+      setSessionExpired(true)
       return
     }
 
@@ -95,6 +97,8 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
   // Fetch conversation details to get agent role
   useEffect(() => {
     if (!conversationId) return
+
+    setSessionExpired(false)
 
     const fetchConversation = async () => {
       try {
@@ -217,7 +221,14 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
               initialMessage={initialMessage}
               onInitialMessageSent={onInitialMessageSent}
               workingDir={workingDir}
-              isDisabled={isDisabled}
+              isDisabled={isDisabled || sessionExpired}
+              disabledMessage={
+                sessionExpired
+                  ? "Session expired — clear this conversation to start a new one"
+                  : isDisabled
+                    ? "Chat disabled — task is complete"
+                    : undefined
+              }
               engine={conversation?.engine}
             />
           ) : (
