@@ -9,7 +9,7 @@ from devboard.db.models.task import Task
 from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.types import BranchComparison, BranchReleaseResult, GitLogEntry
 from devboard.services.task_git.merge_strategy import MergeCommitMerge, RebaseMerge, SquashMerge
-from devboard.services.task_git.service import TaskGitService
+from devboard.services.task_git.service import BaseWorkdirOverlapError, TaskGitService
 from devboard.services.task_git.types import MergeOutcome, MergeResult
 
 
@@ -83,7 +83,7 @@ def mock_worktree_git():
 
 @pytest.mark.asyncio
 async def test_merge_blocked_when_uncommitted_changes_overlap_with_feature(mock_task, mock_git, mock_worktree_git):
-    """merge_task_feature_branch returns ERROR when uncommitted changes overlap with feature branch."""
+    """merge_task_feature_branch raises BaseWorkdirOverlapError when uncommitted changes overlap with feature branch."""
     mock_git.get_checked_out_location.return_value = "/worktrees/main"
     mock_git.get_changed_file_paths = AsyncMock(return_value=["src/shared.py", "src/feature_only.py"])
     mock_worktree_git.get_uncommitted_file_paths = AsyncMock(return_value=["src/shared.py", "src/local.py"])
@@ -94,17 +94,13 @@ async def test_merge_blocked_when_uncommitted_changes_overlap_with_feature(mock_
     ):
         MockGit.side_effect = [mock_git, mock_worktree_git]
 
-        result = await TaskGitService.merge_task_feature_branch(mock_task)
+        with pytest.raises(BaseWorkdirOverlapError) as exc_info:
+            await TaskGitService.merge_task_feature_branch(mock_task)
 
-    assert result == MergeResult(
-        outcome=MergeOutcome.ERROR,
-        merge_method=MergeMethod.SQUASH,
-        message=(
-            "Cannot merge: uncommitted changes in '/worktrees/main' overlap with feature branch changes:\n"
-            "  - src/shared.py\n"
-            "Please commit or stash these files first."
-        ),
-    )
+    assert exc_info.value.checkout_path == "/worktrees/main"
+    assert exc_info.value.overlapping_files == ["src/shared.py"]
+    assert "Cannot merge" in str(exc_info.value)
+    assert "src/shared.py" in str(exc_info.value)
     # Branch should NOT be released when the check fails (would leave worktree in detached HEAD)
     mock_git.release_branch_from_worktree.assert_not_called()
 

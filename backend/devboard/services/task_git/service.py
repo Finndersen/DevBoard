@@ -21,6 +21,18 @@ class TaskBranchNotFoundException(Exception):
         self.task_id = task_id
 
 
+class BaseWorkdirOverlapError(Exception):
+    """Raised when the base branch working directory has uncommitted changes that overlap with feature branch files."""
+
+    def __init__(self, checkout_path: str, overlapping_files: list[str]):
+        file_list = "\n".join(f"  - {f}" for f in sorted(overlapping_files))
+        super().__init__(
+            f"Cannot merge: uncommitted changes in '{checkout_path}' overlap with feature branch changes:\n{file_list}"
+        )
+        self.checkout_path = checkout_path
+        self.overlapping_files = overlapping_files
+
+
 class TaskGitService:
     """Service for task git operations."""
 
@@ -330,12 +342,7 @@ class TaskGitService:
                 )
                 overlapping = set(uncommitted_files) & set(feature_files)
                 if overlapping:
-                    file_list = "\n".join(f"  - {f}" for f in sorted(overlapping))
-                    return MergeResult(
-                        outcome=MergeOutcome.ERROR,
-                        merge_method=merge_method,
-                        message=f"Cannot merge: uncommitted changes in '{checkout_path}' overlap with feature branch changes:\n{file_list}\nPlease commit or stash these files first.",
-                    )
+                    raise BaseWorkdirOverlapError(checkout_path, list(overlapping))
 
         feature_worktree_path = await repo_git.get_checked_out_location(task.branch_name)
         if feature_worktree_path and feature_worktree_path != str(repo_git.repo_path):

@@ -12,6 +12,7 @@ from devboard.agents.tools.task_completion_tools import (
 from devboard.db.models import Task
 from devboard.db.models.codebase import MergeMethod
 from devboard.integrations.github import GitHubIntegration, GitHubPR, GitHubRepository, PRStatus, PullRequestMergeResult
+from devboard.services.task_git import BaseWorkdirOverlapError
 from devboard.services.task_git_service import MergeOutcome, MergeResult
 from devboard.services.task_service import TaskService
 
@@ -109,6 +110,25 @@ class TestCreateCompleteTaskWithLocalMergeTool:
             assert "Task completed successfully" in result
             assert "Rebased feature branch onto main" in result
             assert "Merge commit:" not in result
+
+    @pytest.mark.asyncio
+    async def test_base_branch_overlap_returns_stop_message(self, mock_task, mock_task_service):
+        """Returns stop message (not ModelRetry) when base branch has uncommitted changes overlapping feature branch."""
+        mock_task_service.complete_task_with_local_merge.side_effect = BaseWorkdirOverlapError(
+            "/repo", ["backend/devboard/agents/roles/task_implementation.py"]
+        )
+
+        with patch("devboard.agents.tools.task_completion_tools.GitRepoIntegration") as mock_git_class:
+            mock_git = Mock()
+            mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
+            mock_git_class.return_value = mock_git
+
+            tool = create_complete_task_with_local_merge_tool(mock_task, mock_task_service)
+            result = await tool.function(change_summary="Test summary")
+
+            assert "overlap with feature branch changes" in result
+            assert "STOP" in result
+            assert "inform the user" in result.lower()
 
     @pytest.mark.asyncio
     async def test_merge_failure_raises_model_retry(self, mock_task, mock_task_service):

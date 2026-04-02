@@ -1,6 +1,6 @@
 """Task git operations package."""
 
-from devboard.services.task_git.service import TaskBranchNotFoundException, TaskGitService
+from devboard.services.task_git.service import BaseWorkdirOverlapError, TaskBranchNotFoundException, TaskGitService
 from devboard.services.task_git.types import (
     BaseBranchChanges,
     MergeOutcome,
@@ -14,6 +14,7 @@ from devboard.services.task_git.types import (
 )
 
 __all__ = [
+    "BaseWorkdirOverlapError",
     "TaskBranchNotFoundException",
     "TaskGitService",
     "BaseBranchChanges",

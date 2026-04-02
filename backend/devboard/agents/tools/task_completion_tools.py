@@ -6,6 +6,7 @@ from devboard.db.models import Task
 from devboard.db.models.codebase import MergeMethod
 from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.github import GitHubIntegration
+from devboard.services.task_git import BaseWorkdirOverlapError
 from devboard.services.task_service import TaskService
 
 
@@ -61,6 +62,8 @@ def create_complete_task_with_local_merge_tool(
         # Execute merge and transition to complete (creates change_summary document)
         try:
             merge_result = await task_service.complete_task_with_local_merge(task, change_summary)
+        except BaseWorkdirOverlapError as e:
+            return f"{e}\n\nSTOP. Inform the user that they need to commit or stash their uncommitted changes before this task can be merged."
         except ValueError as e:
             error_msg = str(e)
             if "conflict" in error_msg.lower():
