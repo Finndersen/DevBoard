@@ -1,3 +1,4 @@
+from devboard.agents.roles.context_helpers import build_execution_graph_context
 from devboard.db.models import ParentEntityType, Task
 from devboard.db.models.codebase import BranchHandling, MergeMethod
 from devboard.db.models.conversation import AgentRoleType
@@ -75,7 +76,7 @@ class BeginImplementationAction(TaskWorkflowAction):
 
     KEY = "task.begin_implementation"
 
-    PROMPT_TEMPLATE = "The implementation plan has been approved. Review the plan and begin execution — use `execute_implementation_step` to run each step, consulting the execution graph in task context to identify steps that can run in parallel."
+    PROMPT_TEMPLATE = "The implementation plan has been approved. Review the plan and begin execution — use `execute_implementation_step` to run each step, consulting the execution graph below to identify steps that can run in parallel."
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
@@ -95,7 +96,11 @@ class BeginImplementationAction(TaskWorkflowAction):
             new_agent_role=AgentRoleType.TASK_IMPLEMENTATION,
         )
         self.conversation_repo.commit()
-        return self.PROMPT_TEMPLATE
+        prompt = self.PROMPT_TEMPLATE
+        execution_graph = build_execution_graph_context(self.task, include_step_status=False)
+        if execution_graph:
+            prompt += "\n\n" + execution_graph
+        return prompt
 
 
 class RebaseTaskBranchAction(TaskWorkflowAction):

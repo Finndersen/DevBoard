@@ -3,8 +3,13 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from devboard.db.models.codebase import MergeMethod
+from devboard.db.models.implementation_plan import ImplementationPlan, ImplementationStep, ImplementationStepType
 from devboard.integrations.types import FileDiff, GitLogEntry, StructuredDiff
-from devboard.workflow_actions.task_workflows import ApproveAndMergeAction, _get_task_changes_prompt_context
+from devboard.workflow_actions.task_workflows import (
+    ApproveAndMergeAction,
+    BeginImplementationAction,
+    _get_task_changes_prompt_context,
+)
 
 
 @pytest.fixture
@@ -212,3 +217,71 @@ class TestApproveAndMergeActionRun:
 
         assert result is not None
         assert "complete_task_with_local_merge" in result
+
+
+def _make_begin_implementation_action(task) -> BeginImplementationAction:
+    return BeginImplementationAction(
+        task=task,
+        task_service=Mock(),
+        conversation_repo=Mock(),
+        agent_config_service=Mock(),
+        document_repository=Mock(),
+        integration_service=Mock(),
+    )
+
+
+class TestBeginImplementationActionRun:
+    @pytest.fixture
+    def mock_task_with_plan(self):
+        step1 = Mock(spec=ImplementationStep)
+        step1.step_number = 1
+        step1.title = "Set up database schema"
+        step1.type = ImplementationStepType.CODE_CHANGE
+        step1.dependencies = []
+        step1.status = "pending"
+        step1.outcome = None
+
+        step2 = Mock(spec=ImplementationStep)
+        step2.step_number = 2
+        step2.title = "Implement API endpoints"
+        step2.type = ImplementationStepType.CODE_CHANGE
+        step2.dependencies = [1]
+        step2.status = "pending"
+        step2.outcome = None
+
+        plan = Mock(spec=ImplementationPlan)
+        plan.steps = [step1, step2]
+
+        task = Mock()
+        task.id = 1
+        task.implementation_plan_structured = plan
+        return task
+
+    @pytest.mark.asyncio
+    async def test_returns_prompt_with_execution_graph(self, mock_task_with_plan):
+        """run() returns a prompt that includes the execution graph appended below."""
+        action = _make_begin_implementation_action(mock_task_with_plan)
+
+        result = await action.run()
+
+        assert result is not None
+        assert "execution graph below" in result
+        assert "EXECUTION GRAPH:" in result
+        assert "Layer 1" in result
+        assert "Layer 2" in result
+        assert "Set up database schema" in result
+        assert "Implement API endpoints" in result
+
+    @pytest.mark.asyncio
+    async def test_returns_base_prompt_without_graph_when_no_plan(self):
+        """run() returns only the base prompt when task has no structured plan."""
+        task = Mock()
+        task.id = 1
+        task.implementation_plan_structured = None
+        action = _make_begin_implementation_action(task)
+
+        result = await action.run()
+
+        assert result is not None
+        assert "EXECUTION GRAPH:" not in result
+        assert "The implementation plan has been approved" in result

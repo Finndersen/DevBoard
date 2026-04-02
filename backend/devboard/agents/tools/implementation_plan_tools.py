@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Literal
 
+import logfire
 from pydantic import BaseModel
 from pydantic_ai import ModelRetry, Tool
 
@@ -458,9 +459,8 @@ def create_execute_implementation_step_tool(
             plan_service.set_step_status(
                 step, status=ImplementationStepStatus.INTERRUPTED, outcome="Step interrupted by user."
             )
-            raise ModelRetry(
-                f"Step {step_number} was interrupted by the user. Ask the user how they want to proceed."
-            ) from None
+            logfire.info(f"Step {step_number} interrupted — propagating AgentInterruptedError to parent execution")
+            raise
         except Exception as e:
             plan_service.set_step_status(step, status=ImplementationStepStatus.FAILED, outcome=str(e))
             raise ModelRetry(f"Step {step_number} failed: {e}") from e

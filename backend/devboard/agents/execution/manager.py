@@ -11,7 +11,7 @@ from opentelemetry import context as otel_context
 from sqlalchemy.orm import Session
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.events import ConversationEvent, ExecutionCompleteEvent, SystemEvent, SystemEventType
+from devboard.agents.events import ConversationEvent, ExecutionCompleteEvent, SystemEvent, SystemEventType, TextMessage
 from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError
 from devboard.agents.execution.types import ConversationExecution, ExecutionStatus, SubAgentResult
 from devboard.agents.roles.base import AgentRole
@@ -167,9 +167,16 @@ class ConversationExecutionManager:
             started_at=datetime.datetime.now(datetime.UTC),
             is_sub_agent=True,
         )
+        parent_execution = self._executions.get(conversation_id)
         self._executions[conversation_id] = execution
+        logfire.info(
+            f"Starting sub-agent execution for conversation {conversation_id}",
+            conversation_id=conversation_id,
+            is_sub_agent=True,
+            has_parent_execution=parent_execution is not None,
+        )
         try:
-            with logfire.span("sub_agent_execution", conversation_id=conversation_id):
+            with logfire.span("sub_agent_execution", conversation_id=conversation_id, is_sub_agent=True):
                 execution_service = create_agent_execution_service(
                     conversation=conversation,
                     role=role,
@@ -178,11 +185,39 @@ class ConversationExecutionManager:
                     working_dir=working_dir,
                     interrupt_event=interrupt_event,
                 )
-                result = await execution_service.send_message_or_approval(prompt)
+                last_text_message: TextMessage | None = None
+                async for event in execution_service.stream_events_for_message_or_approval(prompt):
+                    conversation_repo.commit()
+                    await self.broadcast_queue.put((conversation_id, event))
+                    if isinstance(event, TextMessage):
+                        last_text_message = event
                 conversation_repo.commit()
-                return SubAgentResult(result=result.text_content, conversation_id=conversation_id)
+                await self.broadcast_queue.put(
+                    (
+                        conversation_id,
+                        ExecutionCompleteEvent(
+                            status="completed",
+                            error=None,
+                            timestamp=datetime.datetime.now(datetime.UTC),
+                        ),
+                    )
+                )
+                result_text = last_text_message.text_content if last_text_message else ""
+                logfire.info(
+                    f"Sub-agent execution completed for conversation {conversation_id}",
+                    conversation_id=conversation_id,
+                    is_sub_agent=True,
+                )
+                return SubAgentResult(result=result_text, conversation_id=conversation_id)
         finally:
-            self._executions.pop(conversation_id, None)
+            if parent_execution is not None:
+                self._executions[conversation_id] = parent_execution
+                logfire.info(
+                    f"Restored parent execution for conversation {conversation_id}",
+                    conversation_id=conversation_id,
+                )
+            else:
+                self._executions.pop(conversation_id, None)
 
     def request_interrupt(self, conversation_id: int) -> bool:
         """Request interrupt for the active execution.
@@ -193,7 +228,11 @@ class ConversationExecutionManager:
         execution = self._executions.get(conversation_id)
         if execution and execution.status == ExecutionStatus.RUNNING:
             execution.interrupt_requested.set()
-            logfire.info(f"Interrupt requested for conversation {conversation_id}")
+            logfire.info(
+                f"Interrupt requested for conversation {conversation_id}",
+                conversation_id=conversation_id,
+                is_sub_agent=execution.is_sub_agent,
+            )
             return True
         return False
 

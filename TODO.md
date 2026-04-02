@@ -49,6 +49,9 @@
 - add ability to cancel/interrupt a running impementation plan step execution.
 - calling edit_task_specification does not cause auto-refresh of the document
 - Deleting a project conversation does not remove it from the active converstaion list
+- interrupting agent run needs to interrupt sub-agent executions as well? 
+- include duration in sub-agent response?
+- check excution status of sub-agent executions to detect failures
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

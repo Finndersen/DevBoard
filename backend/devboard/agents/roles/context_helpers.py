@@ -47,8 +47,8 @@ def _format_codebase_info(task: Task, working_dir: str) -> str:
 def _format_document_section(title: str, content: str | None) -> str:
     """Format a document section with XML-style document tags."""
     return f"""{title}
-<document>
-{content or "<EMPTY>"}
+<document>\n
+{content or "<EMPTY>"}\n
 </document>"""
 
 
@@ -91,9 +91,10 @@ def _format_implementation_plan_structured(
     for step in plan.steps:
         deps = f" (depends on: {', '.join(str(d) for d in step.dependencies)})" if step.dependencies else ""
         status_part = f"[{step.status}] " if include_step_status else ""
-        lines.append(f"  {step.step_number}. {status_part}{step.title} [{step.type}]{deps}")
+        lines.append(f"\n{step.step_number}. {status_part}{step.title} [{step.type}]{deps}")
         if include_step_outcomes and step.outcome:
-            lines.append(f"     Outcome: {step.outcome}")
+            quoted = "\n".join(f"> {line}" for line in step.outcome.splitlines())
+            lines.append(f"\n   Outcome:\n{quoted}")
 
     return "\n".join(lines)
 

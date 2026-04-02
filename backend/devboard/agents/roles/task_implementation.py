@@ -2,7 +2,7 @@ from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.execution.registry import get_execution_manager
-from devboard.agents.roles.context_helpers import build_execution_graph_context, build_task_context
+from devboard.agents.roles.context_helpers import build_task_context
 from devboard.agents.roles.task_base import TaskAgentRoleBase
 from devboard.agents.tools import (
     create_code_structure_search_tool,
@@ -201,11 +201,7 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
             Step statuses are excluded from the plan — use get_implementation_plan_overview tool
             to check current step statuses during execution.
         """
-        context = build_task_context(self.task, working_dir=self.working_dir, include_step_status=False)
-        execution_graph = build_execution_graph_context(self.task, include_step_status=False)
-        if execution_graph:
-            context += "\n\n" + execution_graph
-        return context
+        return build_task_context(self.task, working_dir=self.working_dir, include_step_status=False)
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

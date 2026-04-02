@@ -614,6 +614,26 @@ class TestRunSubAgent:
             )
 
 
+def _make_stream(*events):
+    """Return a synchronous callable that produces an async generator of the given events."""
+
+    async def _gen():
+        for event in events:
+            yield event
+
+    return Mock(return_value=_gen())
+
+
+def _make_failing_stream(exc: Exception):
+    """Return a synchronous callable that produces an async generator raising exc immediately."""
+
+    async def _gen():
+        raise exc
+        yield  # makes this an async generator
+
+    return Mock(return_value=_gen())
+
+
 class TestRunSubAgentExecution:
     """Tests for ConversationExecutionManager.run_sub_agent_execution."""
 
@@ -645,12 +665,12 @@ class TestRunSubAgentExecution:
     async def test_successful_execution_returns_result(
         self, manager, mock_conversation, mock_role, mock_conv_repo, mock_agent_config_service
     ):
-        """Test that successful execution returns SubAgentResult and pops from _executions."""
+        """Test that successful execution returns SubAgentResult with last text content."""
         final_message = TextMessage(
             role=MessageRole.AGENT, text_content="Sub-agent result", timestamp=datetime.datetime.now()
         )
-        mock_exec_service = AsyncMock()
-        mock_exec_service.send_message_or_approval.return_value = final_message
+        mock_exec_service = Mock()
+        mock_exec_service.stream_events_for_message_or_approval = _make_stream(final_message)
 
         with patch(
             "devboard.agents.execution.manager.create_agent_execution_service",
@@ -666,27 +686,23 @@ class TestRunSubAgentExecution:
             )
 
         assert result == SubAgentResult(result="Sub-agent result", conversation_id=42)
-        # Execution should be cleaned up from _executions after completion
         assert 42 not in manager._executions
-        mock_conv_repo.commit.assert_called_once()
+        # commit after event + final commit = 2
+        assert mock_conv_repo.commit.call_count == 2
 
     @pytest.mark.asyncio
     async def test_registers_execution_as_sub_agent(
         self, manager, mock_conversation, mock_role, mock_conv_repo, mock_agent_config_service
     ):
-        """Test that the execution is registered with is_sub_agent=True."""
+        """Test that the execution is registered with is_sub_agent=True during streaming."""
         captured_execution = {}
 
-        async def capture_and_return(prompt):
-            # At this point, the execution should be registered
+        async def capturing_stream():
             captured_execution["exec"] = manager._executions.get(42)
-            final_message = TextMessage(
-                role=MessageRole.AGENT, text_content="result", timestamp=datetime.datetime.now()
-            )
-            return final_message
+            yield TextMessage(role=MessageRole.AGENT, text_content="result", timestamp=datetime.datetime.now())
 
-        mock_exec_service = AsyncMock()
-        mock_exec_service.send_message_or_approval.side_effect = capture_and_return
+        mock_exec_service = Mock()
+        mock_exec_service.stream_events_for_message_or_approval = Mock(return_value=capturing_stream())
 
         with patch(
             "devboard.agents.execution.manager.create_agent_execution_service",
@@ -713,13 +729,10 @@ class TestRunSubAgentExecution:
         """Test that ConversationBusyError is raised if conversation already has active execution."""
         from devboard.agents.execution.types import ConversationExecution
 
-        # Manually register an active execution
-        mock_event = asyncio.Event()
-        mock_task = Mock()
         existing = ConversationExecution(
             conversation_id=42,
-            interrupt_requested=mock_event,
-            asyncio_task=mock_task,
+            interrupt_requested=asyncio.Event(),
+            asyncio_task=Mock(),
             status=ExecutionStatus.RUNNING,
             started_at=datetime.datetime.now(datetime.UTC),
         )
@@ -739,9 +752,9 @@ class TestRunSubAgentExecution:
     async def test_execution_cleaned_up_after_failure(
         self, manager, mock_conversation, mock_role, mock_conv_repo, mock_agent_config_service
     ):
-        """Test that execution is removed from _executions even when send_message_or_approval raises."""
-        mock_exec_service = AsyncMock()
-        mock_exec_service.send_message_or_approval.side_effect = RuntimeError("Agent failed")
+        """Test that execution is removed from _executions even when streaming raises."""
+        mock_exec_service = Mock()
+        mock_exec_service.stream_events_for_message_or_approval = _make_failing_stream(RuntimeError("Agent failed"))
 
         with patch(
             "devboard.agents.execution.manager.create_agent_execution_service",
@@ -763,23 +776,18 @@ class TestRunSubAgentExecution:
     async def test_interrupt_event_is_signalable_via_request_interrupt(
         self, manager, mock_conversation, mock_role, mock_conv_repo, mock_agent_config_service
     ):
-        """Test that request_interrupt() signals the sub-agent's interrupt event."""
+        """Test that request_interrupt() signals the sub-agent's interrupt event during streaming."""
         interrupt_was_set = {}
 
-        async def slow_execution(prompt):
-            # Allow the test to signal interrupt while "running"
+        async def signaling_stream():
             exec_entry = manager._executions.get(42)
             assert exec_entry is not None
-            # Signal the interrupt
             manager.request_interrupt(42)
             interrupt_was_set["value"] = exec_entry.interrupt_requested.is_set()
-            final_message = TextMessage(
-                role=MessageRole.AGENT, text_content="result", timestamp=datetime.datetime.now()
-            )
-            return final_message
+            yield TextMessage(role=MessageRole.AGENT, text_content="result", timestamp=datetime.datetime.now())
 
-        mock_exec_service = AsyncMock()
-        mock_exec_service.send_message_or_approval.side_effect = slow_execution
+        mock_exec_service = Mock()
+        mock_exec_service.stream_events_for_message_or_approval = Mock(return_value=signaling_stream())
 
         with patch(
             "devboard.agents.execution.manager.create_agent_execution_service",

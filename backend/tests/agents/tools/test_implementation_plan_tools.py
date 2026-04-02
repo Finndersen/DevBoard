@@ -271,7 +271,7 @@ class TestExecuteImplementationStepConversationFlow:
         mock_plan_service: Mock,
         mock_execution_manager: Mock,
     ):
-        """When sub-agent raises AgentInterruptedError, step status is set to INTERRUPTED and ModelRetry is raised."""
+        """When sub-agent raises AgentInterruptedError, step status is set to INTERRUPTED and error propagates."""
         step = self._make_step()
         mock_plan_service.get_step_by_number.return_value = step
 
@@ -283,7 +283,7 @@ class TestExecuteImplementationStepConversationFlow:
             "devboard.agents.tools.implementation_plan_tools.create_sub_agent_conversation",
             return_value=mock_conversation,
         ):
-            with pytest.raises(ModelRetry, match="interrupted by the user"):
+            with pytest.raises(AgentInterruptedError):
                 await execute_step_tool.function(step_number=1)
 
         mock_plan_service.set_step_status.assert_any_call(

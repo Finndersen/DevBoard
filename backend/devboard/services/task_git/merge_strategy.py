@@ -132,6 +132,13 @@ class SquashMerge(MergeStrategy):
     async def _squash_to_local_base(self, task: Task, repo_git: GitRepoIntegration) -> str:
         await self._squash_feature_branch_commits(task, repo_git)
 
+        feature_path = await repo_git.get_checked_out_location(task.branch_name)
+        if feature_path:
+            feature_git = GitRepoIntegration(feature_path)
+            await feature_git.rebase_onto(task.base_branch)
+        else:
+            await repo_git.rebase_branch(task.branch_name, task.base_branch)
+
         checkout_path = await repo_git.get_checked_out_location(task.base_branch)
         if checkout_path:
             worktree_git = GitRepoIntegration(checkout_path)
