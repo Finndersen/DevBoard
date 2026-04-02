@@ -81,7 +81,7 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Fetch documents separately - only when task is loaded with valid document IDs
   const { data: specificationDoc, refetch: refetchSpecification, setData: setSpecificationDoc } = useDocument(task?.specification_document_id ?? null)
-  const { data: implementationPlanDoc, refetch: refetchImplementationPlan, setData: setImplementationPlanDoc } = useDocument(task?.implementation_plan_document_id ?? null)
+  const { data: implementationPlanDoc, refetch: refetchImplementationPlan } = useDocument(task?.implementation_plan_document_id ?? null)
   const { data: implementationPlan, refetch: refetchImplementationPlan2, setData: setImplementationPlan } = useImplementationPlan(task?.implementation_plan_id ? task.id : null)
   const { data: changeSummaryDoc } = useDocument(task?.change_summary_document_id ?? null)
 
@@ -273,16 +273,9 @@ function TaskDetail({ id }: TaskDetailProps) {
     setSpecificationDoc(updatedDoc)
   }, [task?.specification_document_id, updateDocument, setSpecificationDoc])
 
-  const savePlanField = useCallback(async (value: string) => {
-    if (!task?.implementation_plan_document_id) return
-    const updatedDoc = await updateDocument({ id: task.implementation_plan_document_id, content: value })
-    setImplementationPlanDoc(updatedDoc)
-  }, [task?.implementation_plan_document_id, updateDocument, setImplementationPlanDoc])
-
   // Use useEditableField hooks to eliminate boilerplate
   const titleField = useEditableField(task?.title || '', saveTitleField)
   const specificationField = useEditableField(specificationDoc?.content || '', saveSpecificationField)
-  const planField = useEditableField(implementationPlanDoc?.content || '', savePlanField)
 
   // Delete task mutation
   const { mutate: deleteTask, loading: deleteLoading, error: deleteError } = useDeleteTask()
@@ -769,7 +762,6 @@ function TaskDetail({ id }: TaskDetailProps) {
                     implementationPlan={implementationPlan}
                     onPlanUpdated={refetchImplementationPlan2}
                     implementationPlanDoc={implementationPlanDoc}
-                    planField={planField}
                   />
                 )}
 
@@ -908,7 +900,6 @@ function TaskDetail({ id }: TaskDetailProps) {
                   implementationPlan={implementationPlan}
                   onPlanUpdated={refetchImplementationPlan2}
                   implementationPlanDoc={implementationPlanDoc}
-                  planField={planField}
                 />
               )}
 

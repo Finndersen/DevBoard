@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, memo } from 'react'
 import type { ComponentType } from 'react'
 import { CheckIcon, XMarkIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, ArrowPathIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon, StopCircleIcon, CodeBracketIcon, DocumentTextIcon, ClipboardDocumentCheckIcon, EyeIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 import { StopIcon } from '@heroicons/react/24/solid'
-import { useEditableField } from '../../hooks/useEditableField'
 import { MarkdownDocumentEditor } from '../MarkdownDocumentEditor'
 import { Button, Markdown, StatusBadge, Textarea } from '../ui'
 import { textColors, borderColors, surfaces, hoverColors, statusColors } from '../../styles/designSystem'
@@ -357,7 +356,6 @@ interface PlanTabProps {
   onPlanUpdated: () => void
   // Legacy props for Document-based plans
   implementationPlanDoc?: DocumentResponse | null | undefined
-  planField?: ReturnType<typeof useEditableField<string>>
 }
 
 export function PlanTab({ taskId, taskStatus, implementationPlan, onPlanUpdated, implementationPlanDoc }: PlanTabProps) {

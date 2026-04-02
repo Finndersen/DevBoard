@@ -13,6 +13,7 @@ from devboard.db.models import Document
 from devboard.db.models.document import DocumentType
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import ConversationRepository, DocumentRepository
+from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 from tests.conftest import create_mock_task
 
@@ -69,6 +70,7 @@ class TestTaskPlanningRoleWithSpec:
             conversation_repo=Mock(spec=ConversationRepository),
             conversation_id=None,
             working_dir="/test/working_dir",
+            plan_service=Mock(spec=TaskImplementationPlanService),
         )
 
     def test_role_initialization(self, role, mock_task):
@@ -83,13 +85,13 @@ class TestTaskPlanningRoleWithSpec:
         assert "task specification" in prompt.lower()
         assert "implementation plan" in prompt.lower()
 
-    def test_get_tools_without_implementation_plan(self, role, mock_task):
-        """Test role creates correct tools when no implementation plan exists (no plan_service)."""
+    def test_get_tools_includes_structured_plan_tools(self, role, mock_task):
+        """Test role creates correct tools including structured implementation plan tools."""
         tools = role.get_tools()
 
         # Should have list_tasks, view_task_details, create_task, investigate_codebase (common),
-        # plus edit_task (own task) and edit for spec (always included now)
-        assert len(tools) == 6
+        # plus edit_task (own task), edit for spec, and 7 structured plan tools
+        assert len(tools) == 13
         tool_names = [tool.name for tool in tools]
 
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
@@ -99,9 +101,14 @@ class TestTaskPlanningRoleWithSpec:
         assert "list_tasks" in tool_names
         assert "view_task_details" in tool_names
 
-        # Should NOT have plan tools (no plan_service provided)
-        assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" not in tool_names
-        assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" not in tool_names
+        # Structured plan tools should be present
+        assert "set_implementation_plan_steps" in tool_names
+        assert "add_implementation_step" in tool_names
+        assert "edit_implementation_step" in tool_names
+        assert "edit_implementation_step_details" in tool_names
+        assert "remove_implementation_step" in tool_names
+        assert "edit_implementation_plan_overview" in tool_names
+        assert "read_implementation_step_details" in tool_names
 
     @pytest.mark.asyncio
     async def test_context_content_without_implementation_plan(self, role, mock_task):
@@ -158,6 +165,7 @@ class TestTaskPlanningRoleWithPlan:
             conversation_repo=Mock(spec=ConversationRepository),
             conversation_id=None,
             working_dir="/test/working_dir",
+            plan_service=Mock(spec=TaskImplementationPlanService),
         )
 
     def test_role_initialization(self, role, mock_task):
@@ -172,17 +180,22 @@ class TestTaskPlanningRoleWithPlan:
         assert "implementation plan" in prompt.lower()
 
     def test_get_tools_with_implementation_plan(self, role, mock_task):
-        """Test role creates tools for both documents in planning (doc-based plan, no plan_service)."""
+        """Test role creates structured plan tools when plan_service is provided."""
         tools = role.get_tools()
 
         # Should have: list_tasks, view_task_details, create_task, investigate_codebase (common),
-        # plus edit_task (own task), edit for spec (always), set_content for plan, edit for plan
-        assert len(tools) == 8
+        # plus edit_task (own task), edit for spec, and 7 structured plan tools
+        assert len(tools) == 13
 
         tool_names = [tool.name for tool in tools]
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
-        assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
-        assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
+        assert "set_implementation_plan_steps" in tool_names
+        assert "add_implementation_step" in tool_names
+        assert "edit_implementation_step" in tool_names
+        assert "edit_implementation_step_details" in tool_names
+        assert "remove_implementation_step" in tool_names
+        assert "edit_implementation_plan_overview" in tool_names
+        assert "read_implementation_step_details" in tool_names
         assert "investigate_codebase" in tool_names
         assert "create_task" in tool_names
         assert "edit_task" in tool_names
@@ -470,7 +483,7 @@ class TestRoleToolSelection:
     def test_planning_role_provides_edit_spec_tool_even_for_empty_spec(
         self, mock_task_with_blank_spec_and_plan, mock_document_repo, mock_agent_config_service, mock_task_service
     ):
-        """Test TaskPlanningRole always provides edit_specification tool (even when spec is empty)."""
+        """Test TaskPlanningRole always provides edit_specification and structured plan tools."""
         role = TaskPlanningAgentRole(
             task=mock_task_with_blank_spec_and_plan,
             document_repository=mock_document_repo,
@@ -479,27 +492,25 @@ class TestRoleToolSelection:
             conversation_repo=Mock(spec=ConversationRepository),
             conversation_id=None,
             working_dir="/test/working_dir",
+            plan_service=Mock(spec=TaskImplementationPlanService),
         )
 
         tools = role.get_tools()
         tool_names = [tool.name for tool in tools]
 
-        # edit_specification is now always included regardless of content
+        # edit_specification is always included regardless of content
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
-        assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
+        assert "set_implementation_plan_steps" in tool_names
         assert "investigate_codebase" in tool_names
         assert "create_task" in tool_names
         assert "edit_task" in tool_names
         assert "list_tasks" in tool_names
         assert "view_task_details" in tool_names
 
-        # edit plan NOT included because plan.content is empty (doc-based fallback path)
-        assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" not in tool_names
-
-    def test_planning_role_provides_both_tools_for_documents_with_content(
+    def test_planning_role_provides_structured_plan_tools_for_documents_with_content(
         self, mock_task_with_content, mock_document_repo, mock_agent_config_service, mock_task_service
     ):
-        """Test TaskPlanningRole provides all tools when documents have content."""
+        """Test TaskPlanningRole provides structured plan tools regardless of document content."""
         role = TaskPlanningAgentRole(
             task=mock_task_with_content,
             document_repository=mock_document_repo,
@@ -508,24 +519,26 @@ class TestRoleToolSelection:
             conversation_repo=Mock(spec=ConversationRepository),
             conversation_id=None,
             working_dir="/test/working_dir",
+            plan_service=Mock(spec=TaskImplementationPlanService),
         )
 
         tools = role.get_tools()
         tool_names = [tool.name for tool in tools]
 
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
-        assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" in tool_names
-        assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" in tool_names
+        assert "set_implementation_plan_steps" in tool_names
+        assert "add_implementation_step" in tool_names
+        assert "edit_implementation_step" in tool_names
         assert "investigate_codebase" in tool_names
         assert "create_task" in tool_names
         assert "edit_task" in tool_names
         assert "list_tasks" in tool_names
         assert "view_task_details" in tool_names
 
-    def test_planning_role_provides_spec_tools_only_when_no_plan_exists(
+    def test_planning_role_provides_structured_plan_tools_regardless_of_doc_plan(
         self, mock_task_with_spec_only, mock_document_repo, mock_agent_config_service, mock_task_service
     ):
-        """Test TaskPlanningRole provides only spec tools when no implementation plan exists."""
+        """Test TaskPlanningRole always provides structured plan tools when plan_service is given."""
         role = TaskPlanningAgentRole(
             task=mock_task_with_spec_only,
             document_repository=mock_document_repo,
@@ -534,22 +547,21 @@ class TestRoleToolSelection:
             conversation_repo=Mock(spec=ConversationRepository),
             conversation_id=None,
             working_dir="/test/working_dir",
+            plan_service=Mock(spec=TaskImplementationPlanService),
         )
 
         tools = role.get_tools()
         tool_names = [tool.name for tool in tools]
 
-        # Should have common tools plus edit_task (own) and edit for spec
+        # Should have common tools, spec tool, and structured plan tools
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
+        assert "set_implementation_plan_steps" in tool_names
+        assert "add_implementation_step" in tool_names
         assert "investigate_codebase" in tool_names
         assert "create_task" in tool_names
         assert "edit_task" in tool_names
         assert "list_tasks" in tool_names
         assert "view_task_details" in tool_names
-
-        # Should NOT have plan tools (no plan exists yet)
-        assert f"set_{DocumentType.TASK_IMPLEMENTATION_PLAN}_content" not in tool_names
-        assert f"edit_{DocumentType.TASK_IMPLEMENTATION_PLAN}" not in tool_names
 
 
 class TestDocumentEdit:

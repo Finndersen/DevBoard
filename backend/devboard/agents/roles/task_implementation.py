@@ -90,34 +90,11 @@ _STRUCTURED_PLAN_BEHAVIOUR_GUIDELINES = """\
 - ALWAYS use `execute_implementation_step` for every plan step — never bypass it by editing directly\
 """
 
-_DOCUMENT_PLAN_IMPLEMENT_SECTION = """\
-1. IMPLEMENT CODE CHANGES
-   - Break the implementation plan into discrete, independently executable steps
-   - Make edits directly using Edit/Write tools by default
-   - Use the `Agent` tool to launch sub-agents only for implementation steps that are broad enough to
-     warrant delegation — i.e. multi-file edits across different areas of the codebase, or parallel
-     independent steps (e.g. implementing a feature and writing its tests simultaneously)
-   - Do NOT break a single implementation step into sub-steps for sub-agents — delegate the whole step or do it directly
-   - If a `docs/` directory is present, investigate and update appropriate documentation sections,
-     adding or updating any missing or incorrect documentation\
-"""
 
-_DOCUMENT_PLAN_BEHAVIOUR_GUIDELINES = """\
-- Default to making edits directly; only use sub-agents for implementation steps with broad, multi-file scope
-  or for parallelising independent steps\
-"""
-
-
-def _build_system_prompt(has_structured_plan: bool) -> str:
-    if has_structured_plan:
-        implement_section = _STRUCTURED_PLAN_IMPLEMENT_SECTION
-        behaviour_guidelines = _STRUCTURED_PLAN_BEHAVIOUR_GUIDELINES
-    else:
-        implement_section = _DOCUMENT_PLAN_IMPLEMENT_SECTION
-        behaviour_guidelines = _DOCUMENT_PLAN_BEHAVIOUR_GUIDELINES
+def _build_system_prompt() -> str:
     return _PROMPT_BASE.format(
-        implement_section=implement_section,
-        behaviour_guidelines=behaviour_guidelines,
+        implement_section=_STRUCTURED_PLAN_IMPLEMENT_SECTION,
+        behaviour_guidelines=_STRUCTURED_PLAN_BEHAVIOUR_GUIDELINES,
     )
 
 
@@ -150,15 +127,14 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task implementation role."""
-        return _build_system_prompt(has_structured_plan=self.task.implementation_plan_structured is not None)
+        return _build_system_prompt()
 
     def get_tools(self) -> list[Tool]:
         """Get tools for task implementation role."""
-        has_structured_plan = self.task.implementation_plan_structured is not None
-        has_document_plan = self.task.implementation_plan is not None
-
-        if not has_structured_plan and not has_document_plan:
-            raise ValueError(f"Task (ID: {self.task.id}) must have an implementation plan for implementation agent")
+        if self.task.implementation_plan_structured is None:
+            raise ValueError(
+                f"Task (ID: {self.task.id}) must have a structured implementation plan. Tasks with legacy document-based plans must be migrated to the structured format."
+            )
 
         codebase_integration = CodebaseIntegration(self.working_dir)
 
@@ -172,34 +148,22 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
             ]
         )
 
-        # Implementation plan tools: structured plan or Document-based
-        if has_structured_plan:
-            tools.extend(
-                [
-                    create_execute_implementation_step_tool(
-                        self.task,
-                        self.plan_service,
-                        self.agent_config_service,
-                        self.conversation_repo,
-                        self.conversation_id,
-                        self.working_dir,
-                        execution_manager=get_execution_manager(),
-                    ),
-                    create_read_implementation_step_details_tool(self.task, self.plan_service),
-                    create_get_implementation_plan_overview_tool(self.task),
-                ]
-            )
-        elif has_document_plan and self.task.implementation_plan is not None:
-            tools.extend(
-                [
-                    create_set_document_content_tool(
-                        self.task.implementation_plan, self.document_repository, requires_approval=False
-                    ),
-                    create_document_edit_tool(
-                        self.task.implementation_plan, self.document_repository, requires_approval=False
-                    ),
-                ]
-            )
+        # Structured implementation plan tools
+        tools.extend(
+            [
+                create_execute_implementation_step_tool(
+                    self.task,
+                    self.plan_service,
+                    self.agent_config_service,
+                    self.conversation_repo,
+                    self.conversation_id,
+                    self.working_dir,
+                    execution_manager=get_execution_manager(),
+                ),
+                create_read_implementation_step_details_tool(self.task, self.plan_service),
+                create_get_implementation_plan_overview_tool(self.task),
+            ]
+        )
 
         tools.extend(
             [

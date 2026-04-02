@@ -5,7 +5,6 @@ from devboard.agents.roles.context_helpers import build_task_context
 from devboard.agents.roles.task_base import TaskAgentRoleBase
 from devboard.agents.tools import (
     create_document_edit_tool,
-    create_set_document_content_tool,
 )
 from devboard.agents.tools.implementation_plan_tools import (
     create_add_implementation_step_tool,
@@ -138,7 +137,7 @@ class TaskPlanningAgentRole(TaskAgentRoleBase):
         conversation_repo: ConversationRepository,
         conversation_id: int | None,
         working_dir: str,
-        plan_service: TaskImplementationPlanService | None = None,
+        plan_service: TaskImplementationPlanService,
     ):
         super().__init__(
             task=task,
@@ -159,7 +158,7 @@ class TaskPlanningAgentRole(TaskAgentRoleBase):
         """Get tools for task planning role.
 
         Returns:
-            Common task tools plus document editing tools for specification and implementation plan.
+            Common task tools plus document editing tool for specification and structured implementation plan tools.
         """
         tools = super().get_tools()
 
@@ -171,34 +170,19 @@ class TaskPlanningAgentRole(TaskAgentRoleBase):
             create_document_edit_tool(self.task.specification, self.document_repository, requires_approval=False)
         )
 
-        # Structured implementation plan tools
-        if self.plan_service:
-            # Full tool set always provided; tools validate their own preconditions at runtime
-            tools.extend(
-                [
-                    create_set_implementation_plan_steps_tool(self.task, self.plan_service),
-                    create_add_implementation_step_tool(self.task, self.plan_service),
-                    create_edit_implementation_step_tool(self.task, self.plan_service),
-                    create_edit_implementation_step_details_tool(self.task, self.plan_service),
-                    create_remove_implementation_step_tool(self.task, self.plan_service),
-                    create_edit_implementation_plan_overview_tool(self.task, self.plan_service),
-                    create_read_implementation_step_details_tool(self.task, self.plan_service),
-                ]
-            )
-        else:
-            # Fallback to Document-based implementation plan tools (backwards compat)
-            if self.task.implementation_plan:
-                tools.append(
-                    create_set_document_content_tool(
-                        self.task.implementation_plan, self.document_repository, requires_approval=False
-                    )
-                )
-                if self.task.implementation_plan.content:
-                    tools.append(
-                        create_document_edit_tool(
-                            self.task.implementation_plan, self.document_repository, requires_approval=False
-                        )
-                    )
+        # Structured implementation plan tools — full tool set always provided;
+        # tools validate their own preconditions at runtime
+        tools.extend(
+            [
+                create_set_implementation_plan_steps_tool(self.task, self.plan_service),
+                create_add_implementation_step_tool(self.task, self.plan_service),
+                create_edit_implementation_step_tool(self.task, self.plan_service),
+                create_edit_implementation_step_details_tool(self.task, self.plan_service),
+                create_remove_implementation_step_tool(self.task, self.plan_service),
+                create_edit_implementation_plan_overview_tool(self.task, self.plan_service),
+                create_read_implementation_step_details_tool(self.task, self.plan_service),
+            ]
+        )
 
         return tools
 
