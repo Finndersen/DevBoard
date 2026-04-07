@@ -80,13 +80,11 @@ class BeginImplementationAction(TaskWorkflowAction):
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
-        if task.status != TaskStatus.PLANNING:
-            return False
-        # Structured plan: must exist with pending status
-        if task.implementation_plan_structured:
-            return task.implementation_plan_structured.status == "pending"
-        # Legacy Document plan
-        return task.implementation_plan_id is not None
+        return (
+            task.status == TaskStatus.PLANNING
+            and task.implementation_plan_structured is not None
+            and task.implementation_plan_structured.status == "pending"
+        )
 
     async def run(self) -> str | None:
         self.task_service.transition_to_implementing(self.task)
@@ -96,11 +94,8 @@ class BeginImplementationAction(TaskWorkflowAction):
             new_agent_role=AgentRoleType.TASK_IMPLEMENTATION,
         )
         self.conversation_repo.commit()
-        prompt = self.PROMPT_TEMPLATE
         execution_graph = build_execution_graph_context(self.task, include_step_status=False)
-        if execution_graph:
-            prompt += "\n\n" + execution_graph
-        return prompt
+        return self.PROMPT_TEMPLATE + "\n\n" + execution_graph
 
 
 class RebaseTaskBranchAction(TaskWorkflowAction):
