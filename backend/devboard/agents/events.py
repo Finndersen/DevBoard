@@ -159,12 +159,23 @@ class SystemEvent(BaseModel):
     uuid: str | None = None
 
 
+class ContextUsage(BaseModel):
+    """Token context usage from an agent execution."""
+
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    cost_usd: float | None = None
+
+
 class ExecutionCompleteEvent(BaseModel):
     """Signals that an agent execution has finished."""
 
     event_type: Literal["execution_complete"] = "execution_complete"
     status: Literal["completed", "interrupted", "failed"]
     error: str | None = None
+    usage: ContextUsage | None = None
     timestamp: datetime.datetime
     uuid: str | None = None
 
@@ -197,6 +208,9 @@ def describe_event(event: "ConversationEvent") -> str:
     elif isinstance(event, ThinkingEvent):
         return "ThinkingEvent()"
     elif isinstance(event, ExecutionCompleteEvent):
+        if event.usage:
+            total_ctx = event.usage.cache_read_tokens + event.usage.cache_write_tokens + event.usage.input_tokens
+            return f"ExecutionCompleteEvent(status={event.status}, ctx={total_ctx:,} tokens)"
         return f"ExecutionCompleteEvent(status={event.status})"
     else:
         return f"SystemEvent(type={event.type})"

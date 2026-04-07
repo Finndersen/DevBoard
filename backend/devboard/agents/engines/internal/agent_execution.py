@@ -109,6 +109,7 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
             raise AgentInterruptedError("Agent execution interrupted")
 
         self._store_new_messages(agent.get_new_messages())
+        self.last_usage = agent.get_context_usage()
 
     def _get_agent(
         self, conversation_history: list[ModelMessage], extra_tools: list[Tool] | None = None

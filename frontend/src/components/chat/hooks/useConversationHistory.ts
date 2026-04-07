@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { apiClient } from '../../../lib/api'
-import type { ConversationEvent, ToolCallRequest } from '../../../lib/api'
+import type { ContextUsage, ConversationEvent, ToolCallRequest } from '../../../lib/api'
 import type { PendingApprovalWithContext } from '../../../stores/approvalsStore'
 
 export function useConversationHistory(
   conversationId: number,
   messages: ConversationEvent[],
   historyLoaded: boolean,
-  setStoreMessages: (id: number, msgs: ConversationEvent[]) => void,
+  setStoreMessages: (id: number, msgs: ConversationEvent[], contextUsage?: ContextUsage | null) => void,
   setApprovals: (key: string, approvals: PendingApprovalWithContext[]) => void,
   approvalKey: string,
 ) {
@@ -34,7 +34,7 @@ export function useConversationHistory(
     const fetchHistory = async () => {
       setFetchHistoryError(null)
       try {
-        const data = await apiClient.getConversationMessages(conversationId)
+        const { messages: data, context_usage } = await apiClient.getConversationMessages(conversationId)
 
         const systemEvents = data.filter(e => e.event_type === 'system')
         if (systemEvents.length > 0) {
@@ -53,7 +53,7 @@ export function useConversationHistory(
         })
 
         console.log('[ConversationChat] Setting messages from history, count:', historyMessages.length, 'types:', historyMessages.map(m => m.event_type))
-        setStoreMessages(conversationId, historyMessages)
+        setStoreMessages(conversationId, historyMessages, context_usage)
 
         if (toolRequests.length > 0) {
           const approvals: PendingApprovalWithContext[] = toolRequests.map((request) => {

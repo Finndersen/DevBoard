@@ -36,6 +36,7 @@ from devboard.agents.engines.claude_code.virtual_tools import (
     build_virtual_tool_schemas_section,
 )
 from devboard.agents.events import (
+    ContextUsage,
     ConversationEvent,
     SystemEvent,
     SystemEventType,
@@ -137,6 +138,7 @@ class ClaudeCodeAgent(BaseAgent):
 
         self.session_id = session_id
         self.working_dir = working_dir
+        self.last_result_message: ResultMessage | None = None
         # Convert PydanticAI tools to virtual tools and function tools
         self._virtual_tools, self._function_tools = self._partition_tools()
 
@@ -203,6 +205,19 @@ class ClaudeCodeAgent(BaseAgent):
         # Combine all parts
         return "\n\n".join(prompt_parts)
 
+    def get_context_usage(self) -> ContextUsage | None:
+        """Extract ContextUsage from the last ResultMessage, if available."""
+        if self.last_result_message is None or self.last_result_message.usage is None:
+            return None
+        usage = self.last_result_message.usage
+        return ContextUsage(
+            input_tokens=usage.get("input_tokens", 0),
+            output_tokens=usage.get("output_tokens", 0),
+            cache_read_tokens=usage.get("cache_read_input_tokens", 0),
+            cache_write_tokens=usage.get("cache_creation_input_tokens", 0),
+            cost_usd=self.last_result_message.total_cost_usd,
+        )
+
     def get_virtual_tool(self, tool_name: str) -> VirtualTool | None:
         """Get a virtual tool by name.
 
@@ -262,6 +277,8 @@ class ClaudeCodeAgent(BaseAgent):
                             should_retry_api_error = True
                         else:
                             _verify_result_message(message.result, last_assistant_text)
+                            # Store the final result message for usage extraction
+                            self.last_result_message = message
                         # Don't break - let the stream finish naturally so the
                         # subprocess can flush the session file before exiting
                         continue

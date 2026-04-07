@@ -86,7 +86,9 @@ class TestConversationsRouter:
         """Test getting messages for a conversation with no messages."""
         response = client.get(f"/api/conversations/{test_conversation.id}/messages")
         assert response.status_code == 200
-        assert response.json() == []
+        data = response.json()
+        assert data["messages"] == []
+        assert data["context_usage"] is None
 
     def test_get_conversation_messages_with_data(self, client, db_session, test_conversation):
         """Test getting messages for a conversation with existing messages."""
@@ -103,7 +105,8 @@ class TestConversationsRouter:
         response = client.get(f"/api/conversations/{test_conversation.id}/messages")
         assert response.status_code == 200
 
-        messages = response.json()
+        data = response.json()
+        messages = data["messages"]
         assert len(messages) == 2
         assert messages[0]["role"] == "user"
         assert messages[0]["text_content"] == "Hello, can you help me?"
@@ -129,7 +132,8 @@ class TestConversationsRouter:
         response = client.get(f"/api/conversations/{test_conversation.id}/messages")
         assert response.status_code == 200
 
-        events = response.json()
+        data = response.json()
+        events = data["messages"]
         # Should have user message, tool call, and final agent response
         assert len(events) == 3
         assert events[0]["event_type"] == "message"

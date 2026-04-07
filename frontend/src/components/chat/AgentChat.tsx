@@ -18,6 +18,7 @@ import { useModal, useAsyncOperation } from '../../hooks'
 import { useSystemEventHandler } from '../../hooks/useConversationEventHandlers'
 import type { SystemEvent } from '../../lib/api'
 import { formatAgentRoleDisplayName } from '../../utils/agentRoles'
+import ContextUsageDisplay from './ContextUsageDisplay'
 
 interface AgentChatProps {
   conversationId: number | null
@@ -186,6 +187,9 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
               >
                 <InformationCircleIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
+            )}
+            {conversationId && !loadingConversation && (
+              <ContextUsageDisplay conversationId={conversationId} />
             )}
             {conversationId && !loadingConversation && (
               <ConversationModelSelector

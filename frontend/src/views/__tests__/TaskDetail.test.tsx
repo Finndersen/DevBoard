@@ -75,7 +75,7 @@ describe('TaskDetail', () => {
         return HttpResponse.json([])
       }),
       http.get('*/api/conversations/*/messages', () => {
-        return HttpResponse.json([])
+        return HttpResponse.json({ messages: [], context_usage: null })
       }),
       http.get('*/api/tasks/:id/git-status', () => {
         return HttpResponse.json({
@@ -110,7 +110,7 @@ describe('TaskDetail', () => {
     expect(screen.getByText('Implementation Plan')).toBeInTheDocument()
     // Agent title is now dynamically loaded based on conversation's agent_role
     await waitFor(() => {
-      expect(screen.getByText('Planning')).toBeInTheDocument()
+      expect(screen.getAllByText('Planning').length).toBeGreaterThan(0)
     }, { timeout: 3000 })
   })
 

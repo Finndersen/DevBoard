@@ -4,11 +4,12 @@ from datetime import UTC, datetime
 
 import logfire
 
-from devboard.agents.conversation_history import ConversationHistoryService
-from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
+from devboard.agents.conversation_history import ConversationHistory, ConversationHistoryService
+from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService, SessionMessage
 from devboard.agents.engines.claude_code.session.event_converter import session_messages_to_events
+from devboard.agents.engines.claude_code.session.models import AssistantSessionMessage
 from devboard.agents.events import (
-    ConversationEvent,
+    ContextUsage,
     SystemEvent,
     SystemEventType,
 )
@@ -22,46 +23,47 @@ class ClaudeCodeConversationHistoryService(ConversationHistoryService):
 
     Note: Claude Code manages its own session files. This service reads from
     session files as needed rather than storing messages in the database.
-
-    Attributes:
-        conversation: The conversation instance (from base class)
-        conversation_repo: Repository for conversation operations
     """
 
     @property
     def session_id(self) -> str | None:
-        """Get the current Claude session ID from the conversation."""
         return self.conversation.external_session_id
 
-    async def get_conversation_messages(self) -> list[ConversationEvent]:
-        """Retrieve all events for the Claude Code conversation.
-
-        Events are loaded from Claude Code session files and include text messages,
-        tool calls, and tool results in chronological order.
-        Claude Code manages its own session storage in ~/.claude/projects.
-
-        Returns:
-            List of ConversationEvent instances in chronological order.
-            Returns empty list if no session_id (conversation hasn't started or was cleared).
-            Returns a SESSION_EXPIRED event if the session file was cleaned up.
-        """
-        # Return empty list if no session exists yet
+    async def get_conversation_history(self) -> ConversationHistory:
         if not self.session_id:
-            return []
+            return ConversationHistory()
 
-        # Load low-level session messages
         claude_session_service = ClaudeCodeSessionService()
         try:
             session_messages = claude_session_service.load_session_messages(self.session_id)
         except FileNotFoundError:
             logfire.warn(f"Session file not found for conversation {self.conversation.id}, session ID preserved")
-            return [
-                SystemEvent(
-                    type=SystemEventType.SESSION_EXPIRED,
-                    data={"message": "Claude Code session file not found. Clear this conversation to start a new one."},
-                    timestamp=datetime.now(UTC),
-                )
-            ]
+            return ConversationHistory(
+                messages=[
+                    SystemEvent(
+                        type=SystemEventType.SESSION_EXPIRED,
+                        data={
+                            "message": "Claude Code session file not found. Clear this conversation to start a new one."
+                        },
+                        timestamp=datetime.now(UTC),
+                    )
+                ]
+            )
 
-        # Convert to conversation events with filtering
-        return session_messages_to_events(session_messages)
+        events = session_messages_to_events(session_messages)
+        context_usage = self._extract_usage(session_messages)
+        return ConversationHistory(messages=events, context_usage=context_usage)
+
+    @staticmethod
+    def _extract_usage(session_messages: list[SessionMessage]) -> ContextUsage | None:
+        """Extract context usage from the last AssistantSessionMessage with usage data."""
+        for msg in reversed(session_messages):
+            if isinstance(msg, AssistantSessionMessage) and msg.usage:
+                usage = msg.usage
+                return ContextUsage(
+                    input_tokens=usage.get("input_tokens", 0),
+                    output_tokens=usage.get("output_tokens", 0),
+                    cache_read_tokens=usage.get("cache_read_input_tokens", 0),
+                    cache_write_tokens=usage.get("cache_creation_input_tokens", 0),
+                )
+        return None

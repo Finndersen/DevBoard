@@ -24,8 +24,8 @@ export function useStreamBootstrap() {
         const results = await Promise.allSettled(
           executions.map(async e => {
             try {
-              const messages = await apiClient.getConversationMessages(e.conversation_id)
-              setMessages(e.conversation_id, messages)
+              const { messages, context_usage } = await apiClient.getConversationMessages(e.conversation_id)
+              setMessages(e.conversation_id, messages, context_usage)
             } catch (err) {
               console.warn('[StreamBootstrap] Failed to load history for conversation', e.conversation_id, err)
             }

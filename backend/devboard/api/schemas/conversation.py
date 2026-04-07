@@ -4,6 +4,15 @@ import datetime
 
 from pydantic import BaseModel
 
+from devboard.agents.events import ContextUsage, ConversationEvent
+
+
+class ConversationMessagesResponse(BaseModel):
+    """Response schema for conversation messages endpoint."""
+
+    messages: list[ConversationEvent]
+    context_usage: ContextUsage | None = None
+
 
 class ConversationResponse(BaseModel):
     """Unified response schema for conversation details and list items."""

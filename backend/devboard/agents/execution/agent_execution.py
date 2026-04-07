@@ -10,7 +10,7 @@ import logfire
 from pydantic_ai import Tool
 
 from devboard.agents.conversation_history import ConversationHistoryService
-from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType, TextMessage
+from devboard.agents.events import ContextUsage, ConversationEvent, SystemEvent, SystemEventType, TextMessage
 from devboard.agents.roles.base import AgentRole
 from devboard.agents.system_message_tags import wrap_system_message
 from devboard.api.schemas.agent_conversation import ToolApprovals
@@ -78,6 +78,7 @@ class AgentExecutionService(ABC):
         self._additional_tools = additional_tools or []
         self._oauth_service = oauth_service
         self._interrupt_event = interrupt_event
+        self.last_usage: ContextUsage | None = None
 
     async def _build_context_message(self, user_message: str) -> str:
         """Wrap context snapshot into the user message for the first run.

@@ -74,7 +74,7 @@ describe('ConversationChat', () => {
     // Individual tests can override these with server.use() if they need specific data
     server.use(
       http.get('*/api/conversations/1/messages', () => {
-        return HttpResponse.json([])
+        return HttpResponse.json({ messages: [], context_usage: null })
       }),
       http.get('*/api/executions/active', () => {
         return HttpResponse.json({ executions: [] })
@@ -98,7 +98,7 @@ describe('ConversationChat', () => {
   it('loads and displays chat history on mount', async () => {
     server.use(
       http.get('*/api/conversations/1/messages', () => {
-        return HttpResponse.json(defaultChatHistory)
+        return HttpResponse.json({ messages: defaultChatHistory, context_usage: null })
       })
     )
 
@@ -113,7 +113,7 @@ describe('ConversationChat', () => {
   it('displays messages with correct user/assistant styling', async () => {
     server.use(
       http.get('*/api/conversations/1/messages', () => {
-        return HttpResponse.json(defaultChatHistory)
+        return HttpResponse.json({ messages: defaultChatHistory, context_usage: null })
       })
     )
 
@@ -376,14 +376,14 @@ describe('ConversationChat', () => {
 
     server.use(
       http.get('*/api/conversations/1/messages', () => {
-        return HttpResponse.json([
+        return HttpResponse.json({ messages: [
           {
             event_type: 'message',
             text_content: 'Test message from history',
             role: 'user',
             timestamp: testDate,
           },
-        ])
+        ], context_usage: null })
       })
     )
 
@@ -469,7 +469,7 @@ describe('ConversationChat', () => {
 
     server.use(
       http.get('*/api/conversations/1/messages', () => {
-        return HttpResponse.json(messages)
+        return HttpResponse.json({ messages, context_usage: null })
       })
     )
 
@@ -603,7 +603,7 @@ describe('ConversationChat', () => {
   it('handles empty chat history gracefully', async () => {
     server.use(
       http.get('*/api/conversations/1/messages', () => {
-        return HttpResponse.json([])
+        return HttpResponse.json({ messages: [], context_usage: null })
       })
     )
 
@@ -620,7 +620,7 @@ describe('ConversationChat', () => {
   it('accepts custom placeholder and empty state message', async () => {
     server.use(
       http.get('*/api/conversations/1/messages', () => {
-        return HttpResponse.json([])
+        return HttpResponse.json({ messages: [], context_usage: null })
       })
     )
 

@@ -8,7 +8,6 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
-from devboard.agents.events import ConversationEvent
 from devboard.agents.exceptions import ConversationBusyError
 from devboard.agents.execution.registry import get_execution_manager
 from devboard.api.dependencies.conversations import get_conversation_history_service
@@ -28,7 +27,7 @@ from devboard.api.schemas.agent_conversation import (
 )
 from devboard.api.schemas.claude_code_todo import TodoItem
 from devboard.api.schemas.common import DeleteResponse, ResetConversationResponse
-from devboard.api.schemas.conversation import ConversationResponse, ConversationUpdate
+from devboard.api.schemas.conversation import ConversationMessagesResponse, ConversationResponse, ConversationUpdate
 from devboard.api.schemas.integration import UpdateConversationModelRequest
 from devboard.db.models import Conversation, Project, Task, TaskStatus
 from devboard.db.repositories import ConversationRepository
@@ -86,10 +85,10 @@ async def get_conversation(
     )
 
 
-@router.get("/{conversation_id}/messages", response_model=list[ConversationEvent])
+@router.get("/{conversation_id}/messages", response_model=ConversationMessagesResponse)
 async def get_conversation_messages(
     history_service: ConversationHistoryService = Depends(get_conversation_history_service),
-) -> list[ConversationEvent]:
+) -> ConversationMessagesResponse:
     """Get all messages for a conversation.
 
     Retrieves messages from database (PydanticAI) or session files (Claude Code)
@@ -98,7 +97,8 @@ async def get_conversation_messages(
     Note: ToolCallRequest events are excluded as they are ephemeral approval
     requests, not conversation history.
     """
-    return await history_service.get_conversation_messages()
+    history = await history_service.get_conversation_history()
+    return ConversationMessagesResponse(messages=history.messages, context_usage=history.context_usage)
 
 
 def _start_agent_execution(

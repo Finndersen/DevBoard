@@ -110,6 +110,9 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
 
                 yield event
 
+            # Capture usage from the completed run
+            self.last_usage = agent.get_context_usage()
+
             if self._interrupt_event and self._interrupt_event.is_set():
                 logfire.info(f"Claude Code agent execution interrupted for conversation {self.conversation.id}")
                 raise AgentInterruptedError("Agent execution interrupted")

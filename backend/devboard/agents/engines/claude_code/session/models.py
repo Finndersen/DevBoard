@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from devboard.agents.engines.claude_code.session.types import (
     TextBlockDict,
@@ -53,6 +54,7 @@ class AssistantSessionMessage(BaseSessionMessage):
         default_factory=_assistant_content_factory
     )
     model: str | None = None
+    usage: dict[str, Any] | None = None
 
     @property
     def text_content(self) -> str:

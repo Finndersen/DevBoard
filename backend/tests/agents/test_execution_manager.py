@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from devboard.agents.events import ExecutionCompleteEvent, MessageRole, TextMessage
+from devboard.agents.events import ContextUsage, ExecutionCompleteEvent, MessageRole, TextMessage
 from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError
 from devboard.agents.execution.manager import ConversationExecutionManager
 from devboard.agents.execution.types import ConversationExecution, ExecutionStatus
@@ -18,15 +18,15 @@ def manager() -> ConversationExecutionManager:
     return ConversationExecutionManager()
 
 
-async def _simple_coro(q, ie, *, conversation_id, message_or_approvals) -> None:
-    pass
+async def _simple_coro(q, ie, *, conversation_id, message_or_approvals) -> ContextUsage | None:
+    return None
 
 
-async def _interrupt_raising_coro(q, ie, *, conversation_id, message_or_approvals) -> None:
+async def _interrupt_raising_coro(q, ie, *, conversation_id, message_or_approvals) -> ContextUsage | None:
     raise AgentInterruptedError("interrupted")
 
 
-async def _error_raising_coro(q, ie, *, conversation_id, message_or_approvals) -> None:
+async def _error_raising_coro(q, ie, *, conversation_id, message_or_approvals) -> ContextUsage | None:
     raise ValueError("something went wrong")
 
 
@@ -168,6 +168,51 @@ class TestExecutionLifecycle:
         assert conversation_id == 1
         assert isinstance(event, ExecutionCompleteEvent)
         assert event.status == "interrupted"
+
+    @pytest.mark.asyncio
+    async def test_execution_complete_event_includes_usage_from_coro(self, manager):
+        """Usage returned by the coro should appear in ExecutionCompleteEvent."""
+        expected_usage = ContextUsage(
+            input_tokens=100,
+            output_tokens=50,
+            cache_read_tokens=800,
+            cache_write_tokens=200,
+        )
+
+        async def _coro_with_usage(q, ie, *, conversation_id, message_or_approvals) -> ContextUsage | None:
+            return expected_usage
+
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_coro_with_usage):
+            execution = manager.start_agent_execution(1, "Hello")
+        await execution.asyncio_task
+
+        conversation_id, event = await asyncio.wait_for(manager.broadcast_queue.get(), timeout=1.0)
+        assert conversation_id == 1
+        assert isinstance(event, ExecutionCompleteEvent)
+        assert event.status == "completed"
+        assert event.usage == expected_usage
+
+    @pytest.mark.asyncio
+    async def test_execution_complete_event_usage_none_when_coro_returns_none(self, manager):
+        """usage should be None when the coro returns None (no usage data)."""
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_simple_coro):
+            execution = manager.start_agent_execution(1, "Hello")
+        await execution.asyncio_task
+
+        conversation_id, event = await asyncio.wait_for(manager.broadcast_queue.get(), timeout=1.0)
+        assert isinstance(event, ExecutionCompleteEvent)
+        assert event.usage is None
+
+    @pytest.mark.asyncio
+    async def test_execution_complete_event_usage_none_on_interrupt(self, manager):
+        """usage should be None when the coro raises AgentInterruptedError."""
+        with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_interrupt_raising_coro):
+            execution = manager.start_agent_execution(1, "Hello")
+        await execution.asyncio_task
+
+        conversation_id, event = await asyncio.wait_for(manager.broadcast_queue.get(), timeout=1.0)
+        assert isinstance(event, ExecutionCompleteEvent)
+        assert event.usage is None
 
 
 class TestInterrupt:

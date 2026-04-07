@@ -4,11 +4,14 @@ import datetime
 from typing import Any
 
 from devboard.agents.events import (
+    ContextUsage,
+    ExecutionCompleteEvent,
     MessageRole,
     SystemEvent,
     SystemEventType,
     TextMessage,
     ToolCallRequest,
+    describe_event,
 )
 
 
@@ -151,6 +154,144 @@ class TestTextMessageModelField:
         )
         data = event.model_dump(mode="json")
         assert data["model"] is None
+
+
+class TestContextUsage:
+    """Tests for ContextUsage model."""
+
+    def test_context_usage_creation(self):
+        usage = ContextUsage(
+            input_tokens=100,
+            output_tokens=200,
+            cache_read_tokens=5000,
+            cache_write_tokens=1000,
+        )
+        assert usage.input_tokens == 100
+        assert usage.output_tokens == 200
+        assert usage.cache_read_tokens == 5000
+        assert usage.cache_write_tokens == 1000
+        assert usage.cost_usd is None
+
+    def test_context_usage_with_cost(self):
+        usage = ContextUsage(
+            input_tokens=100,
+            output_tokens=200,
+            cache_read_tokens=5000,
+            cache_write_tokens=1000,
+            cost_usd=0.0123,
+        )
+        assert usage.cost_usd == 0.0123
+
+    def test_context_usage_serialization(self):
+        usage = ContextUsage(
+            input_tokens=100,
+            output_tokens=200,
+            cache_read_tokens=5000,
+            cache_write_tokens=1000,
+            cost_usd=0.05,
+        )
+        data = usage.model_dump(mode="json")
+        assert data["input_tokens"] == 100
+        assert data["output_tokens"] == 200
+        assert data["cache_read_tokens"] == 5000
+        assert data["cache_write_tokens"] == 1000
+        assert data["cost_usd"] == 0.05
+
+    def test_context_usage_deserialization(self):
+        data = {
+            "input_tokens": 50,
+            "output_tokens": 150,
+            "cache_read_tokens": 3000,
+            "cache_write_tokens": 500,
+        }
+        usage = ContextUsage.model_validate(data)
+        assert usage.input_tokens == 50
+        assert usage.cost_usd is None
+
+
+class TestExecutionCompleteEvent:
+    """Tests for ExecutionCompleteEvent with usage field."""
+
+    def test_execution_complete_without_usage(self):
+        event = ExecutionCompleteEvent(
+            status="completed",
+            timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
+        )
+        assert event.usage is None
+        assert event.status == "completed"
+
+    def test_execution_complete_with_usage(self):
+        usage = ContextUsage(
+            input_tokens=100,
+            output_tokens=200,
+            cache_read_tokens=5000,
+            cache_write_tokens=1000,
+        )
+        event = ExecutionCompleteEvent(
+            status="completed",
+            usage=usage,
+            timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
+        )
+        assert event.usage is not None
+        assert event.usage.input_tokens == 100
+        assert event.usage.cache_read_tokens == 5000
+
+    def test_execution_complete_serialization_without_usage(self):
+        event = ExecutionCompleteEvent(
+            status="failed",
+            error="Something went wrong",
+            timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
+        )
+        data = event.model_dump(mode="json")
+        assert data["event_type"] == "execution_complete"
+        assert data["status"] == "failed"
+        assert data["usage"] is None
+
+    def test_execution_complete_serialization_with_usage(self):
+        usage = ContextUsage(
+            input_tokens=100,
+            output_tokens=200,
+            cache_read_tokens=5000,
+            cache_write_tokens=1000,
+            cost_usd=0.01,
+        )
+        event = ExecutionCompleteEvent(
+            status="completed",
+            usage=usage,
+            timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
+        )
+        data = event.model_dump(mode="json")
+        assert data["usage"]["input_tokens"] == 100
+        assert data["usage"]["cache_read_tokens"] == 5000
+        assert data["usage"]["cost_usd"] == 0.01
+
+
+class TestDescribeEventWithUsage:
+    """Tests for describe_event with ExecutionCompleteEvent usage."""
+
+    def test_describe_execution_complete_without_usage(self):
+        event = ExecutionCompleteEvent(
+            status="completed",
+            timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
+        )
+        description = describe_event(event)
+        assert description == "ExecutionCompleteEvent(status=completed)"
+
+    def test_describe_execution_complete_with_usage(self):
+        usage = ContextUsage(
+            input_tokens=400,
+            output_tokens=200,
+            cache_read_tokens=5000,
+            cache_write_tokens=1000,
+        )
+        event = ExecutionCompleteEvent(
+            status="completed",
+            usage=usage,
+            timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
+        )
+        description = describe_event(event)
+        # total_ctx = 400 + 5000 + 1000 = 6400
+        assert description == "ExecutionCompleteEvent(status=completed, ctx=6,400 tokens)"
 
 
 class TestToolCallRequestModelField:

@@ -1,8 +1,10 @@
 """Tests for conversations API endpoints."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
+from devboard.agents.conversation_history import ConversationHistory
 from devboard.agents.engines import AgentEngine
+from devboard.agents.events import ContextUsage
 from devboard.agents.roles import AgentRoleType
 from devboard.api.schemas.claude_code_todo import TodoItem, TodoStatus
 from devboard.db.models import ParentEntityType
@@ -134,6 +136,73 @@ class TestConversationTodosEndpoint:
         """Should return 404 for nonexistent conversation."""
         response = client.get("/api/conversations/99999/todos")
         assert response.status_code == 404
+
+
+class TestGetConversationMessagesEndpoint:
+    """Tests for GET /api/conversations/{id}/messages endpoint."""
+
+    def test_returns_messages_and_context_usage(self, client, db_session, test_task):
+        """Should return messages list and context_usage in response."""
+        from devboard.db.repositories import ConversationRepository
+
+        conv_repo = ConversationRepository(db_session)
+        conversation = conv_repo.get_active_conversation_for_entity(
+            entity_type=ParentEntityType.TASK,
+            entity_id=test_task.id,
+        )
+        assert conversation is not None
+
+        expected_usage = ContextUsage(
+            input_tokens=100,
+            output_tokens=50,
+            cache_read_tokens=800,
+            cache_write_tokens=200,
+        )
+
+        with (
+            patch("devboard.api.dependencies.conversations.create_conversation_history_service") as mock_create_history,
+        ):
+            mock_service = AsyncMock()
+            mock_service.get_conversation_history.return_value = ConversationHistory(
+                messages=[], context_usage=expected_usage
+            )
+            mock_create_history.return_value = mock_service
+
+            response = client.get(f"/api/conversations/{conversation.id}/messages")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "messages" in data
+        assert "context_usage" in data
+        assert data["messages"] == []
+        assert data["context_usage"]["input_tokens"] == 100
+        assert data["context_usage"]["output_tokens"] == 50
+        assert data["context_usage"]["cache_read_tokens"] == 800
+        assert data["context_usage"]["cache_write_tokens"] == 200
+
+    def test_returns_null_context_usage_when_none(self, client, db_session, test_task):
+        """Should return null context_usage when no usage data available."""
+        from devboard.db.repositories import ConversationRepository
+
+        conv_repo = ConversationRepository(db_session)
+        conversation = conv_repo.get_active_conversation_for_entity(
+            entity_type=ParentEntityType.TASK,
+            entity_id=test_task.id,
+        )
+        assert conversation is not None
+
+        with patch(
+            "devboard.api.dependencies.conversations.create_conversation_history_service"
+        ) as mock_create_history:
+            mock_service = AsyncMock()
+            mock_service.get_conversation_history.return_value = ConversationHistory(messages=[])
+            mock_create_history.return_value = mock_service
+
+            response = client.get(f"/api/conversations/{conversation.id}/messages")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["context_usage"] is None
 
 
 class TestListConversationsEndpoint:

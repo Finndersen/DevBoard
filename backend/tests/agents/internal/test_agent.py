@@ -1,12 +1,14 @@
 """Tests for InternalAgent with Role-based architecture."""
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from pydantic_ai import Tool
+from pydantic_ai.usage import RunUsage
 
 from devboard.agents.base_agent import SHARED_PROMPT_SUFFIX
 from devboard.agents.engines.internal import InternalAgent
+from devboard.agents.events import ContextUsage
 from devboard.agents.language_models import LLMProvider, ModelType
 from devboard.agents.roles.base import AgentRole
 from devboard.db.models.language_model import LanguageModelDB
@@ -71,3 +73,50 @@ class TestInternalAgent:
             mock_agent_cls.assert_called_once()
             call_kwargs = mock_agent_cls.call_args
             assert call_kwargs[0][0] == "openai:gpt-4"
+
+
+class TestInternalAgentGetContextUsage:
+    """Tests for InternalAgent.get_context_usage()."""
+
+    @pytest.fixture
+    def agent(self):
+        role = MockAgentRole()
+        model = LanguageModelDB(provider=LLMProvider.OPENAI, name="gpt-4", model_type=ModelType.STANDARD)
+        return InternalAgent(role=role, model=model)
+
+    def test_returns_none_when_no_run_result(self, agent):
+        assert agent.last_run_result is None
+        assert agent.get_context_usage() is None
+
+    def test_returns_none_when_usage_empty(self, agent):
+        mock_result = Mock()
+        mock_result.usage.return_value = RunUsage()
+        agent.last_run_result = mock_result
+
+        assert agent.get_context_usage() is None
+
+    def test_extracts_usage_fields(self, agent):
+        mock_result = Mock()
+        mock_result.usage.return_value = RunUsage(
+            input_tokens=100,
+            output_tokens=50,
+            cache_read_tokens=800,
+            cache_write_tokens=200,
+        )
+        agent.last_run_result = mock_result
+
+        usage = agent.get_context_usage()
+
+        assert isinstance(usage, ContextUsage)
+        assert usage.input_tokens == 100
+        assert usage.output_tokens == 50
+        assert usage.cache_read_tokens == 800
+        assert usage.cache_write_tokens == 200
+        assert usage.cost_usd is None
+
+    def test_returns_none_for_zero_usage(self, agent):
+        mock_result = Mock()
+        mock_result.usage.return_value = RunUsage(input_tokens=0, output_tokens=0)
+        agent.last_run_result = mock_result
+
+        assert agent.get_context_usage() is None

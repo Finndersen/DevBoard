@@ -95,12 +95,10 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         )
 
     @pytest.mark.asyncio
-    async def test_get_conversation_messages_session_expired(self, history_service, conversation, db_session):
-        """Test that get_conversation_messages handles FileNotFoundError gracefully."""
-        # Verify the session ID is set
+    async def test_get_conversation_history_session_expired(self, history_service, conversation, db_session):
+        """Test that get_conversation_history handles FileNotFoundError gracefully."""
         assert conversation.external_session_id == "test-session-id-12345"
 
-        # Mock load_session_messages to raise FileNotFoundError
         with patch(
             "devboard.agents.engines.claude_code.conversation_history.ClaudeCodeSessionService"
         ) as mock_session_service_class:
@@ -108,26 +106,23 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
             mock_session_service.load_session_messages.side_effect = FileNotFoundError("Session file not found")
             mock_session_service_class.return_value = mock_session_service
 
-            # Call get_conversation_messages
-            events = await history_service.get_conversation_messages()
+            history = await history_service.get_conversation_history()
 
-        # Verify a SESSION_EXPIRED event is returned
-        assert len(events) == 1
-        event = events[0]
+        assert len(history.messages) == 1
+        event = history.messages[0]
         assert event.event_type == "system"
         assert event.type == SystemEventType.SESSION_EXPIRED
         assert (
             event.data["message"] == "Claude Code session file not found. Clear this conversation to start a new one."
         )
+        assert history.context_usage is None
 
-        # Verify the session ID is preserved
         db_session.refresh(conversation)
         assert conversation.external_session_id == "test-session-id-12345"
 
     @pytest.mark.asyncio
-    async def test_get_conversation_messages_no_session_id(self, conversation_repo, db_session):
-        """Test that get_conversation_messages returns empty list when no session ID."""
-        # Create conversation without external session ID
+    async def test_get_conversation_history_no_session_id(self, conversation_repo, db_session):
+        """Test that get_conversation_history returns empty when no session ID."""
         conversation = conversation_repo.create(
             parent_entity_type=ParentEntityType.PROJECT,
             parent_entity_id=2,
@@ -143,8 +138,9 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
             conversation_repository=conversation_repo,
         )
 
-        events = await history_service.get_conversation_messages()
-        assert events == []
+        history = await history_service.get_conversation_history()
+        assert history.messages == []
+        assert history.context_usage is None
 
     @pytest.mark.asyncio
     async def test_stream_events_session_expired(self, execution_service, conversation, db_session, monkeypatch):

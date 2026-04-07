@@ -3,11 +3,13 @@
 import datetime
 from unittest.mock import MagicMock, Mock
 
+import pytest
 from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.usage import RequestUsage
 from pydantic_core import to_jsonable_python
 
 from devboard.agents.engines.internal.conversation_history import PydanticAIConversationHistoryService
-from devboard.agents.events import MessageRole, MetaMessage, MetaMessageType, TextMessage
+from devboard.agents.events import ContextUsage, MessageRole, MetaMessage, MetaMessageType, TextMessage
 from devboard.db.models.messages import ConversationMessage, MessageType
 
 NOW = datetime.datetime(2025, 1, 1, 12, 0, 0, tzinfo=datetime.UTC)
@@ -40,6 +42,31 @@ def _user_prompt_msg(text: str) -> ConversationMessage:
     msg.message_type = MessageType.USER_PROMPT
     msg.text_content = text
     msg.timestamp = NOW
+    return msg
+
+
+def _make_model_response_msg_with_usage(
+    text: str,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+) -> Mock:
+    """Create a mock DbConversationMessage for a TEXT_RESPONSE with usage."""
+    model_response = ModelResponse(
+        parts=[TextPart(content=text)],
+        usage=RequestUsage(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_write_tokens,
+        ),
+    )
+    msg = Mock()
+    msg.message_type = MessageType.TEXT_RESPONSE
+    msg.text_content = text
+    msg.timestamp = datetime.datetime(2025, 10, 8, 15, 0, 0, tzinfo=datetime.UTC)
+    msg.pydantic_content = to_jsonable_python(model_response)
     return msg
 
 
@@ -152,3 +179,60 @@ class TestPydanticAIConversationHistoryServiceSystemMessageParsing:
         events = service._db_message_to_events(msg)
         assert len(events) == 1
         assert isinstance(events[0], MetaMessage)
+
+
+class TestGetConversationHistoryContextUsage:
+    """Tests for context_usage in get_conversation_history()."""
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_messages(self):
+        service = _make_history_service()
+        service.conversation_repo.get_messages.return_value = []
+
+        history = await service.get_conversation_history()
+        assert history.context_usage is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_usage_tokens(self):
+        service = _make_history_service()
+        msg = _make_model_response_msg_with_usage("Hello", input_tokens=0, output_tokens=0)
+        service.conversation_repo.get_messages.return_value = [msg]
+
+        history = await service.get_conversation_history()
+        assert history.context_usage is None
+
+    @pytest.mark.asyncio
+    async def test_extracts_usage_from_last_model_response(self):
+        service = _make_history_service()
+        msg = _make_model_response_msg_with_usage(
+            "Hello",
+            input_tokens=100,
+            output_tokens=50,
+            cache_read_tokens=800,
+            cache_write_tokens=200,
+        )
+        service.conversation_repo.get_messages.return_value = [msg]
+
+        history = await service.get_conversation_history()
+
+        assert isinstance(history.context_usage, ContextUsage)
+        assert history.context_usage == ContextUsage(
+            input_tokens=100,
+            output_tokens=50,
+            cache_read_tokens=800,
+            cache_write_tokens=200,
+        )
+
+    @pytest.mark.asyncio
+    async def test_uses_last_model_response_in_history(self):
+        """Returns usage from the most recent ModelResponse, not earlier ones."""
+        service = _make_history_service()
+        first_msg = _make_model_response_msg_with_usage("First", input_tokens=50, output_tokens=10)
+        last_msg = _make_model_response_msg_with_usage("Last", input_tokens=200, output_tokens=80)
+        service.conversation_repo.get_messages.return_value = [first_msg, last_msg]
+
+        history = await service.get_conversation_history()
+
+        assert history.context_usage is not None
+        assert history.context_usage.input_tokens == 200
+        assert history.context_usage.output_tokens == 80

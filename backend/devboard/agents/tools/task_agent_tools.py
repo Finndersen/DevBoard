@@ -115,7 +115,7 @@ def create_get_task_agent_status_tool(
         status = "running" if get_execution_manager().has_active_execution(conversation.id) else "idle"
 
         history_service = create_conversation_history_service(conversation, conversation_repo)
-        all_events = await history_service.get_conversation_messages()
+        all_events = (await history_service.get_conversation_history()).messages
 
         text_messages = [e for e in all_events if isinstance(e, TextMessage)][-max_messages:]
 

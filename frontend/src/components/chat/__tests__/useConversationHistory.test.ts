@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { useConversationHistory } from '../hooks/useConversationHistory'
 import { apiClient } from '../../../lib/api'
-import type { ConversationEvent } from '../../../lib/api'
+import type { ConversationEvent, ConversationMessagesResponse } from '../../../lib/api'
 
 vi.mock('../../../lib/api', () => ({
   apiClient: {
@@ -11,6 +11,10 @@ vi.mock('../../../lib/api', () => ({
 }))
 
 const mockGetMessages = vi.mocked(apiClient.getConversationMessages)
+
+function makeResponse(messages: ConversationEvent[]): ConversationMessagesResponse {
+  return { messages, context_usage: null }
+}
 
 const makeTextEvent = (text: string): ConversationEvent => ({
   event_type: 'message',
@@ -30,7 +34,7 @@ describe('useConversationHistory', () => {
 
   it('fetches history when historyLoaded is false on mount', async () => {
     const serverMessages = [makeTextEvent('hello')]
-    mockGetMessages.mockResolvedValue(serverMessages)
+    mockGetMessages.mockResolvedValue(makeResponse(serverMessages))
 
     renderHook(() =>
       useConversationHistory(1, [], false, setStoreMessages, setApprovals, approvalKey),
@@ -41,7 +45,7 @@ describe('useConversationHistory', () => {
     })
 
     await waitFor(() => {
-      expect(setStoreMessages).toHaveBeenCalledWith(1, serverMessages)
+      expect(setStoreMessages).toHaveBeenCalledWith(1, serverMessages, null)
     })
   })
 
@@ -59,7 +63,7 @@ describe('useConversationHistory', () => {
     // Background streaming: messages accumulated via addEvent but historyLoaded = false
     const streamingMessages = [makeTextEvent('streaming event')]
     const serverMessages = [makeTextEvent('full history')]
-    mockGetMessages.mockResolvedValue(serverMessages)
+    mockGetMessages.mockResolvedValue(makeResponse(serverMessages))
 
     renderHook(() =>
       useConversationHistory(1, streamingMessages, false, setStoreMessages, setApprovals, approvalKey),
@@ -70,13 +74,13 @@ describe('useConversationHistory', () => {
     })
 
     await waitFor(() => {
-      expect(setStoreMessages).toHaveBeenCalledWith(1, serverMessages)
+      expect(setStoreMessages).toHaveBeenCalledWith(1, serverMessages, null)
     })
   })
 
   it('re-fetches when historyLoaded transitions from true to false (simulating HMR store clear)', async () => {
     const serverMessages = [makeTextEvent('hello')]
-    mockGetMessages.mockResolvedValue(serverMessages)
+    mockGetMessages.mockResolvedValue(makeResponse(serverMessages))
 
     // Initial render with historyLoaded: true — no fetch
     const { rerender } = renderHook(
@@ -95,12 +99,12 @@ describe('useConversationHistory', () => {
     })
 
     await waitFor(() => {
-      expect(setStoreMessages).toHaveBeenCalledWith(1, serverMessages)
+      expect(setStoreMessages).toHaveBeenCalledWith(1, serverMessages, null)
     })
   })
 
   it('does not double-fetch on StrictMode double-render', async () => {
-    mockGetMessages.mockResolvedValue([])
+    mockGetMessages.mockResolvedValue(makeResponse([]))
 
     // Render twice rapidly with historyLoaded: false (simulating StrictMode)
     const { rerender } = renderHook(

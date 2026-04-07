@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import type { ConversationEvent, ExecutionCompleteEvent, ToolApprovalRequest, ToolCallRequest, ToolCall, ToolResult, SystemEvent } from '../lib/api'
+import type { ConversationEvent, ContextUsage, ExecutionCompleteEvent, ToolApprovalRequest, ToolCallRequest, ToolCall, ToolResult, SystemEvent } from '../lib/api'
 import { apiClient } from '../lib/api'
 import type { EventHandlerRegistry } from '../hooks/useConversationEventHandlers'
 import { invokeStreamCompleteHandlers, invokeEventHandlers } from '../hooks/useConversationEventHandlers'
@@ -18,6 +18,7 @@ export interface StreamState {
 export interface ConversationMessagesState {
   messages: ConversationEvent[]
   historyLoaded: boolean
+  contextUsage?: ContextUsage | null
 }
 
 // External mutable maps (outside Zustand because Immer freezes objects or they contain functions)
@@ -72,7 +73,7 @@ interface ConversationStreamActions {
   stopStream: (conversationId: number) => void
   completeStream: (conversationId: number) => void
   addEvent: (conversationId: number, event: ConversationEvent) => void
-  setMessages: (conversationId: number, messages: ConversationEvent[]) => void
+  setMessages: (conversationId: number, messages: ConversationEvent[], contextUsage?: ContextUsage | null) => void
   setError: (conversationId: number, error: Error) => void
   getStreamState: (conversationId: number) => StreamState | undefined
   isConversationStreaming: (conversationId: number) => boolean
@@ -131,6 +132,15 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
                 get().addEvent(conversationId, synthesized)
               }
             }
+          }
+          // Update contextUsage if provided in the event
+          if (completeEvent.usage) {
+            set((draft) => {
+              const convMessages = draft.conversationMessages.get(conversationId)
+              if (convMessages) {
+                convMessages.contextUsage = completeEvent.usage
+              }
+            })
           }
           get().completeStream(conversationId)
         }
@@ -403,9 +413,9 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       })
     },
 
-    setMessages: (conversationId, messages) => {
+    setMessages: (conversationId, messages, contextUsage) => {
       set((draft) => {
-        draft.conversationMessages.set(conversationId, { messages, historyLoaded: true })
+        draft.conversationMessages.set(conversationId, { messages, historyLoaded: true, contextUsage })
       })
     },
 

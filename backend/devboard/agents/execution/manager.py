@@ -11,8 +11,9 @@ from opentelemetry import context as otel_context
 from sqlalchemy.orm import Session
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.events import ConversationEvent, ExecutionCompleteEvent, SystemEvent, SystemEventType, TextMessage
+from devboard.agents.events import ContextUsage, ConversationEvent, ExecutionCompleteEvent, SystemEvent, SystemEventType, TextMessage
 from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError
+from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.agents.execution.types import ConversationExecution, ExecutionStatus, SubAgentResult
 from devboard.agents.roles.base import AgentRole
 from devboard.api.dependencies.factories import create_agent_execution_service, create_agent_role_for_conversation
@@ -45,7 +46,7 @@ class ConversationExecutionManager:
     async def _run_wrapper(
         self,
         conversation_id: int,
-        coro: Coroutine[Any, Any, None],
+        coro: Coroutine[Any, Any, ContextUsage | None],
     ) -> None:
         """Run the coroutine and handle lifecycle transitions."""
         execution = self._executions.get(conversation_id)
@@ -55,10 +56,11 @@ class ConversationExecutionManager:
         # Detach from the request's trace context — background tasks run outside
         # the request lifecycle and should produce their own root span in Logfire.
         token = otel_context.attach(otel_context.Context())
+        last_usage: ContextUsage | None = None
         try:
             with logfire.span("background.agent_execution", conversation_id=conversation_id):
                 try:
-                    await coro
+                    last_usage = await coro
                     execution.status = ExecutionStatus.COMPLETED
                     logfire.info(f"Execution completed for conversation {conversation_id}")
                 except AgentInterruptedError:
@@ -76,6 +78,7 @@ class ConversationExecutionManager:
                             ExecutionCompleteEvent(
                                 status=cast(Literal["completed", "interrupted", "failed"], execution.status),
                                 error=execution.error,
+                                usage=last_usage,
                                 timestamp=datetime.datetime.now(datetime.UTC),
                             ),
                         )
@@ -300,7 +303,7 @@ async def _create_agent_stream(
     message_or_approvals: str | ToolApprovals,
     interrupt_event: asyncio.Event,
     working_dir: str,
-) -> AsyncIterator[ConversationEvent]:
+) -> tuple[AsyncIterator[ConversationEvent], AgentExecutionService]:
     role = await create_agent_role_for_conversation(
         conversation=conversation,
         document_repo=services.document_repo,
@@ -318,7 +321,7 @@ async def _create_agent_stream(
         working_dir=working_dir,
         interrupt_event=interrupt_event,
     )
-    return exec_service.stream_events_for_message_or_approval(message_or_approvals)
+    return exec_service.stream_events_for_message_or_approval(message_or_approvals), exec_service
 
 
 async def _run_agent_for_conversation(
@@ -327,7 +330,7 @@ async def _run_agent_for_conversation(
     *,
     conversation_id: int,
     message_or_approvals: str | ToolApprovals,
-) -> None:
+) -> ContextUsage | None:
     """Run agent execution for a conversation and push events to the broadcast queue.
 
     Opens its own DB session, constructs services, runs the agent, and pushes
@@ -337,8 +340,12 @@ async def _run_agent_for_conversation(
 
     For task conversations, workspace allocation happens first so that the
     role is created with a valid working directory.
+
+    Returns:
+        ContextUsage from the agent execution if available, otherwise None.
     """
     db = SessionLocal()
+    last_usage: ContextUsage | None = None
     try:
         async with DependencyResolver(dependency_overrides={get_db: lambda: db}) as resolver:
             services = await resolver.run(get_execution_services)
@@ -369,7 +376,7 @@ async def _run_agent_for_conversation(
                                 ),
                             )
                         )
-                    agent_stream = await _create_agent_stream(
+                    agent_stream, exec_service = await _create_agent_stream(
                         services, conversation, message_or_approvals, interrupt_event, working_dir=allocation.slot.path
                     )
                     await _drain_events(
@@ -379,6 +386,7 @@ async def _run_agent_for_conversation(
                         conversation_id,
                     )
                     await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
+                    last_usage = exec_service.last_usage
             except BranchInUseException as e:
                 await broadcast_queue.put(
                     (
@@ -457,11 +465,14 @@ async def _run_agent_for_conversation(
             else:
                 raise ValueError(f"Unsupported parent entity type: {type(conversation_parent).__name__}")
 
-            agent_stream = await _create_agent_stream(
+            agent_stream, exec_service = await _create_agent_stream(
                 services, conversation, message_or_approvals, interrupt_event, working_dir=working_dir
             )
             await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
+            last_usage = exec_service.last_usage
 
     finally:
         await asyncio.to_thread(db.commit)
         await asyncio.to_thread(db.close)
+
+    return last_usage

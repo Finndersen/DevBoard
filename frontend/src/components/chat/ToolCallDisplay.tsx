@@ -80,7 +80,7 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
     if (subAgentInfo) {
       return apiClient.getClaudeCodeSubAgentMessages(sessionId!, subAgentInfo.agentId)
     }
-    return apiClient.getConversationMessages(devboardSubAgentInfo!.conversationId)
+    return apiClient.getConversationMessages(devboardSubAgentInfo!.conversationId).then(r => r.messages)
   }, [subAgentInfo, devboardSubAgentInfo, sessionId])
 
   // Determine status

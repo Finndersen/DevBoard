@@ -33,6 +33,7 @@ from pydantic_ai.tools import (
 from devboard.agents.base_agent import BaseAgent
 from devboard.agents.engines.internal.utils import convert_tool_args
 from devboard.agents.events import (
+    ContextUsage,
     ConversationEvent,
     MessageRole,
     TextMessage,
@@ -255,3 +256,17 @@ class InternalAgent(BaseAgent):
         if self.last_run_result is None:
             raise RuntimeError("get_new_messages() called before agent run completed")
         return self.last_run_result.new_messages()
+
+    def get_context_usage(self) -> ContextUsage | None:
+        """Extract ContextUsage from the last run result, if available."""
+        if self.last_run_result is None:
+            return None
+        usage = self.last_run_result.usage()
+        if not usage.has_values():
+            return None
+        return ContextUsage(
+            input_tokens=usage.input_tokens or 0,
+            output_tokens=usage.output_tokens or 0,
+            cache_read_tokens=usage.cache_read_tokens or 0,
+            cache_write_tokens=usage.cache_write_tokens or 0,
+        )

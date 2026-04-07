@@ -1,5 +1,8 @@
 import '@testing-library/jest-dom'
 import { afterAll, afterEach, beforeAll, vi } from 'vitest'
+import { enableMapSet } from 'immer'
+
+enableMapSet()
 import { setupServer } from 'msw/node'
 import { handlers } from './mocks/handlers'
 import React from 'react'

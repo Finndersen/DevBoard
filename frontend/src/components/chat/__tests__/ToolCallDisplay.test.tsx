@@ -11,7 +11,7 @@ vi.mock('../../../lib/api', async () => {
     ...actual,
     apiClient: {
       getClaudeCodeSubAgentMessages: vi.fn().mockResolvedValue([]),
-      getConversationMessages: vi.fn().mockResolvedValue([]),
+      getConversationMessages: vi.fn().mockResolvedValue({ messages: [], context_usage: null }),
     },
   }
 })

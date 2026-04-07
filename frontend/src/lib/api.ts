@@ -255,12 +255,26 @@ export interface ThinkingEvent {
   uuid?: string
 }
 
+export interface ContextUsage {
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
+  cost_usd: number | null
+}
+
 export interface ExecutionCompleteEvent {
   event_type: 'execution_complete'
   status: 'completed' | 'interrupted' | 'failed'
   error: string | null
   timestamp: string
   conversation_id: number
+  usage?: ContextUsage | null
+}
+
+export interface ConversationMessagesResponse {
+  messages: ConversationEvent[]
+  context_usage: ContextUsage | null
 }
 
 // Union type for all conversation events
@@ -998,8 +1012,8 @@ export class ApiClient {
     return this.request<ConversationResponse>(`/api/conversations/${conversationId}`)
   }
 
-  async getConversationMessages(conversationId: number | string): Promise<ConversationEvent[]> {
-    return this.request<ConversationEvent[]>(`/api/conversations/${conversationId}/messages`)
+  async getConversationMessages(conversationId: number | string): Promise<ConversationMessagesResponse> {
+    return this.request<ConversationMessagesResponse>(`/api/conversations/${conversationId}/messages`)
   }
 
   async sendConversationMessage(

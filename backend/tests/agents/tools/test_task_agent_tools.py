@@ -208,7 +208,7 @@ class TestGetTaskAgentStatus:
         ]
 
         mock_history_service = Mock()
-        mock_history_service.get_conversation_messages = AsyncMock(return_value=messages)
+        mock_history_service.get_conversation_history = AsyncMock(return_value=Mock(messages=messages))
 
         tool = create_get_task_agent_status_tool(mock_project, mock_task_service, mock_conversation_repo)
 
@@ -240,7 +240,7 @@ class TestGetTaskAgentStatus:
     ):
         """Returns running status when an execution is active."""
         mock_history_service = Mock()
-        mock_history_service.get_conversation_messages = AsyncMock(return_value=[])
+        mock_history_service.get_conversation_history = AsyncMock(return_value=Mock(messages=[]))
 
         tool = create_get_task_agent_status_tool(mock_project, mock_task_service, mock_conversation_repo)
 
@@ -265,7 +265,7 @@ class TestGetTaskAgentStatus:
         messages = [make_text_message(MessageRole.USER, f"Message {i}", offset_seconds=i) for i in range(10)]
 
         mock_history_service = Mock()
-        mock_history_service.get_conversation_messages = AsyncMock(return_value=messages)
+        mock_history_service.get_conversation_history = AsyncMock(return_value=Mock(messages=messages))
 
         tool = create_get_task_agent_status_tool(mock_project, mock_task_service, mock_conversation_repo)
 

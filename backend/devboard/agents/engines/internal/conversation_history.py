@@ -2,9 +2,10 @@
 
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ModelResponse, ToolCallPart, ToolReturnPart
 
-from devboard.agents.conversation_history import ConversationHistoryService
+from devboard.agents.conversation_history import ConversationHistory, ConversationHistoryService
 from devboard.agents.engines.internal.utils import convert_tool_args
 from devboard.agents.events import (
+    ContextUsage,
     ConversationEvent,
     MessageRole,
     MetaMessage,
@@ -23,41 +24,42 @@ class PydanticAIConversationHistoryService(ConversationHistoryService):
 
     This service retrieves messages stored in the database and converts them
     to ConversationEvent format for display.
-
-    Attributes:
-        conversation: The conversation instance (from base class)
-        conversation_repo: Repository for database operations
     """
 
-    async def get_conversation_messages(self) -> list[ConversationEvent]:
-        """Retrieve all messages for the PydanticAI conversation.
-
-        Messages are queried from the database and converted to ConversationEvent objects
-        that include text messages, tool calls, and tool results.
-
-        Returns:
-            List of ConversationEvent instances in chronological order
-        """
+    async def get_conversation_history(self) -> ConversationHistory:
         db_messages = self.conversation_repo.get_messages(self.conversation.id)
 
         events: list[ConversationEvent] = []
+        context_usage: ContextUsage | None = None
 
         for msg in db_messages:
-            # Convert each database message to appropriate ConversationEvent type(s)
             msg_events = self._db_message_to_events(msg)
             events.extend(msg_events)
 
-        return events
+            # Track usage from TEXT_RESPONSE messages (each overwrites the previous,
+            # so we end up with usage from the last model response)
+            if msg.message_type == MessageType.TEXT_RESPONSE:
+                context_usage = self._extract_usage(msg)
+
+        return ConversationHistory(messages=events, context_usage=context_usage)
+
+    def _extract_usage(self, msg: DbConversationMessage) -> ContextUsage | None:
+        """Extract context usage from a TEXT_RESPONSE database message."""
+        pydantic_msgs = ModelMessagesTypeAdapter.validate_python([msg.pydantic_content])
+        if not pydantic_msgs or not isinstance(pydantic_msgs[0], ModelResponse):
+            return None
+        usage = pydantic_msgs[0].usage
+        if not (usage.input_tokens or usage.output_tokens or usage.cache_read_tokens or usage.cache_write_tokens):
+            return None
+        return ContextUsage(
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_read_tokens=usage.cache_read_tokens,
+            cache_write_tokens=usage.cache_write_tokens,
+        )
 
     def _db_message_to_events(self, msg: DbConversationMessage) -> list[ConversationEvent]:
-        """Convert a database message to one or more ConversationEvent objects.
-
-        Args:
-            msg: Database conversation message
-
-        Returns:
-            List of ConversationEvent objects representing the message content
-        """
+        """Convert a database message to one or more ConversationEvent objects."""
         events: list[ConversationEvent] = []
 
         if msg.message_type == MessageType.USER_PROMPT:
@@ -79,7 +81,6 @@ class PydanticAIConversationHistoryService(ConversationHistoryService):
                     )
                 )
         elif msg.message_type == MessageType.TEXT_RESPONSE:
-            # Agent text response - single text message
             # Extract model_name from serialized pydantic_content if available
             model_name: str | None = None
             pydantic_msgs = ModelMessagesTypeAdapter.validate_python([msg.pydantic_content])
@@ -94,9 +95,7 @@ class PydanticAIConversationHistoryService(ConversationHistoryService):
                 )
             )
         elif msg.message_type in (MessageType.TOOL_CALL, MessageType.TOOL_RESULT, MessageType.STRUCTURED_RESPONSE):
-            # For messages containing tool calls/results, we need to parse the PydanticAI message
             pydantic_msg = convert_messages_to_pydantic([msg])[0]
-            # Extract parts from the message
             for part in pydantic_msg.parts:
                 if isinstance(part, ToolCallPart):
                     events.append(
