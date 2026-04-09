@@ -834,6 +834,41 @@ export interface OpenPRsResponse {
   errors: string[]
 }
 
+// Log Entries
+export type LogEntrySource = 'developer' | 'system' | 'agent'
+export type LogEntryStatus = 'active' | 'resolved' | 'superseded'
+
+export interface LogEntry {
+  id: number
+  timestamp: string
+  source: LogEntrySource
+  type: string
+  content: string
+  metadata: Record<string, unknown> | null
+  project_id: number | null
+  task_id: number | null
+  status: LogEntryStatus
+  pinned: boolean
+}
+
+export interface LogEntryFilters {
+  project_id?: number | null
+  task_id?: number | null
+  type?: string | null
+  since?: string | null
+  until?: string | null
+  status?: LogEntryStatus | null
+  source?: LogEntrySource | null
+  pinned?: boolean | null
+  limit?: number | null
+  offset?: number | null
+}
+
+export interface LogEntryUpdate {
+  status?: LogEntryStatus
+  pinned?: boolean
+}
+
 // Active Executions
 export interface ActiveExecutionItem {
   conversation_id: number
@@ -1473,6 +1508,25 @@ export class ApiClient {
         body: JSON.stringify(data),
       },
     )
+  }
+
+  // Log Entries
+  async getLogEntries(filters: LogEntryFilters = {}): Promise<LogEntry[]> {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== null && value !== undefined) {
+        params.set(key, String(value))
+      }
+    }
+    const query = params.toString()
+    return this.request<LogEntry[]>(`/api/log-entries${query ? `?${query}` : ''}`)
+  }
+
+  async updateLogEntry(id: number | string, data: LogEntryUpdate): Promise<LogEntry> {
+    return this.request<LogEntry>(`/api/log-entries/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    })
   }
 
   // Active Executions

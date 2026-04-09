@@ -11,6 +11,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   PlusIcon,
+  NewspaperIcon,
 } from '@heroicons/react/24/outline'
 import { useUIStore } from '../../stores/uiStore'
 
@@ -24,6 +25,7 @@ const navigationSections: NavigationSection[] = [
   { icon: HomeIcon, label: 'Home', route: '/' },
   { icon: FolderIcon, label: 'Projects', route: '/projects' },
   { icon: ListBulletIcon, label: 'Tasks', route: '/tasks' },
+  { icon: NewspaperIcon, label: 'Events', route: '/events' },
   { icon: CodeBracketIcon, label: 'Codebases', route: '/codebases' },
   { icon: PuzzlePieceIcon, label: 'MCP Servers', route: '/mcp-servers' },
   { icon: CommandLineIcon, label: 'Claude Code', route: '/claude-code' },

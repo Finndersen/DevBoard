@@ -35,6 +35,9 @@ export function useURLSync() {
     if (pathname === '/codebases') {
       return { type: 'codebases-list', entityId: 'main', title: 'Codebases' }
     }
+    if (pathname === '/events') {
+      return { type: 'events-list', entityId: 'main', title: 'Events' }
+    }
 
     // Project detail
     const projectMatch = pathname.match(/^\/projects\/(\d+)$/)
@@ -134,6 +137,9 @@ export function useURLSync() {
         break
       case 'claude-code':
         targetPath = '/claude-code'
+        break
+      case 'events-list':
+        targetPath = '/events'
         break
     }
 

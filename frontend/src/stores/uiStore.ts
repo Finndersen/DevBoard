@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
 
-export type ViewType = 'task' | 'project' | 'codebase' | 'settings' | 'home' | 'mcp-servers' | 'claude-code' | 'tasks-list' | 'projects-list' | 'codebases-list'
+export type ViewType = 'task' | 'project' | 'codebase' | 'settings' | 'home' | 'mcp-servers' | 'claude-code' | 'tasks-list' | 'projects-list' | 'codebases-list' | 'events-list'
 
 export type ActivityStatus =
   | { type: 'idle' }

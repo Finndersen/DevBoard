@@ -822,4 +822,107 @@ describe('ApiClient', () => {
     })
   })
 
+  describe('Log Entries API', () => {
+    const mockLogEntries = [
+      {
+        id: 1,
+        timestamp: '2024-01-01T00:00:00Z',
+        source: 'developer' as const,
+        type: 'thought',
+        content: 'Need to add retry logic',
+        metadata: null,
+        project_id: 1,
+        task_id: null,
+        status: 'active' as const,
+        pinned: false,
+      },
+      {
+        id: 2,
+        timestamp: '2024-01-01T01:00:00Z',
+        source: 'system' as const,
+        type: 'task_status_change',
+        content: 'Task moved to implementing',
+        metadata: { old_status: 'planning', new_status: 'implementing' },
+        project_id: 1,
+        task_id: 42,
+        status: 'active' as const,
+        pinned: true,
+      },
+    ]
+
+    it('gets log entries without filters', async () => {
+      server.use(
+        http.get('*/api/log-entries', () => {
+          return HttpResponse.json(mockLogEntries)
+        })
+      )
+
+      const result = await apiClient.getLogEntries()
+      expect(result).toEqual(mockLogEntries)
+    })
+
+    it('builds query string from filters', async () => {
+      let capturedUrl: string | undefined
+
+      server.use(
+        http.get('*/api/log-entries', ({ request }) => {
+          capturedUrl = request.url
+          return HttpResponse.json([])
+        })
+      )
+
+      await apiClient.getLogEntries({ project_id: 1, source: 'developer', pinned: true })
+      expect(capturedUrl).toContain('project_id=1')
+      expect(capturedUrl).toContain('source=developer')
+      expect(capturedUrl).toContain('pinned=true')
+    })
+
+    it('omits null and undefined filter values from query string', async () => {
+      let capturedUrl: string | undefined
+
+      server.use(
+        http.get('*/api/log-entries', ({ request }) => {
+          capturedUrl = request.url
+          return HttpResponse.json([])
+        })
+      )
+
+      await apiClient.getLogEntries({ project_id: null, source: undefined, type: 'thought' })
+      expect(capturedUrl).not.toContain('project_id')
+      expect(capturedUrl).not.toContain('source')
+      expect(capturedUrl).toContain('type=thought')
+    })
+
+    it('patches a log entry', async () => {
+      const updated = { ...mockLogEntries[0], pinned: true }
+
+      server.use(
+        http.patch('*/api/log-entries/1', async ({ request }) => {
+          const body = await request.json()
+          expect(body).toEqual({ pinned: true })
+          return HttpResponse.json(updated)
+        })
+      )
+
+      const result = await apiClient.updateLogEntry(1, { pinned: true })
+      expect(result).toEqual(updated)
+    })
+
+    it('patches a log entry status', async () => {
+      const updated = { ...mockLogEntries[0], status: 'resolved' as const }
+
+      server.use(
+        http.patch('*/api/log-entries/1', async ({ request }) => {
+          const body = await request.json()
+          expect(body).toEqual({ status: 'resolved' })
+          return HttpResponse.json(updated)
+        })
+      )
+
+      const result = await apiClient.updateLogEntry(1, { status: 'resolved' })
+      expect(result.status).toBe('resolved')
+    })
+
+  })
+
 })

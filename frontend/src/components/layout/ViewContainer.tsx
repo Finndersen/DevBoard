@@ -12,6 +12,7 @@ import ClaudeCodeView from '../../views/ClaudeCodeView'
 import ProjectsList from '../../views/ProjectsList'
 import CodebasesList from '../../views/CodebasesList'
 import TasksList from '../../views/TasksList'
+import EventsList from '../../views/EventsList'
 import ConversationEventHandlerProvider from '../chat/ConversationEventHandlerProvider'
 
 export default function ViewContainer() {
@@ -53,6 +54,7 @@ export default function ViewContainer() {
             {view.type === 'projects-list' && <ProjectsList />}
             {view.type === 'codebases-list' && <CodebasesList />}
             {view.type === 'tasks-list' && <TasksList />}
+            {view.type === 'events-list' && <EventsList />}
             {view.type === 'mcp-servers' && <MCPServersView />}
             {view.type === 'settings' && <Settings />}
             {view.type === 'claude-code' && <ClaudeCodeView />}
