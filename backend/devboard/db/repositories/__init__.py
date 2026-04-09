@@ -1,6 +1,7 @@
 """Repository layer for data access operations."""
 
 from .agent_role_config import AgentRoleConfigRepository
+from .background_agent import BackgroundAgentRepository, BackgroundAgentRunRepository
 from .base import BaseRepository
 from .claude_project import ClaudeProjectCacheRepository
 from .codebase import CodebaseRepository
@@ -18,6 +19,8 @@ from .task import TaskRepository
 from .worktree_slot import WorktreeSlotRepository
 
 __all__ = [
+    "BackgroundAgentRepository",
+    "BackgroundAgentRunRepository",
     "AgentRoleConfigRepository",
     "BaseRepository",
     "LogEntryRepository",

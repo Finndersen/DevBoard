@@ -130,7 +130,12 @@ class Conversation(Base):
             raise RuntimeError(msg)
 
         entity: Task | Project | Codebase | None
-        if self.parent_entity_type == ParentEntityType.TASK:
+        if self.parent_entity_type == ParentEntityType.BACKGROUND_AGENT:
+            # Background agents as parent entity; import locally to avoid circular imports
+            from .background_agent import BackgroundAgent
+
+            entity = session.get(BackgroundAgent, self.parent_entity_id)  # type: ignore[assignment]
+        elif self.parent_entity_type == ParentEntityType.TASK:
             if load_task_context:
                 from .implementation_plan import ImplementationPlan
 

@@ -1,6 +1,12 @@
 """Database models package."""
 
 from .agent_role_config import AgentRoleConfig
+from .background_agent import (
+    BackgroundAgent,
+    BackgroundAgentEventTrigger,
+    BackgroundAgentScheduleTrigger,
+)
+from .background_agent_run import BackgroundAgentRun, BackgroundAgentRunStatus
 from .base import Base
 from .claude_project import ClaudeProjectPathCache
 from .codebase import BranchHandling, Codebase, MergeMethod
@@ -40,6 +46,11 @@ ParentEntity = Task | Project | Codebase
 
 __all__ = [
     "AgentRoleConfig",
+    "BackgroundAgent",
+    "BackgroundAgentEventTrigger",
+    "BackgroundAgentRun",
+    "BackgroundAgentRunStatus",
+    "BackgroundAgentScheduleTrigger",
     "Base",
     "ClaudeProjectPathCache",
     "BranchHandling",

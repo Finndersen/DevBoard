@@ -1,9 +1,10 @@
 """Repository dependency injection functions."""
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from devboard.db.database import get_db
+from devboard.db.models.background_agent import BackgroundAgent
 from devboard.db.repositories import (
     AgentRoleConfigRepository,
     ClaudeProjectCacheRepository,
@@ -21,6 +22,7 @@ from devboard.db.repositories import (
     TaskRepository,
     WorktreeSlotRepository,
 )
+from devboard.db.repositories.background_agent import BackgroundAgentRepository, BackgroundAgentRunRepository
 
 
 def get_codebase_repository(db: Session = Depends(get_db)) -> CodebaseRepository:
@@ -98,3 +100,23 @@ def get_language_model_repository(db: Session = Depends(get_db)) -> LanguageMode
 def get_log_entry_repository(db: Session = Depends(get_db)) -> LogEntryRepository:
     """Get LogEntryRepository instance."""
     return LogEntryRepository(db)
+
+
+def get_background_agent_repository(db: Session = Depends(get_db)) -> BackgroundAgentRepository:
+    """Get BackgroundAgentRepository instance."""
+    return BackgroundAgentRepository(db)
+
+
+def get_background_agent_run_repository(db: Session = Depends(get_db)) -> BackgroundAgentRunRepository:
+    """Get BackgroundAgentRunRepository instance."""
+    return BackgroundAgentRunRepository(db)
+
+
+def get_background_agent_or_404(
+    agent_id: int,
+    repo: BackgroundAgentRepository = Depends(get_background_agent_repository),
+) -> BackgroundAgent:
+    agent = repo.get_by_id(agent_id, with_triggers=True)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Background agent not found")
+    return agent

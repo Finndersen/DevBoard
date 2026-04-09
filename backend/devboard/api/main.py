@@ -18,6 +18,8 @@ from devboard.agents.execution.registry import get_execution_manager, set_execut
 from devboard.agents.language_models import DEFAULT_MODELS
 from devboard.api.routers import (
     agents,
+    background_agent_runs,
+    background_agents,
     claude_code,
     codebases,
     configurations,
@@ -240,6 +242,8 @@ app.include_router(configurations.router, prefix="/api/configurations", tags=["c
 app.include_router(custom_fields.router, prefix="/api/custom-fields", tags=["custom-fields"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
+app.include_router(background_agents.router, prefix="/api/background-agents", tags=["background-agents"])
+app.include_router(background_agent_runs.router, prefix="/api/background-agent-runs", tags=["background-agent-runs"])
 app.include_router(conversations.router, prefix="/api/conversations", tags=["conversations"])
 app.include_router(websocket.router, prefix="/api", tags=["websocket"])
 app.include_router(worktrees.router, prefix="/api", tags=["worktrees"])

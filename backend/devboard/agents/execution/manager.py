@@ -11,7 +11,14 @@ from opentelemetry import context as otel_context
 from sqlalchemy.orm import Session
 
 from devboard.agents.agent_config_service import AgentConfigService
-from devboard.agents.events import ContextUsage, ConversationEvent, ExecutionCompleteEvent, SystemEvent, SystemEventType, TextMessage
+from devboard.agents.events import (
+    ContextUsage,
+    ConversationEvent,
+    ExecutionCompleteEvent,
+    SystemEvent,
+    SystemEventType,
+    TextMessage,
+)
 from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError
 from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.agents.execution.types import ConversationExecution, ExecutionStatus, SubAgentResult
