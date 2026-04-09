@@ -120,6 +120,7 @@ class ClaudeCodeAgent(BaseAgent):
         working_dir: str | None = None,
         additional_tools: list[Tool] | None = None,
         custom_instructions: str | None = None,
+        additional_write_dirs: list[str] | None = None,
     ):
         """Initialize Claude Code agent with role.
 
@@ -130,6 +131,7 @@ class ClaudeCodeAgent(BaseAgent):
             working_dir: Optional path to codebase directory
             additional_tools: Extra tools to add beyond those defined by the role
             custom_instructions: User-defined instructions to append to the base system prompt
+            additional_write_dirs: Optional list of additional directories to grant write access via Edit tool rules
         """
         if model is not None and model.provider != LLMProvider.ANTHROPIC:
             raise ValueError(f"Unsupported model provider for Claude Code: {model.provider}")
@@ -139,6 +141,7 @@ class ClaudeCodeAgent(BaseAgent):
         self.session_id = session_id
         self.working_dir = working_dir
         self.last_result_message: ResultMessage | None = None
+        self._additional_write_dirs = additional_write_dirs
         # Convert PydanticAI tools to virtual tools and function tools
         self._virtual_tools, self._function_tools = self._partition_tools()
 
@@ -183,6 +186,7 @@ class ClaudeCodeAgent(BaseAgent):
             cwd=self.working_dir,
             include_builtin_system_prompt=self.role.include_builtin_system_prompt,
             load_settings=self.role.include_claude_md,
+            additional_write_dirs=self._additional_write_dirs,
         )
 
     def _build_system_prompt(self) -> str:

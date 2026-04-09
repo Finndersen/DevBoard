@@ -54,6 +54,7 @@ class AgentExecutionService(ABC):
         additional_tools: list[Tool] | None = None,
         oauth_service: OAuthService | None = None,
         interrupt_event: asyncio.Event | None = None,
+        additional_write_dirs: list[str] | None = None,
     ):
         """Initialize the agent execution service.
 
@@ -68,6 +69,7 @@ class AgentExecutionService(ABC):
                 beyond those defined by the role. Used for workflow-action-specific tools.
             oauth_service: Optional OAuthService for OAuth-authenticated MCP servers.
             interrupt_event: Optional asyncio.Event that signals graceful interrupt when set.
+            additional_write_dirs: Optional list of additional directories to grant write access via Edit tool rules.
         """
         self.conversation = conversation
         self.role = role
@@ -78,6 +80,7 @@ class AgentExecutionService(ABC):
         self._additional_tools = additional_tools or []
         self._oauth_service = oauth_service
         self._interrupt_event = interrupt_event
+        self.additional_write_dirs = additional_write_dirs
         self.last_usage: ContextUsage | None = None
 
     async def _build_context_message(self, user_message: str) -> str:

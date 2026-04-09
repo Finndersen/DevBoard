@@ -121,6 +121,7 @@ def create_agent_execution_service(
     additional_tools: list[Tool] | None = None,
     oauth_service: OAuthService | None = None,
     interrupt_event: asyncio.Event | None = None,
+    additional_write_dirs: list[str] | None = None,
 ) -> AgentExecutionService:
     """Create the appropriate execution service based on engine type.
 
@@ -167,6 +168,7 @@ def create_agent_execution_service(
             additional_tools=additional_tools,
             oauth_service=oauth_service,
             interrupt_event=interrupt_event,
+            additional_write_dirs=additional_write_dirs,
         )
     else:
         raise HTTPException(

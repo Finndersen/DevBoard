@@ -2,13 +2,15 @@
 
 import asyncio
 import datetime
+from contextlib import ExitStack, asynccontextmanager
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from devboard.agents.events import ConversationEvent, MessageRole, TextMessage
 from devboard.api.dependencies.services import ExecutionServices
-from devboard.db.models import Conversation, Project
+from devboard.db.models import Conversation, Project, Task
+from devboard.db.models.task import TaskStatus
 
 
 @pytest.fixture
@@ -104,6 +106,7 @@ class TestRunAgentForConversation:
             agent_config_service=mock_services.agent_config_service,
             working_dir="/projects/test",
             interrupt_event=interrupt_event,
+            additional_write_dirs=None,
         )
 
     @pytest.mark.asyncio
@@ -271,3 +274,134 @@ class TestRunAgentForConversation:
                     conversation_id=99,
                     message_or_approvals="Hello",
                 )
+
+
+def _make_task_conversation(slot_path: str, codebase_local_path: str):
+    """Return (conversation, task, allocation) mocks for a task conversation."""
+    codebase = Mock()
+    codebase.local_path = codebase_local_path
+
+    task = Mock(spec=Task)
+    task.id = 42
+    task.status = TaskStatus.IMPLEMENTING
+    task.codebase = codebase
+
+    conversation = Mock(spec=Conversation)
+    conversation.id = 1
+    conversation.get_parent_entity.return_value = task
+
+    slot = Mock()
+    slot.id = 10
+    slot.path = slot_path
+
+    allocation = Mock()
+    allocation.reused = True
+    allocation.slot = slot
+
+    return conversation, task, allocation
+
+
+async def _empty_async_gen():
+    return
+    yield  # noqa: unreachable
+
+
+class TestTaskConversationWriteDirs:
+    """Tests that additional_write_dirs is correctly computed for task conversations."""
+
+    def _setup_task_workspace(self, mock_services, allocation):
+        """Configure mock workspace service and return patch list for task conversation tests."""
+
+        @asynccontextmanager
+        async def mock_allocate(_task):
+            yield allocation
+
+        mock_workspace = Mock()
+        mock_workspace.allocate_workspace = mock_allocate
+        mock_workspace.prepare_workspace.return_value = _empty_async_gen()
+        mock_services.workspace_service = mock_workspace
+
+        mock_resolver = AsyncMock()
+        mock_resolver.__aenter__ = AsyncMock(return_value=mock_resolver)
+        mock_resolver.__aexit__ = AsyncMock(return_value=None)
+        mock_resolver.run = AsyncMock(return_value=mock_services)
+
+        return [
+            patch("devboard.agents.execution.manager.SessionLocal", return_value=Mock()),
+            patch("devboard.agents.execution.manager.DependencyResolver", return_value=mock_resolver),
+            patch(
+                "devboard.agents.execution.manager.create_agent_role_for_conversation",
+                new_callable=AsyncMock,
+            ),
+            patch("devboard.agents.execution.manager.ensure_project_directory", return_value="/projects/test"),
+            patch("devboard.agents.execution.manager._drain_events", new_callable=AsyncMock),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_worktree_path_adds_codebase_to_write_dirs(self, mock_services):
+        """When slot path differs from codebase local_path, codebase path is in additional_write_dirs."""
+        codebase_path = "/repos/myapp"
+        worktree_path = "/repos/myapp/.git/worktrees/task-42"
+        conversation, _task, allocation = _make_task_conversation(worktree_path, codebase_path)
+        mock_services.conversation_repo.get_by_id.return_value = conversation
+
+        exec_service = _make_mock_exec_service(_empty_async_gen)
+        mock_create_exec = Mock(return_value=exec_service)
+        patches = self._setup_task_workspace(mock_services, allocation)
+
+        with (
+            ExitStack() as stack,
+            patch("devboard.agents.execution.manager.create_agent_execution_service", mock_create_exec),
+        ):
+            for p in patches:
+                stack.enter_context(p)
+
+            from devboard.agents.execution.manager import _run_agent_for_conversation
+
+            await _run_agent_for_conversation(
+                asyncio.Queue(), asyncio.Event(), conversation_id=1, message_or_approvals="Hello"
+            )
+
+        mock_create_exec.assert_called_once_with(
+            conversation=conversation,
+            role=mock_create_exec.call_args.kwargs["role"],
+            conversation_repo=mock_services.conversation_repo,
+            agent_config_service=mock_services.agent_config_service,
+            working_dir=worktree_path,
+            interrupt_event=mock_create_exec.call_args.kwargs["interrupt_event"],
+            additional_write_dirs=[codebase_path],
+        )
+
+    @pytest.mark.asyncio
+    async def test_same_path_does_not_add_write_dirs(self, mock_services):
+        """When slot path equals codebase local_path, additional_write_dirs is None."""
+        codebase_path = "/repos/myapp"
+        conversation, _task, allocation = _make_task_conversation(codebase_path, codebase_path)
+        mock_services.conversation_repo.get_by_id.return_value = conversation
+
+        exec_service = _make_mock_exec_service(_empty_async_gen)
+        mock_create_exec = Mock(return_value=exec_service)
+        patches = self._setup_task_workspace(mock_services, allocation)
+
+        with (
+            ExitStack() as stack,
+            patch("devboard.agents.execution.manager.create_agent_execution_service", mock_create_exec),
+        ):
+            for p in patches:
+                stack.enter_context(p)
+
+            from devboard.agents.execution.manager import _run_agent_for_conversation
+
+            await _run_agent_for_conversation(
+                asyncio.Queue(), asyncio.Event(), conversation_id=1, message_or_approvals="Hello"
+            )
+
+        mock_create_exec.assert_called_once_with(
+            conversation=conversation,
+            role=mock_create_exec.call_args.kwargs["role"],
+            conversation_repo=mock_services.conversation_repo,
+            agent_config_service=mock_services.agent_config_service,
+            working_dir=codebase_path,
+            interrupt_event=mock_create_exec.call_args.kwargs["interrupt_event"],
+            additional_write_dirs=None,
+        )

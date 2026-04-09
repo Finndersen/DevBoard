@@ -348,6 +348,53 @@ class TestClaudeClient:
             await wrapper({"count": "not a number", "name": "test"})
 
 
+class TestAdditionalWriteDirs:
+    """Tests for additional_write_dirs functionality in ClaudeClient."""
+
+    def test_additional_write_dirs_added_to_allowed_tools(self):
+        """Test that additional_write_dirs results in Edit(<dir>/**) entries in allowed_tools."""
+        client = ClaudeClient(
+            allowed_builtin_tools=["Read"],
+            additional_write_dirs=["/some/path"],
+            load_settings=False,
+        )
+        assert "Edit(/some/path/**)" in client.options.allowed_tools
+
+    def test_multiple_additional_write_dirs(self):
+        """Test that multiple additional_write_dirs all get Edit entries."""
+        client = ClaudeClient(
+            allowed_builtin_tools=["Read"],
+            additional_write_dirs=["/path/one", "/path/two"],
+            load_settings=False,
+        )
+        assert "Edit(/path/one/**)" in client.options.allowed_tools
+        assert "Edit(/path/two/**)" in client.options.allowed_tools
+
+    def test_additional_write_dirs_none_adds_no_extra_entries(self):
+        """Test that additional_write_dirs=None adds no extra Edit entries."""
+        client_with_none = ClaudeClient(
+            allowed_builtin_tools=["Read"],
+            additional_write_dirs=None,
+            load_settings=False,
+        )
+        client_without = ClaudeClient(
+            allowed_builtin_tools=["Read"],
+            load_settings=False,
+        )
+        assert client_with_none.options.allowed_tools == client_without.options.allowed_tools
+
+    def test_additional_write_dirs_combined_with_allowed_builtin_tools(self):
+        """Test that Edit entries are added alongside allowed builtin tools."""
+        client = ClaudeClient(
+            allowed_builtin_tools=["Read", "Bash"],
+            additional_write_dirs=["/repo/main"],
+            load_settings=False,
+        )
+        assert "Read" in client.options.allowed_tools
+        assert "Bash" in client.options.allowed_tools
+        assert "Edit(/repo/main/**)" in client.options.allowed_tools
+
+
 class TestMcpToolErrorHandling:
     """Tests for MCP tool error handling behavior."""
 

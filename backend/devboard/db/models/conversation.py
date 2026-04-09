@@ -142,6 +142,7 @@ class Conversation(Base):
                 stmt = (
                     select(Task)
                     .options(
+                        joinedload(Task.codebase),
                         joinedload(Task.specification),
                         joinedload(Task.implementation_plan),
                         joinedload(Task.change_summary),
@@ -151,7 +152,8 @@ class Conversation(Base):
                 )
                 entity = session.execute(stmt).unique().scalar_one_or_none()
             else:
-                entity = session.get(Task, self.parent_entity_id)
+                stmt = select(Task).options(joinedload(Task.codebase)).where(Task.id == self.parent_entity_id)
+                entity = session.execute(stmt).unique().scalar_one_or_none()
         elif self.parent_entity_type == ParentEntityType.PROJECT:
             entity = session.get(Project, self.parent_entity_id)
         elif self.parent_entity_type == ParentEntityType.CODEBASE:

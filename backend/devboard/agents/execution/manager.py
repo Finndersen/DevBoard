@@ -4,6 +4,7 @@ import asyncio
 import datetime
 import time
 from collections.abc import AsyncIterator, Coroutine
+from pathlib import Path
 from typing import Any, Literal, cast
 
 import logfire
@@ -310,7 +311,14 @@ async def _create_agent_stream(
     message_or_approvals: str | ToolApprovals,
     interrupt_event: asyncio.Event,
     working_dir: str,
+    additional_write_dirs: list[str] | None = None,
 ) -> tuple[AsyncIterator[ConversationEvent], AgentExecutionService]:
+    """Create an agent execution stream for a conversation.
+
+    Args:
+        additional_write_dirs: Extra directories to grant write access to (e.g. the main
+            codebase repo dir when working_dir is a worktree).
+    """
     role = await create_agent_role_for_conversation(
         conversation=conversation,
         document_repo=services.document_repo,
@@ -327,6 +335,7 @@ async def _create_agent_stream(
         agent_config_service=services.agent_config_service,
         working_dir=working_dir,
         interrupt_event=interrupt_event,
+        additional_write_dirs=additional_write_dirs,
     )
     return exec_service.stream_events_for_message_or_approval(message_or_approvals), exec_service
 
@@ -383,8 +392,17 @@ async def _run_agent_for_conversation(
                                 ),
                             )
                         )
+                    codebase_local_path = conversation_parent.codebase.local_path
+                    additional_write_dirs = (
+                        [codebase_local_path] if Path(allocation.slot.path) != Path(codebase_local_path) else None
+                    )
                     agent_stream, exec_service = await _create_agent_stream(
-                        services, conversation, message_or_approvals, interrupt_event, working_dir=allocation.slot.path
+                        services,
+                        conversation,
+                        message_or_approvals,
+                        interrupt_event,
+                        working_dir=allocation.slot.path,
+                        additional_write_dirs=additional_write_dirs,
                     )
                     await _drain_events(
                         services.workspace_service.prepare_workspace(conversation_parent, allocation.slot),

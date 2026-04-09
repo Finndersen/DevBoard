@@ -101,6 +101,7 @@ class ClaudeClient:
         cwd: str | None = None,
         load_settings: bool = True,
         sandbox_enabled: bool = True,
+        additional_write_dirs: list[str] | None = None,
     ):
         """Initialize Claude Code client.
 
@@ -114,6 +115,7 @@ class ClaudeClient:
             cwd: Optional working directory for Claude Code operations
             load_settings: Whether to load local, project and user-level .settings.json and CLAUDE.md files
             sandbox_enabled: Whether to enable OS-level sandboxing for bash commands (default: True)
+            additional_write_dirs: Optional list of additional directories to grant write access via Edit tool rules
         """
         self.session_id = session_id
         self._tools = tools or []
@@ -140,6 +142,11 @@ class ClaudeClient:
 
         # Combine allowed builtin tools with custom MCP tool names
         all_allowed_tools = list(allowed_set) + custom_tool_names
+
+        # Add Edit rules for additional write directories
+        if additional_write_dirs:
+            for write_dir in additional_write_dirs:
+                all_allowed_tools.append(f"Edit({write_dir}/**)")
 
         # Load environment variables from user settings
         env_vars = load_env_from_settings()

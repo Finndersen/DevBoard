@@ -141,4 +141,5 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
             working_dir=self.working_dir,
             additional_tools=extra_tools or [],
             custom_instructions=self.get_custom_instructions(),
+            additional_write_dirs=self.additional_write_dirs,
         )
