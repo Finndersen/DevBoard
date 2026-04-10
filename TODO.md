@@ -52,6 +52,12 @@
 - interrupting agent run needs to interrupt sub-agent executions as well? 
 - include duration in sub-agent response?
 - check excution status of sub-agent executions to detect failures
+- Make it more explicit which implemetnation plan step a subagent is executing - currently multiple parallel steps show as "running" status and and so agent tries to do them all
+- detect failed sub-agent exection - either poll and check active executions for sub-agents, or parent agent execution. For implementation plan steps, mark as interrupted if sub-agent execution fails.
+- allow adding custom message when doing rebase action (to proivde context about changes and what todo)
+- When rebase fails with conflict, the details of new commits/changes are not included
+- Rebase & Merge locally did not prompt to rebase first??
+- For rebase, perform action immediately and provide output to agent? (it does this already for planning since there will be no conflicts - but could probably do during implemetnation and just report the conflicts?)
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

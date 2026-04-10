@@ -39,6 +39,26 @@ export function useURLSync() {
       return { type: 'events-list', entityId: 'main', title: 'Events' }
     }
 
+    // Background agents
+    if (pathname === '/background-agents') {
+      return { type: 'background-agents-list', entityId: 'main', title: 'Agents' }
+    }
+    if (pathname === '/background-agents/new') {
+      return { type: 'background-agent-edit', entityId: 'new', title: 'Create Agent' }
+    }
+    const bgAgentRunMatch = pathname.match(/^\/background-agents\/runs\/(\d+)$/)
+    if (bgAgentRunMatch) {
+      return { type: 'background-agent-run', entityId: bgAgentRunMatch[1], title: `Run #${bgAgentRunMatch[1]}` }
+    }
+    const bgAgentEditMatch = pathname.match(/^\/background-agents\/(\d+)\/edit$/)
+    if (bgAgentEditMatch) {
+      return { type: 'background-agent-edit', entityId: bgAgentEditMatch[1], title: `Edit Agent` }
+    }
+    const bgAgentDetailMatch = pathname.match(/^\/background-agents\/(\d+)$/)
+    if (bgAgentDetailMatch) {
+      return { type: 'background-agent-detail', entityId: bgAgentDetailMatch[1], title: `Agent #${bgAgentDetailMatch[1]}` }
+    }
+
     // Project detail
     const projectMatch = pathname.match(/^\/projects\/(\d+)$/)
     if (projectMatch) {
@@ -140,6 +160,20 @@ export function useURLSync() {
         break
       case 'events-list':
         targetPath = '/events'
+        break
+      case 'background-agents-list':
+        targetPath = '/background-agents'
+        break
+      case 'background-agent-detail':
+        targetPath = `/background-agents/${activeView.entityId}`
+        break
+      case 'background-agent-edit':
+        targetPath = activeView.entityId === 'new'
+          ? '/background-agents/new'
+          : `/background-agents/${activeView.entityId}/edit`
+        break
+      case 'background-agent-run':
+        targetPath = `/background-agents/runs/${activeView.entityId}`
         break
     }
 

@@ -185,7 +185,7 @@ function MessageEventDisplay({ message, isLatest, highlightRing, previousEventTi
           )}
         </div>
         <span className="absolute bottom-1 right-1.5 bg-black/75 dark:bg-black/75 backdrop-blur-md rounded-md border border-white/[0.06] px-2 py-0.5 text-[10px] text-gray-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
-          {formatEventTiming(message.timestamp, null)}
+          {formatEventTiming(message.timestamp, previousEventTimestamp ?? null)}
         </span>
       </div>
     )

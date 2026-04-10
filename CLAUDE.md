@@ -69,6 +69,7 @@ We are working to develop an application as described in @docs/INDEX.md
 - Vitest + React Testing Library + MSW; colocated in `__tests__/` directories
 - User-centric queries, `renderHook` for custom hooks, MSW for API mocking
 - Never filter output with grep
+- When a test fails, read the **beginning** of the output to find the failing file/test name — Vitest prints it early. Use `| head -80` or pipe to a temp file; do NOT grep for `FAIL`/`×`/`failed` as Vitest's format makes these unreliable
 
 ## Scripts
 - `pnpm dev` / `pnpm build` / `pnpm lint`

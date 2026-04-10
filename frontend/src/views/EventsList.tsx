@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { NewspaperIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
+import { NewspaperIcon, ChevronDownIcon, ChevronUpIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { useLogEntries, usePinnedLogEntries } from '../hooks/useLogEntries'
 import { useProjects } from '../hooks'
 import { apiClient } from '../lib/api'
@@ -8,6 +8,8 @@ import type { LogEntry, LogEntrySource, LogEntryFilters } from '../lib/api'
 import ViewHeader from '../components/layout/ViewHeader'
 import { ErrorMessage } from '../components/ui'
 import { loadingSpinner } from '../styles/designSystem'
+import { useViewContext } from '../contexts/ViewContext'
+import { useUIStore } from '../stores/uiStore'
 
 const DEFAULT_LIMIT = 20
 
@@ -22,7 +24,7 @@ function formatRelativeTime(timestamp: string): string {
   return `${days}d ago`
 }
 
-function sourceBorderColor(source: LogEntrySource): string {
+function sourceDotColor(source: LogEntrySource): string {
   switch (source) {
     case 'developer': return 'bg-blue-500'
     case 'system': return 'bg-gray-500'
@@ -30,11 +32,11 @@ function sourceBorderColor(source: LogEntrySource): string {
   }
 }
 
-function sourceLabel(source: LogEntrySource): string {
+function sourceText(source: LogEntrySource): string {
   switch (source) {
-    case 'developer': return '👤 developer'
-    case 'system': return '⚙️ system'
-    case 'agent': return '🤖 agent'
+    case 'developer': return 'developer'
+    case 'system': return 'system'
+    case 'agent': return 'agent'
   }
 }
 
@@ -49,7 +51,21 @@ function typeBadgeClass(type: string, source: LogEntrySource): string {
   }
 }
 
-interface EntryCardProps {
+function TableColGroup() {
+  return (
+    <colgroup>
+      <col style={{ width: '5.5rem' }} />
+      <col style={{ width: '5.5rem' }} />
+      <col style={{ width: '7rem' }} />
+      <col />
+      <col style={{ width: '9rem' }} />
+      <col style={{ width: '5rem' }} />
+      <col style={{ width: '5rem' }} />
+    </colgroup>
+  )
+}
+
+interface EntryRowProps {
   entry: LogEntry
   projectName?: string
   onPin: (entry: LogEntry) => void
@@ -58,75 +74,48 @@ interface EntryCardProps {
   onNavigateTask: (id: number) => void
 }
 
-function EntryCard({
+function EntryRow({
   entry,
   projectName,
   onPin,
   onResolve,
   onNavigateProject,
   onNavigateTask,
-}: EntryCardProps) {
+}: EntryRowProps) {
   const isInactive = entry.status === 'resolved' || entry.status === 'superseded'
-  const bg = entry.source === 'system' || entry.source === 'agent'
-    ? 'bg-gray-900/60 dark:bg-gray-900/60'
-    : 'bg-gray-800/80 dark:bg-gray-800/80'
 
   return (
-    <div
-      className={`rounded-md flex gap-2 items-stretch p-2.5 ${bg} ${isInactive ? 'opacity-50' : ''}`}
-      data-testid="entry-card"
+    <tr
+      className={`border-b border-gray-700/50 hover:bg-white/[0.03] ${isInactive ? 'opacity-50' : ''}`}
+      data-testid="entry-row"
       data-source={entry.source}
       data-status={entry.status}
     >
-      {/* Left border */}
-      <div className={`w-0.5 rounded-full flex-shrink-0 self-stretch ${sourceBorderColor(entry.source)}`} />
+      {/* Timestamp */}
+      <td className="text-gray-500 text-xs whitespace-nowrap py-1.5 px-2">
+        {formatRelativeTime(entry.timestamp)}
+      </td>
+
+      {/* Source */}
+      <td className="py-1.5 px-2">
+        <span className="flex items-center gap-1.5">
+          <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${sourceDotColor(entry.source)}`} />
+          <span className="text-xs text-gray-400">{sourceText(entry.source)}</span>
+        </span>
+      </td>
+
+      {/* Type */}
+      <td className="py-1.5 px-2">
+        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${typeBadgeClass(entry.type, entry.source)}`}>
+          {entry.type}
+        </span>
+      </td>
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap mb-1">
-          <span className="text-xs text-gray-500">{formatRelativeTime(entry.timestamp)}</span>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${typeBadgeClass(entry.type, entry.source)}`}>
-            {entry.type}
-          </span>
-          <span className="text-[10px] text-gray-500">{sourceLabel(entry.source)}</span>
-          {entry.status !== 'active' && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-950 text-green-400">
-              ✓ {entry.status}
-            </span>
-          )}
-          {entry.pinned && (
-            <span className="text-[10px] text-amber-400">📌</span>
-          )}
-        </div>
-
-        <p className={`text-sm text-gray-200 m-0 ${isInactive ? 'line-through' : ''}`}>
+      <td className="py-1.5 px-2 max-w-0">
+        <p className={`text-xs text-gray-200 truncate ${isInactive ? 'line-through' : ''}`} title={entry.content}>
           {entry.content}
         </p>
-
-        {(entry.project_id || entry.task_id) && (
-          <div className="mt-1 flex gap-2 flex-wrap">
-            {entry.project_id && (
-              <button
-                onClick={() => onNavigateProject(entry.project_id!)}
-                className="text-xs text-blue-400 hover:underline"
-              >
-                {projectName ?? `Project #${entry.project_id}`}
-              </button>
-            )}
-            {entry.task_id && (
-              <>
-                {entry.project_id && <span className="text-xs text-gray-600">·</span>}
-                <button
-                  onClick={() => onNavigateTask(entry.task_id!)}
-                  className="text-xs text-blue-400 hover:underline"
-                >
-                  Task #{entry.task_id}
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
         {entry.metadata && (
           <details className="mt-1.5">
             <summary className="text-xs text-gray-500 cursor-pointer select-none">metadata</summary>
@@ -135,15 +124,50 @@ function EntryCard({
             </pre>
           </details>
         )}
-      </div>
+      </td>
+
+      {/* Project / Task */}
+      <td className="py-1.5 px-2 whitespace-nowrap">
+        {entry.project_id && (
+          <button
+            onClick={() => onNavigateProject(entry.project_id!)}
+            className="text-xs text-blue-400 hover:underline"
+          >
+            {projectName ?? `Project #${entry.project_id}`}
+          </button>
+        )}
+        {entry.project_id && entry.task_id && (
+          <span className="text-xs text-gray-600 mx-1">·</span>
+        )}
+        {entry.task_id && (
+          <button
+            onClick={() => onNavigateTask(entry.task_id!)}
+            className="text-xs text-blue-400 hover:underline"
+          >
+            Task #{entry.task_id}
+          </button>
+        )}
+      </td>
+
+      {/* Status */}
+      <td className="py-1.5 px-2 whitespace-nowrap">
+        {entry.status !== 'active' && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-950 text-green-400">
+            {entry.status}
+          </span>
+        )}
+        {entry.pinned && (
+          <span className="text-[10px] text-amber-400">📌</span>
+        )}
+      </td>
 
       {/* Actions */}
-      <div className="flex flex-col gap-1 flex-shrink-0">
+      <td className="py-1.5 px-2 whitespace-nowrap text-right">
         {entry.status === 'active' && (
           <button
             onClick={() => onResolve(entry)}
             title="Resolve"
-            className="border border-gray-600 rounded text-gray-400 text-[11px] px-1.5 py-0.5 hover:border-gray-400 hover:text-gray-200 transition-colors"
+            className="border border-gray-600 rounded text-gray-400 text-[11px] px-1.5 py-0.5 hover:border-gray-400 hover:text-gray-200 transition-colors mr-1"
           >
             ✓
           </button>
@@ -159,14 +183,16 @@ function EntryCard({
         >
           📌
         </button>
-      </div>
-    </div>
+      </td>
+    </tr>
   )
 }
 
 export default function EventsList() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { viewId } = useViewContext()
+  const activeViewId = useUIStore(state => state.activeViewId)
 
   const params = new URLSearchParams(location.search)
 
@@ -190,8 +216,15 @@ export default function EventsList() {
 
   const { data: projects } = useProjects()
 
-  // Sync filters to URL
+  // Keep navigate in a ref so the URL-sync effect doesn't re-fire on every
+  // router navigation (React Router creates a new navigate reference each render,
+  // which would re-trigger the effect before activeViewId has updated).
+  const navigateRef = useRef(navigate)
+  useEffect(() => { navigateRef.current = navigate })
+
+  // Sync filters to URL — only when this view is the active one
   useEffect(() => {
+    if (viewId !== activeViewId) return
     const p = new URLSearchParams()
     if (selectedSource) p.set('source', selectedSource)
     if (selectedProjectId) p.set('project_id', String(selectedProjectId))
@@ -200,8 +233,8 @@ export default function EventsList() {
     if (since) p.set('since', since)
     if (until) p.set('until', until)
     const qs = p.toString()
-    navigate(`/events${qs ? `?${qs}` : ''}`, { replace: true })
-  }, [selectedSource, selectedProjectId, typeFilter, pinnedOnly, since, until, navigate])
+    navigateRef.current(`/events${qs ? `?${qs}` : ''}`, { replace: true })
+  }, [selectedSource, selectedProjectId, typeFilter, pinnedOnly, since, until, viewId, activeViewId])
 
   // Reset offset and accumulated entries when filters change
   const prevFiltersKey = useRef('')
@@ -217,7 +250,7 @@ export default function EventsList() {
   const feedFilters: LogEntryFilters = {
     project_id: selectedProjectId ?? null,
     source: selectedSource,
-    type: typeFilter || null,
+    type: typeFilter ? `${typeFilter}*` : null,
     pinned: pinnedOnly ? true : null,
     since: since ? `${since}T00:00:00` : null,
     until: until ? `${until}T23:59:59` : null,
@@ -261,6 +294,13 @@ export default function EventsList() {
     setOffset(prev => prev + DEFAULT_LIMIT)
   }, [])
 
+  const handleRefresh = useCallback(() => {
+    setOffset(0)
+    setAllEntries([])
+    refetchFeed()
+    refetchPinned()
+  }, [refetchFeed, refetchPinned])
+
   const handleToggleSource = useCallback((src: LogEntrySource) => {
     // Clicking the active source deselects it (all sources); clicking an inactive source selects only it
     setSelectedSource(prev => (prev === src ? null : src))
@@ -295,6 +335,13 @@ export default function EventsList() {
     { src: 'system', label: '⚙️ System' },
     { src: 'agent', label: '🤖 Agent' },
   ]
+
+  const sharedRowProps = {
+    onPin: handlePin,
+    onResolve: handleResolve,
+    onNavigateProject: handleNavigateProject,
+    onNavigateTask: handleNavigateTask,
+  }
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -393,6 +440,19 @@ export default function EventsList() {
               data-testid="until-filter"
             />
           </label>
+
+          <div className="ml-auto">
+            <button
+              onClick={handleRefresh}
+              title="Refresh"
+              disabled={feedLoading}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs border border-gray-600 text-gray-400 hover:border-gray-400 hover:text-gray-200 disabled:opacity-40 transition-colors"
+              data-testid="refresh-button"
+            >
+              <ArrowPathIcon className={`w-3.5 h-3.5 ${feedLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {/* Pinned error */}
@@ -419,20 +479,19 @@ export default function EventsList() {
             </button>
 
             {pinnedExpanded && (
-              <div className="divide-y divide-gray-800">
-                {pinnedEntries.map(entry => (
-                  <div key={entry.id} className="p-2">
-                    <EntryCard
+              <table className="w-full border-collapse">
+                <TableColGroup />
+                <tbody>
+                  {pinnedEntries.map(entry => (
+                    <EntryRow
+                      key={entry.id}
                       entry={entry}
                       projectName={entry.project_id ? projectMap.get(entry.project_id) : undefined}
-                      onPin={handlePin}
-                      onResolve={handleResolve}
-                      onNavigateProject={handleNavigateProject}
-                      onNavigateTask={handleNavigateTask}
+                      {...sharedRowProps}
                     />
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
         )}
@@ -441,18 +500,31 @@ export default function EventsList() {
         {feedError && <ErrorMessage error={feedError} retry={refetchFeed} />}
 
         {/* Main Feed */}
-        <div className="flex flex-col gap-1.5" data-testid="main-feed">
-          {allEntries.map(entry => (
-            <EntryCard
-              key={entry.id}
-              entry={entry}
-              projectName={entry.project_id ? projectMap.get(entry.project_id) : undefined}
-              onPin={handlePin}
-              onResolve={handleResolve}
-              onNavigateProject={handleNavigateProject}
-              onNavigateTask={handleNavigateTask}
-            />
-          ))}
+        <div data-testid="main-feed">
+          <table className="w-full border-collapse">
+            <TableColGroup />
+            <thead>
+              <tr className="border-b border-gray-700/50 sticky top-0 bg-gray-900">
+                <th className="py-1.5 px-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Time</th>
+                <th className="py-1.5 px-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Source</th>
+                <th className="py-1.5 px-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Type</th>
+                <th className="py-1.5 px-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider">Content</th>
+                <th className="py-1.5 px-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Project / Task</th>
+                <th className="py-1.5 px-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Status</th>
+                <th className="py-1.5 px-2 text-right text-[10px] font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allEntries.map(entry => (
+                <EntryRow
+                  key={entry.id}
+                  entry={entry}
+                  projectName={entry.project_id ? projectMap.get(entry.project_id) : undefined}
+                  {...sharedRowProps}
+                />
+              ))}
+            </tbody>
+          </table>
 
           {feedLoading && (
             <div className="flex justify-center py-6">

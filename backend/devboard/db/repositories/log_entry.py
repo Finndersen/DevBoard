@@ -89,7 +89,7 @@ class LogEntryRepository(BaseRepository[LogEntry]):
         limit: int | None = None,
         offset: int | None = None,
     ) -> list[LogEntry]:
-        """Query log entries with optional filters, ordered by timestamp ascending.
+        """Query log entries with optional filters, ordered by timestamp descending.
 
         Args:
             project_id: Filter by project scope
@@ -105,7 +105,7 @@ class LogEntryRepository(BaseRepository[LogEntry]):
             offset: Number of results to skip (for pagination)
 
         Returns:
-            List of matching LogEntry instances ordered by timestamp ascending
+            List of matching LogEntry instances ordered by timestamp descending
         """
         stmt = select(LogEntry)
 
@@ -130,7 +130,7 @@ class LogEntryRepository(BaseRepository[LogEntry]):
         if pinned is not None:
             stmt = stmt.where(LogEntry.pinned == pinned)
 
-        stmt = stmt.order_by(LogEntry.timestamp.asc())
+        stmt = stmt.order_by(LogEntry.timestamp.desc())
 
         if offset is not None:
             stmt = stmt.offset(offset)

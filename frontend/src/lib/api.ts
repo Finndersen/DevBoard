@@ -869,6 +869,97 @@ export interface LogEntryUpdate {
   pinned?: boolean
 }
 
+// Background Agents
+export type AgentEngine = 'internal' | 'claude_code' | 'gemini_cli'
+
+export type BackgroundAgentRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+
+export interface BackgroundAgentEventTrigger {
+  id: number
+  agent_id: number
+  event_type_pattern: string
+  created_at: string
+}
+
+export interface BackgroundAgentScheduleTrigger {
+  id: number
+  agent_id: number
+  cron_expression: string
+  last_triggered_at: string | null
+  created_at: string
+}
+
+export interface BackgroundAgent {
+  id: number
+  name: string
+  description: string | null
+  prompt: string
+  engine: AgentEngine
+  model_id: string | null
+  state: Record<string, unknown>
+  enabled: boolean
+  project_id: number | null
+  created_at: string
+  updated_at: string
+  mcp_tool_ids: number[]
+  event_triggers: BackgroundAgentEventTrigger[]
+  schedule_triggers: BackgroundAgentScheduleTrigger[]
+}
+
+export interface BackgroundAgentCreate {
+  name: string
+  prompt: string
+  engine: AgentEngine
+  description?: string | null
+  model_id?: string | null
+  enabled?: boolean
+  project_id?: number | null
+  mcp_tool_ids: number[]
+  event_triggers: { event_type_pattern: string }[]
+  schedule_triggers: { cron_expression: string }[]
+}
+
+export interface BackgroundAgentUpdate {
+  name?: string | null
+  description?: string | null
+  prompt?: string | null
+  engine?: AgentEngine | null
+  model_id?: string | null
+  enabled?: boolean | null
+  project_id?: number | null
+  mcp_tool_ids?: number[] | null
+  event_triggers?: { event_type_pattern: string }[] | null
+  schedule_triggers?: { cron_expression: string }[] | null
+}
+
+export interface BackgroundAgentRun {
+  id: number
+  agent_id: number
+  conversation_id: number
+  triggered_by: string
+  trigger_event_id: string | null
+  started_at: string
+  completed_at: string | null
+  status: BackgroundAgentRunStatus
+  state_before: Record<string, unknown>
+  state_after: Record<string, unknown> | null
+  input_tokens: number | null
+  output_tokens: number | null
+  error: string | null
+}
+
+export interface BackgroundAgentRunStats {
+  total_runs: number
+  completed: number
+  failed: number
+  avg_input_tokens: number | null
+  avg_output_tokens: number | null
+}
+
+export interface ManualTriggerResponse {
+  conversation_id: number
+}
+
 // Active Executions
 export interface ActiveExecutionItem {
   conversation_id: number
@@ -1537,6 +1628,71 @@ export class ApiClient {
   async hasActiveExecution(conversationId: number): Promise<boolean> {
     const response = await this.getActiveExecutions()
     return response.executions.some((e) => e.conversation_id === conversationId)
+  }
+
+  // Background Agents
+  async getBackgroundAgents(enabled?: boolean): Promise<BackgroundAgent[]> {
+    const params = enabled !== undefined ? `?enabled=${enabled}` : ''
+    return this.request<BackgroundAgent[]>(`/api/background-agents/${params}`)
+  }
+
+  async getBackgroundAgent(id: number | string): Promise<BackgroundAgent> {
+    return this.request<BackgroundAgent>(`/api/background-agents/${id}`)
+  }
+
+  async createBackgroundAgent(data: BackgroundAgentCreate): Promise<BackgroundAgent> {
+    return this.request<BackgroundAgent>('/api/background-agents/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async updateBackgroundAgent(id: number | string, data: BackgroundAgentUpdate): Promise<BackgroundAgent> {
+    return this.request<BackgroundAgent>(`/api/background-agents/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteBackgroundAgent(id: number | string): Promise<void> {
+    return this.request<void>(`/api/background-agents/${id}`, { method: 'DELETE' })
+  }
+
+  async updateBackgroundAgentState(id: number | string, state: Record<string, unknown>): Promise<BackgroundAgent> {
+    return this.request<BackgroundAgent>(`/api/background-agents/${id}/state`, {
+      method: 'PATCH',
+      body: JSON.stringify({ state }),
+    })
+  }
+
+  async triggerBackgroundAgent(id: number | string): Promise<ManualTriggerResponse> {
+    return this.request<ManualTriggerResponse>(`/api/background-agents/${id}/trigger`, {
+      method: 'POST',
+    })
+  }
+
+  async getBackgroundAgentRuns(
+    agentId: number | string,
+    params?: { status?: BackgroundAgentRunStatus; limit?: number; offset?: number },
+  ): Promise<BackgroundAgentRun[]> {
+    const query = new URLSearchParams()
+    if (params?.status) query.set('status', params.status)
+    if (params?.limit !== undefined) query.set('limit', String(params.limit))
+    if (params?.offset !== undefined) query.set('offset', String(params.offset))
+    const qs = query.toString()
+    return this.request<BackgroundAgentRun[]>(`/api/background-agents/${agentId}/runs${qs ? `?${qs}` : ''}`)
+  }
+
+  async getBackgroundAgentRunStats(agentId: number | string): Promise<BackgroundAgentRunStats> {
+    return this.request<BackgroundAgentRunStats>(`/api/background-agents/${agentId}/runs/stats`)
+  }
+
+  async getBackgroundAgentRun(runId: number | string): Promise<BackgroundAgentRun> {
+    return this.request<BackgroundAgentRun>(`/api/background-agent-runs/${runId}`)
+  }
+
+  async getBackgroundAgentRunConversation(runId: number | string): Promise<ConversationResponse> {
+    return this.request<ConversationResponse>(`/api/background-agent-runs/${runId}/conversation`)
   }
 }
 

@@ -361,6 +361,9 @@ export default function ConversationsPanel() {
                   {/* Row 3: Project name (tasks) or entity name (project/codebase conversations) */}
                   {secondaryLabel && (
                     <div className={`text-xs mt-0.5 ml-6 truncate ${textColors.muted}`}>
+                      {isTaskConversation && (
+                        <span className="shrink-0 mr-1">#{item.parent_entity_id}</span>
+                      )}
                       {secondaryLabel}
                     </div>
                   )}

@@ -15,7 +15,7 @@ export default function Alert({ variant, title, icon, padding = 'p-4', className
   const classes = `border rounded-md ${padding} ${colors.bg} ${colors.border} ${colors.text} ${className}`
 
   return (
-    <div className={classes}>
+    <div className={classes} role="alert">
       <div className="flex">
         {icon && (
           <div className="flex-shrink-0 mr-3">

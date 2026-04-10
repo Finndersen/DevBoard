@@ -1,10 +1,20 @@
+import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, waitFor, fireEvent } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { render } from '../../test/utils'
 import { server } from '../../test/setup'
 import type { LogEntry } from '../../lib/api'
+import { ViewContextProvider } from '../../contexts/ViewContext'
 import EventsList from '../EventsList'
+
+function renderEventsList() {
+  return render(
+    <ViewContextProvider viewId="events-view" viewType="events-list" entityId="">
+      <EventsList />
+    </ViewContextProvider>
+  )
+}
 
 const mockEntries: LogEntry[] = [
   {
@@ -96,7 +106,7 @@ describe('EventsList', () => {
   })
 
   it('renders filter bar with source toggles', async () => {
-    render(<EventsList />)
+    renderEventsList()
 
     await waitFor(() => {
       expect(screen.getByTestId('filter-bar')).toBeInTheDocument()
@@ -108,7 +118,7 @@ describe('EventsList', () => {
   })
 
   it('renders all source types in the main feed', async () => {
-    render(<EventsList />)
+    renderEventsList()
 
     await waitFor(() => {
       expect(screen.getByText('Developer thought entry')).toBeInTheDocument()
@@ -119,18 +129,18 @@ describe('EventsList', () => {
   })
 
   it('shows correct source labels for each entry type', async () => {
-    render(<EventsList />)
+    renderEventsList()
 
     await waitFor(() => {
-      expect(screen.getAllByText('👤 developer').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('developer').length).toBeGreaterThan(0)
     })
 
-    expect(screen.getByText('⚙️ system')).toBeInTheDocument()
-    expect(screen.getByText('🤖 agent')).toBeInTheDocument()
+    expect(screen.getByText('system')).toBeInTheDocument()
+    expect(screen.getByText('agent')).toBeInTheDocument()
   })
 
   it('renders resolved entries with reduced opacity and strikethrough', async () => {
-    render(<EventsList />)
+    renderEventsList()
 
     await waitFor(() => {
       expect(screen.getByText('Resolved blocker')).toBeInTheDocument()
@@ -139,12 +149,12 @@ describe('EventsList', () => {
     const resolvedText = screen.getByText('Resolved blocker')
     expect(resolvedText).toHaveClass('line-through')
 
-    const card = resolvedText.closest('[data-testid="entry-card"]')
-    expect(card).toHaveClass('opacity-50')
+    const row = resolvedText.closest('[data-testid="entry-row"]')
+    expect(row).toHaveClass('opacity-50')
   })
 
   it('shows expandable metadata section for entries with metadata', async () => {
-    render(<EventsList />)
+    renderEventsList()
 
     await waitFor(() => {
       expect(screen.getByText('Task moved to implementing')).toBeInTheDocument()
@@ -156,7 +166,7 @@ describe('EventsList', () => {
   })
 
   it('shows project link for entries with project_id', async () => {
-    render(<EventsList />)
+    renderEventsList()
 
     await waitFor(() => {
       // Project name appears as a clickable button in the entry card (not just as a select option)
@@ -165,7 +175,7 @@ describe('EventsList', () => {
   })
 
   it('shows task link for entries with task_id', async () => {
-    render(<EventsList />)
+    renderEventsList()
 
     await waitFor(() => {
       expect(screen.getByText('Task #1')).toBeInTheDocument()
@@ -174,7 +184,7 @@ describe('EventsList', () => {
 
   describe('source toggles', () => {
     it('all sources are active by default (no source filter)', async () => {
-      render(<EventsList />)
+      renderEventsList()
 
       await waitFor(() => {
         expect(screen.getByTestId('source-toggle-developer')).toBeInTheDocument()
@@ -186,7 +196,7 @@ describe('EventsList', () => {
     })
 
     it('selects only clicked source, deactivating others', async () => {
-      render(<EventsList />)
+      renderEventsList()
 
       await waitFor(() => {
         expect(screen.getByTestId('source-toggle-developer')).toBeInTheDocument()
@@ -202,7 +212,7 @@ describe('EventsList', () => {
     })
 
     it('clicking active source resets to all sources', async () => {
-      render(<EventsList />)
+      renderEventsList()
 
       await waitFor(() => {
         expect(screen.getByTestId('source-toggle-developer')).toBeInTheDocument()
@@ -227,7 +237,7 @@ describe('EventsList', () => {
     it('shows pinned section when pinned entries exist', async () => {
       setupHandlers(mockEntries, [pinnedEntry])
 
-      render(<EventsList />)
+      renderEventsList()
 
       await waitFor(() => {
         expect(screen.getByTestId('pinned-section')).toBeInTheDocument()
@@ -237,7 +247,7 @@ describe('EventsList', () => {
     })
 
     it('hides pinned section when no pinned entries', async () => {
-      render(<EventsList />)
+      renderEventsList()
 
       await waitFor(() => {
         expect(screen.queryByTestId('pinned-section')).not.toBeInTheDocument()
@@ -247,7 +257,7 @@ describe('EventsList', () => {
     it('collapses pinned section when header is clicked', async () => {
       setupHandlers(mockEntries, [pinnedEntry])
 
-      render(<EventsList />)
+      renderEventsList()
 
       await waitFor(() => {
         expect(screen.getByText('Pinned blocker entry')).toBeInTheDocument()
@@ -272,7 +282,7 @@ describe('EventsList', () => {
         }),
       )
 
-      render(<EventsList />)
+      renderEventsList()
 
       await waitFor(() => {
         expect(screen.getByText('Developer thought entry')).toBeInTheDocument()
@@ -296,7 +306,7 @@ describe('EventsList', () => {
         }),
       )
 
-      render(<EventsList />)
+      renderEventsList()
 
       await waitFor(() => {
         expect(screen.getByText('Developer thought entry')).toBeInTheDocument()
@@ -314,7 +324,7 @@ describe('EventsList', () => {
 
   describe('project filter', () => {
     it('updates the project filter when a project is selected', async () => {
-      render(<EventsList />)
+      renderEventsList()
 
       await waitFor(() => {
         expect(screen.getByTestId('project-filter')).toBeInTheDocument()
@@ -336,7 +346,7 @@ describe('EventsList', () => {
       }))
       setupHandlers(fullPage)
 
-      render(<EventsList />)
+      renderEventsList()
 
       await waitFor(() => {
         expect(screen.getByTestId('load-more')).toBeInTheDocument()
@@ -344,7 +354,7 @@ describe('EventsList', () => {
     })
 
     it('does not show load more button when fewer than limit results are returned', async () => {
-      render(<EventsList />)
+      renderEventsList()
 
       await waitFor(() => {
         expect(screen.queryByTestId('load-more')).not.toBeInTheDocument()

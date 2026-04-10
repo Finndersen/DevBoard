@@ -186,9 +186,12 @@ export default function TasksList() {
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
                         {task.status}
                       </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                        {task.project_name}
-                      </span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className={`text-xs shrink-0 ${textColors.muted}`}>#{task.id}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                          {task.project_name}
+                        </span>
+                      </div>
                     </div>
                     {pr && (
                       <div className="flex items-center gap-2 mt-2 flex-wrap">

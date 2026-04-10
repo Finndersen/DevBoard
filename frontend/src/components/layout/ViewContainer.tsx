@@ -13,6 +13,10 @@ import ProjectsList from '../../views/ProjectsList'
 import CodebasesList from '../../views/CodebasesList'
 import TasksList from '../../views/TasksList'
 import EventsList from '../../views/EventsList'
+import BackgroundAgentsList from '../../views/BackgroundAgentsList'
+import BackgroundAgentDetail from '../../views/BackgroundAgentDetail'
+import BackgroundAgentEditor from '../../views/BackgroundAgentEditor'
+import BackgroundAgentRunDetail from '../../views/BackgroundAgentRunDetail'
 import ConversationEventHandlerProvider from '../chat/ConversationEventHandlerProvider'
 
 export default function ViewContainer() {
@@ -55,6 +59,10 @@ export default function ViewContainer() {
             {view.type === 'codebases-list' && <CodebasesList />}
             {view.type === 'tasks-list' && <TasksList />}
             {view.type === 'events-list' && <EventsList />}
+            {view.type === 'background-agents-list' && <BackgroundAgentsList />}
+            {view.type === 'background-agent-detail' && <BackgroundAgentDetail id={view.entityId} />}
+            {view.type === 'background-agent-edit' && <BackgroundAgentEditor id={view.entityId} />}
+            {view.type === 'background-agent-run' && <BackgroundAgentRunDetail id={view.entityId} />}
             {view.type === 'mcp-servers' && <MCPServersView />}
             {view.type === 'settings' && <Settings />}
             {view.type === 'claude-code' && <ClaudeCodeView />}

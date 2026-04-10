@@ -244,8 +244,8 @@ class TestLogEntryRepository:
 
     # ---- query — ordering ----
 
-    def test_query_ordered_by_timestamp_ascending(self, repo: LogEntryRepository, db_session: Session):
-        """query returns log entries ordered by timestamp ascending."""
+    def test_query_ordered_by_timestamp_descending(self, repo: LogEntryRepository, db_session: Session):
+        """query returns log entries ordered by timestamp descending."""
         now = datetime(2026, 3, 22, 12, 0, 0, tzinfo=UTC)
         repo.create(source=LogEntrySource.SYSTEM, type="t", content="third", timestamp=now + timedelta(seconds=2))
         repo.create(source=LogEntrySource.SYSTEM, type="t", content="first", timestamp=now)
@@ -254,7 +254,7 @@ class TestLogEntryRepository:
 
         results = repo.query()
         contents = [r.content for r in results]
-        assert contents == ["first", "second", "third"]
+        assert contents == ["third", "second", "first"]
 
     # ---- update_status ----
 
