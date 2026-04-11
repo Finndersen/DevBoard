@@ -256,6 +256,7 @@ const StepCard = memo(function StepCard({ step, taskId, onStepUpdated }: StepCar
           onClose={() => setIsSubAgentModalOpen(false)}
           fetchMessages={fetchMessages}
           title={step.title}
+          conversationId={step.conversation_id ?? undefined}
         />
       )}
     </div>

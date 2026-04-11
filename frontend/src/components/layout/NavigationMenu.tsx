@@ -5,6 +5,7 @@ import {
   Cog6ToothIcon,
   PuzzlePieceIcon,
   FolderIcon,
+  ClipboardDocumentListIcon,
   ListBulletIcon,
   CodeBracketIcon,
   CommandLineIcon,
@@ -25,8 +26,8 @@ interface NavigationSection {
 const navigationSections: NavigationSection[] = [
   { icon: HomeIcon, label: 'Home', route: '/' },
   { icon: FolderIcon, label: 'Projects', route: '/projects' },
-  { icon: ListBulletIcon, label: 'Tasks', route: '/tasks' },
-  { icon: NewspaperIcon, label: 'Events', route: '/events' },
+  { icon: ClipboardDocumentListIcon, label: 'Tasks', route: '/tasks' },
+  { icon: ListBulletIcon, label: 'Events', route: '/events' },
   { icon: CpuChipIcon, label: 'Agents', route: '/background-agents' },
   { icon: CodeBracketIcon, label: 'Codebases', route: '/codebases' },
   { icon: PuzzlePieceIcon, label: 'MCP Servers', route: '/mcp-servers' },

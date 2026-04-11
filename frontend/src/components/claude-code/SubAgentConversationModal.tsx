@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 
-import type { ConversationEvent } from '../../lib/api'
+import type { ConversationEvent, ConversationResponse } from '../../lib/api'
+import { apiClient } from '../../lib/api'
 import { textColors } from '../../styles/designSystem'
 import ConversationMessageList from '../chat/ConversationMessageList'
 import { Modal } from '../ui'
@@ -13,6 +14,7 @@ interface SubAgentConversationModalProps {
   subagentType?: string
   subtitle?: string
   workingDir?: string
+  conversationId?: number
 }
 
 export default function SubAgentConversationModal({
@@ -23,10 +25,12 @@ export default function SubAgentConversationModal({
   subagentType,
   subtitle,
   workingDir,
+  conversationId,
 }: SubAgentConversationModalProps) {
   const [messages, setMessages] = useState<ConversationEvent[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [conversationMeta, setConversationMeta] = useState<ConversationResponse | null>(null)
 
   const loadMessages = useCallback(async () => {
     setLoading(true)
@@ -44,8 +48,13 @@ export default function SubAgentConversationModal({
   useEffect(() => {
     if (isOpen) {
       loadMessages()
+      if (conversationId !== undefined) {
+        apiClient.getConversation(conversationId).then(setConversationMeta).catch(() => {})
+      } else {
+        setConversationMeta(null)
+      }
     }
-  }, [isOpen, loadMessages])
+  }, [isOpen, loadMessages, conversationId])
 
   const modalTitle = (
     <span className="flex items-center gap-2 min-w-0 w-full">
@@ -55,11 +64,19 @@ export default function SubAgentConversationModal({
           {subagentType}
         </span>
       )}
-      {subtitle && (
-        <span className="ml-auto flex-shrink-0 text-xs text-gray-400 dark:text-gray-500 font-mono">
-          {subtitle}
-        </span>
-      )}
+      <span className="ml-auto flex-shrink-0 flex items-center gap-3">
+        {subtitle && (
+          <span className={`text-xs font-mono ${textColors.muted}`}>{subtitle}</span>
+        )}
+        {conversationMeta && (
+          <>
+            <span className={`text-xs font-mono ${textColors.muted}`}>Conversation: {conversationMeta.id}</span>
+            {conversationMeta.external_session_id && (
+              <span className={`text-xs font-mono ${textColors.muted}`}>Session: {conversationMeta.external_session_id}</span>
+            )}
+          </>
+        )}
+      </span>
     </span>
   )
 

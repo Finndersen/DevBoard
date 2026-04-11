@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, ClipboardDocumentListIcon, CodeBracketIcon, ChatBubbleLeftIcon, CheckCircleIcon, ArrowPathIcon, XCircleIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, DocumentTextIcon, NumberedListIcon, CodeBracketIcon, ChatBubbleLeftIcon, CheckCircleIcon, ArrowPathIcon, XCircleIcon } from '@heroicons/react/24/outline'
 import { TaskStatus } from '../lib/api'
 import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse, PRFeedbackResponse, CustomFieldDefinition } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument, useImplementationPlan } from '../hooks'
@@ -837,8 +837,8 @@ function TaskDetail({ id }: TaskDetailProps) {
                 <div className="flex items-center justify-between">
                   <nav className="flex space-x-6">
                     {[
-                      { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon, badge: null as number | null },
-                      ...(task.implementation_plan_id || task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon, badge: null as number | null }] : []),
+                      { id: 'specification' as const, name: 'Specification', icon: DocumentTextIcon, badge: null as number | null },
+                      ...(task.implementation_plan_id || task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Plan', icon: NumberedListIcon, badge: null as number | null }] : []),
                       ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon, badge: (diffData?.files?.length ?? null) as number | null }] : []),
                       ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) && prFeedback && (prFeedback.reviews.length > 0 || prFeedback.standalone_threads.length > 0) ? [{ id: 'comments' as const, name: 'PR Comments', icon: ChatBubbleLeftIcon, badge: countPRComments(prFeedback) as number | null }] : []),
                       ...(task.change_summary_document_id ? [{ id: 'summary' as const, name: 'Change Summary', icon: DocumentTextIcon, badge: null as number | null }] : []),

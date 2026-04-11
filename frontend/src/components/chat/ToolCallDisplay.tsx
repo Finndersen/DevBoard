@@ -263,6 +263,7 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
           subagentType={subAgentInfo?.subagentType ?? devboardSubAgentInfo?.description}
           subtitle={subAgentInfo?.agentId}
           workingDir={workingDir}
+          conversationId={devboardSubAgentInfo?.conversationId}
         />
       )}
     </div>
