@@ -158,6 +158,14 @@ class WorktreePoolManager:
                             f"Branch '{task.branch_name}' is already in use by task {slot.last_used_by_task_id}"
                         )
 
+            # Branch is checked out in a worktree with no matching DB slot (orphaned worktree).
+            # Release the branch so it can be checked out in a proper slot.
+            logfire.warn(
+                f"Branch {task.branch_name} is checked out in orphaned worktree at "
+                f"{branch_location} (no matching DB slot). Releasing branch."
+            )
+            await git.release_branch_from_worktree(task.branch_name)
+
         # PRIORITY 2: Sticky slot and candidate pool in single pass
         sticky_slot: WorktreeSlot | None = None
         candidate_slots: list[WorktreeSlot] = []

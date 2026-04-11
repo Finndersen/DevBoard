@@ -126,6 +126,36 @@ async def test_allocate_uses_unlocked_slot_with_branch_already_checked_out(
     worktree_slot_repo.lock_slot.assert_called_once_with(slot, sample_task)
 
 
+@pytest.mark.asyncio
+async def test_allocate_releases_branch_from_orphaned_worktree_and_falls_through_to_lru(
+    pool_manager, worktree_slot_repo, sample_task
+):
+    """Branch found in worktree with no matching DB slot — release it and fall through to LRU."""
+    orphaned_path = "/projects/test-repo.worktree-orphan"
+    slot = _make_slot(
+        slot_id=1,
+        path="/projects/test-repo.worktree-1",
+        locked=False,
+        last_used_by_task_id=None,
+    )
+    slot.get_current_branch = AsyncMock(return_value="some-other-branch")
+    worktree_slot_repo.get_by_codebase.return_value = [slot]
+    worktree_slot_repo.get_all_locked.return_value = []
+    worktree_slot_repo.lock_slot.return_value = slot
+
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git_cls:
+        mock_git = mock_git_cls.return_value
+        mock_git.get_checked_out_location = AsyncMock(return_value=orphaned_path)
+        mock_git.release_branch_from_worktree = AsyncMock()
+        # slot has no uncommitted changes
+        with patch.object(pool_manager, "slot_has_uncommitted_changes", AsyncMock(return_value=False)):
+            result = await pool_manager.allocate_for_task(sample_task)
+
+    mock_git.release_branch_from_worktree.assert_called_once_with(sample_task.branch_name)
+    assert result == AllocationResult(slot=slot, reused=False)
+    worktree_slot_repo.lock_slot.assert_called_once_with(slot, sample_task)
+
+
 # =============================================================================
 # Worktree Path Generation
 # =============================================================================
