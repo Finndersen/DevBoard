@@ -62,12 +62,14 @@ class TestTaskPlanningRoleWithSpec:
     @pytest.fixture
     def role(self, mock_task, mock_document_repo, mock_agent_config_service, mock_task_service):
         """Create TaskPlanningRole instance."""
+        conversation_repo = Mock(spec=ConversationRepository)
+        conversation_repo.db = Mock()
         return TaskPlanningAgentRole(
             task=mock_task,
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
-            conversation_repo=Mock(spec=ConversationRepository),
+            conversation_repo=conversation_repo,
             conversation_id=None,
             working_dir="/test/working_dir",
             plan_service=Mock(spec=TaskImplementationPlanService),
@@ -90,8 +92,9 @@ class TestTaskPlanningRoleWithSpec:
         tools = role.get_tools()
 
         # Should have list_tasks, view_task_details, create_task, investigate_codebase (common),
+        # plus view_codebase_details, update_codebase (codebase tools),
         # plus edit_task (own task), edit for spec, and 7 structured plan tools
-        assert len(tools) == 13
+        assert len(tools) == 15
         tool_names = [tool.name for tool in tools]
 
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
@@ -157,12 +160,14 @@ class TestTaskPlanningRoleWithPlan:
     @pytest.fixture
     def role(self, mock_task, mock_document_repo, mock_agent_config_service, mock_task_service):
         """Create TaskPlanningRole instance."""
+        conversation_repo = Mock(spec=ConversationRepository)
+        conversation_repo.db = Mock()
         return TaskPlanningAgentRole(
             task=mock_task,
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
-            conversation_repo=Mock(spec=ConversationRepository),
+            conversation_repo=conversation_repo,
             conversation_id=None,
             working_dir="/test/working_dir",
             plan_service=Mock(spec=TaskImplementationPlanService),
@@ -184,8 +189,9 @@ class TestTaskPlanningRoleWithPlan:
         tools = role.get_tools()
 
         # Should have: list_tasks, view_task_details, create_task, investigate_codebase (common),
+        # plus view_codebase_details, update_codebase (codebase tools),
         # plus edit_task (own task), edit for spec, and 7 structured plan tools
-        assert len(tools) == 13
+        assert len(tools) == 15
 
         tool_names = [tool.name for tool in tools]
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
@@ -484,12 +490,14 @@ class TestRoleToolSelection:
         self, mock_task_with_blank_spec_and_plan, mock_document_repo, mock_agent_config_service, mock_task_service
     ):
         """Test TaskPlanningRole always provides edit_specification and structured plan tools."""
+        conversation_repo = Mock(spec=ConversationRepository)
+        conversation_repo.db = Mock()
         role = TaskPlanningAgentRole(
             task=mock_task_with_blank_spec_and_plan,
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
-            conversation_repo=Mock(spec=ConversationRepository),
+            conversation_repo=conversation_repo,
             conversation_id=None,
             working_dir="/test/working_dir",
             plan_service=Mock(spec=TaskImplementationPlanService),
@@ -511,12 +519,14 @@ class TestRoleToolSelection:
         self, mock_task_with_content, mock_document_repo, mock_agent_config_service, mock_task_service
     ):
         """Test TaskPlanningRole provides structured plan tools regardless of document content."""
+        conversation_repo = Mock(spec=ConversationRepository)
+        conversation_repo.db = Mock()
         role = TaskPlanningAgentRole(
             task=mock_task_with_content,
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
-            conversation_repo=Mock(spec=ConversationRepository),
+            conversation_repo=conversation_repo,
             conversation_id=None,
             working_dir="/test/working_dir",
             plan_service=Mock(spec=TaskImplementationPlanService),
@@ -539,12 +549,14 @@ class TestRoleToolSelection:
         self, mock_task_with_spec_only, mock_document_repo, mock_agent_config_service, mock_task_service
     ):
         """Test TaskPlanningRole always provides structured plan tools when plan_service is given."""
+        conversation_repo = Mock(spec=ConversationRepository)
+        conversation_repo.db = Mock()
         role = TaskPlanningAgentRole(
             task=mock_task_with_spec_only,
             document_repository=mock_document_repo,
             agent_config_service=mock_agent_config_service,
             task_service=mock_task_service,
-            conversation_repo=Mock(spec=ConversationRepository),
+            conversation_repo=conversation_repo,
             conversation_id=None,
             working_dir="/test/working_dir",
             plan_service=Mock(spec=TaskImplementationPlanService),

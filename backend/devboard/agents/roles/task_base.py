@@ -8,10 +8,14 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.execution.registry import get_execution_manager
 from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import create_list_tasks_tool, create_view_task_details_tool
+from devboard.agents.tools.codebase_management_tools import (
+    create_update_codebase_tool,
+    create_view_codebase_details_tool,
+)
 from devboard.agents.tools.sub_agent_tools import create_task_codebase_investigation_tool
 from devboard.agents.tools.task_tools import create_create_task_tool
 from devboard.db.models import Task
-from devboard.db.repositories import ConversationRepository
+from devboard.db.repositories import CodebaseRepository, ConversationRepository
 from devboard.services.task_service import TaskService
 
 
@@ -44,6 +48,8 @@ class TaskAgentRoleBase(AgentRole):
 
         Subclasses should call super().get_tools() and extend with role-specific tools.
         """
+        codebase_repo = CodebaseRepository(self.conversation_repo.db)
+        codebases = [self.task.codebase]
         return [
             create_list_tasks_tool(self.task.project, self.task_service),
             create_view_task_details_tool(self.task.project, self.task_service),
@@ -56,6 +62,8 @@ class TaskAgentRoleBase(AgentRole):
                 working_dir=self.working_dir,
                 execution_manager=get_execution_manager(),
             ),
+            create_view_codebase_details_tool(codebases, codebase_repo),
+            create_update_codebase_tool(codebases, codebase_repo),
         ]
 
     @abstractmethod

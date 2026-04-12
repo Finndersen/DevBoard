@@ -10,6 +10,10 @@ from devboard.agents.tools import (
     create_render_html_tool,
     create_set_document_content_tool,
 )
+from devboard.agents.tools.codebase_management_tools import (
+    create_update_codebase_tool,
+    create_view_codebase_details_tool,
+)
 from devboard.agents.tools.sub_agent_tools import CodebaseInvestigationContext, create_multi_codebase_investigation_tool
 from devboard.agents.tools.task_agent_tools import (
     create_get_task_agent_status_tool,
@@ -22,7 +26,7 @@ from devboard.agents.tools.task_tools import (
     create_view_task_details_tool,
 )
 from devboard.db.models import Project, Task
-from devboard.db.repositories import ConversationRepository, DocumentRepository
+from devboard.db.repositories import CodebaseRepository, ConversationRepository, DocumentRepository
 from devboard.services.task_service import TaskService
 
 PROJECT_QA_ROLE_PROMPT = """
@@ -151,20 +155,25 @@ class ProjectQAAgentRole(AgentRole):
             create_render_html_tool(),
         ]
 
-        # Add codebase investigation tool if project has codebases
+        # Add codebase tools if project has codebases
         if self.project.codebases:
-            tools.append(
-                create_multi_codebase_investigation_tool(
-                    [
-                        CodebaseInvestigationContext(codebase=cb, working_dir=cb.local_path)
-                        for cb in self.project.codebases
-                    ],
-                    self.agent_config_service,
-                    conversation_repo=self.conversation_repo,
-                    parent_entity=self.project,
-                    parent_conversation_id=self.conversation_id,
-                    execution_manager=get_execution_manager(),
-                )
+            codebase_repo = CodebaseRepository(self.conversation_repo.db)
+            tools.extend(
+                [
+                    create_view_codebase_details_tool(self.project.codebases, codebase_repo),
+                    create_update_codebase_tool(self.project.codebases, codebase_repo),
+                    create_multi_codebase_investigation_tool(
+                        [
+                            CodebaseInvestigationContext(codebase=cb, working_dir=cb.local_path)
+                            for cb in self.project.codebases
+                        ],
+                        self.agent_config_service,
+                        conversation_repo=self.conversation_repo,
+                        parent_entity=self.project,
+                        parent_conversation_id=self.conversation_id,
+                        execution_manager=get_execution_manager(),
+                    ),
+                ]
             )
 
         return tools

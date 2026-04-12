@@ -57,7 +57,9 @@ class TestTaskPRReviewAgentRole:
 
     @pytest.fixture
     def mock_conversation_repo(self):
-        return Mock(spec=ConversationRepository)
+        repo = Mock(spec=ConversationRepository)
+        repo.db = Mock()
+        return repo
 
     @pytest.fixture
     def role(
@@ -138,8 +140,9 @@ class TestTaskPRReviewAgentRole:
         """Test the total number of tools returned."""
         tools = role.get_tools()
         # 4 common (list_tasks, view_task_details, create_task, investigate_codebase)
+        # + 2 codebase tools (view_codebase_details, update_codebase)
         # + 5 PR-specific (get_pr_status, get_pr_feedback, code_structure_search, directory_tree, merge_pr_and_complete_task)
-        assert len(tools) == 9
+        assert len(tools) == 11
 
     def test_system_prompt_content(self, role):
         """Test role has appropriate system prompt."""

@@ -54,6 +54,12 @@ Enables agents to generate rich visualizations like dashboards, charts, styled t
 
 **get_pr_feedback**: Fetch all PR reviews and code comments. No approval (read-only). No params. Returns comprehensive feedback including reviews with their associated code comment threads and standalone comments. Used by: TaskPRReviewRole
 
+### Codebase Management
+
+**view_codebase_details**: View full configuration details of a codebase. No approval (read-only). Params: `codebase_name` (required). Returns JSON with all fields: `id`, `name`, `description`, `repository_url`, `local_path`, `default_branch`, `merge_method`, `branch_handling`, `max_worktrees`, `setup_command`, `developer_context`. Used by: ProjectQARole, TaskPlanningRole, TaskImplementationRole, TaskPRReviewRole
+
+**update_codebase**: Update configuration properties of a codebase. No approval. Params: `codebase_name` (required), `description`, `setup_command`, `developer_context` (at least one required). Only provided fields are updated. Returns JSON with `id`, `name`, and updated field values. Used by: ProjectQARole, TaskPlanningRole, TaskImplementationRole, TaskPRReviewRole
+
 ### Codebase Analysis
 
 **search_codebase**: Semantic search via embeddings. No approval (read-only). Params: `query`, `codebase_id`. Used by: All roles
@@ -131,17 +137,17 @@ Enables agents to generate rich visualizations like dashboards, charts, styled t
 
 ## Tool Registration by Role
 
-**ProjectQARole**: edit_project_specification, render_html, list_tasks, view_task_details, create_task, search_codebase, read_codebase_files
+**ProjectQARole**: edit_project_specification, render_html, list_tasks, view_task_details, create_task, view_codebase_details, update_codebase, investigate_codebase, search_codebase, read_codebase_files (codebase tools only present when project has codebases)
 
 **TaskSpecificationRole**: edit_task_specification, set_task_specification_content, search_codebase, read_codebase_files
 
-**TaskPlanningRole**: set_implementation_plan_steps, add_implementation_step, edit_implementation_step, remove_implementation_step, edit_implementation_plan_overview, read_implementation_step_details, create_task, search_codebase, read_codebase_files, execute_shell_command
+**TaskPlanningRole**: set_implementation_plan_steps, add_implementation_step, edit_implementation_step, remove_implementation_step, edit_implementation_plan_overview, read_implementation_step_details, create_task, view_codebase_details, update_codebase, search_codebase, read_codebase_files, execute_shell_command
 
-**TaskImplementationRole**: execute_implementation_step, read_implementation_step_details, create_task, search_codebase, read_codebase_files, execute_shell_command
+**TaskImplementationRole**: execute_implementation_step, read_implementation_step_details, create_task, view_codebase_details, update_codebase, search_codebase, read_codebase_files, execute_shell_command
 
 **StepExecutionRole**: search_codebase, read_codebase_files (plus Claude Code engine builtins: Read, Edit, Write, Bash, Grep, Glob, etc.)
 
-**TaskPRReviewRole**: create_task, get_pr_feedback, merge_pr_and_complete_task
+**TaskPRReviewRole**: create_task, get_pr_feedback, merge_pr_and_complete_task, view_codebase_details, update_codebase
 
 ## MCP Tool Integration
 
