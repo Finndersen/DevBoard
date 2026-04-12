@@ -33,6 +33,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
     initial_message: ''
   })
   const [isCreating, setIsCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   const [autoGenerateBranch, setAutoGenerateBranch] = useState(true)
 
   // Custom fields state
@@ -87,6 +88,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
         initial_message: ''
       })
       setIsCreating(false)
+      setCreateError(null)
       setAutoGenerateBranch(true)
       setCustomFieldValues({})
       if (!projectId) {
@@ -155,6 +157,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
     e.preventDefault()
     if (!effectiveProjectId) return
     setIsCreating(true)
+    setCreateError(null)
     try {
       const customFields: Record<string, unknown> = {}
       Object.entries(customFieldValues).forEach(([name, value]) => {
@@ -199,6 +202,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       })
     } catch (error) {
       console.error('Failed to create task:', error)
+      setCreateError(error instanceof Error ? error.message : 'Failed to create task')
     } finally {
       setIsCreating(false)
     }
@@ -347,6 +351,8 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
           onChange={handleCustomFieldChange}
           loading={customFieldsLoading}
         />
+
+        {createError && <Alert variant="error">{createError}</Alert>}
 
         <div className="flex justify-end space-x-3 pt-4">
           <Button

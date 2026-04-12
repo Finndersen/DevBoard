@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, NumberedListIcon, CodeBracketIcon, ChatBubbleLeftIcon, CheckCircleIcon, ArrowPathIcon, XCircleIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, DocumentTextIcon, NumberedListIcon, CodeBracketIcon, ChatBubbleLeftIcon, CheckCircleIcon, ArrowPathIcon, XCircleIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline'
 import { TaskStatus } from '../lib/api'
 import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse, PRFeedbackResponse, CustomFieldDefinition } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument, useImplementationPlan } from '../hooks'
@@ -17,6 +17,7 @@ import AgentChat, { type AgentChatHandle } from '../components/chat/AgentChat'
 import GitBranchStatusModal from '../components/modals/GitBranchStatusModal'
 import { apiClient } from '../lib/api'
 import { useNotificationStore } from '../stores/notificationStore'
+import { reportMutationError } from '../lib/errors'
 import { useTaskGitStatus } from './hooks/useTaskGitStatus'
 import { useTaskEventHandlers } from './hooks/useTaskEventHandlers'
 import { useCodeReviewStatus } from './hooks/useCodeReviewStatus'
@@ -257,8 +258,13 @@ function TaskDetail({ id }: TaskDetailProps) {
     if (!task) return
     try {
       await updateTask({ id: task.id, task: { custom_fields: { [fieldName]: value } } as unknown as Partial<Task> })
-    } catch {
-      addNotification({ type: 'error', message: `Failed to update custom field "${fieldName}"` })
+    } catch (err) {
+      reportMutationError(addNotification, err, {
+        entityType: 'task',
+        entityId: task.id.toString(),
+        entityTitle: task.title,
+        fallbackMessage: `Failed to update custom field "${fieldName}"`,
+      })
     }
   }, [task, updateTask, addNotification])
 
@@ -325,8 +331,12 @@ function TaskDetail({ id }: TaskDetailProps) {
         navigate(`/projects/${task.project_id}`)
       }
     } catch (error) {
-      console.error('Failed to delete task:', error)
-      // Error will be shown via deleteError state
+      reportMutationError(addNotification, error, {
+        entityType: 'task',
+        entityId: task?.id.toString() ?? null,
+        entityTitle: task?.title ?? null,
+        fallbackMessage: 'Failed to delete task',
+      })
     }
   }, [task, project, cachedViews, deleteTask, deleteTaskFromStore, findViewByEntity, switchTab, evictView, invalidateTasks, invalidateConversations, addNotification, navigate])
 

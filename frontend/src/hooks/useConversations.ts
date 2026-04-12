@@ -9,10 +9,14 @@ export function useConversations() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const inFlightRef = useRef(false)
+  const pendingRefetchRef = useRef(false)
   const conversationsVersion = useUIStore(s => s.conversationsVersion)
 
   const fetchConversations = useCallback(async () => {
-    if (inFlightRef.current) return
+    if (inFlightRef.current) {
+      pendingRefetchRef.current = true
+      return
+    }
     inFlightRef.current = true
     try {
       const result = await apiClient.getConversations()
@@ -23,6 +27,10 @@ export function useConversations() {
     } finally {
       setLoading(false)
       inFlightRef.current = false
+      if (pendingRefetchRef.current) {
+        pendingRefetchRef.current = false
+        fetchConversations()
+      }
     }
   }, [])
 

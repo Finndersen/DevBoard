@@ -24,7 +24,7 @@ function injectWsEvents(conversationId: number, events: ConversationEvent[]): vo
   }
   // execution_complete terminates the stream
   store.handleWebSocketEvent(conversationId, {
-    event_type: 'execution_complete',
+    event_type: 'agent_run_completed',
     status: 'completed',
     error: null,
     timestamp: new Date().toISOString(),

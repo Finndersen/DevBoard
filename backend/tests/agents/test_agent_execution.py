@@ -5,7 +5,16 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from devboard.agents.events import SystemEvent, SystemEventType
+from devboard.agents.events import (
+    AgentRunCompletedEvent,
+    AgentRunStartedEvent,
+    ContextUsage,
+    MessageRole,
+    SystemEvent,
+    SystemEventType,
+    TextMessage,
+)
+from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.mcp.mcp_tool_factory import MCPServerSetupFailure
 
@@ -42,7 +51,8 @@ class ConcreteAgentExecution(AgentExecutionService):
         raise NotImplementedError  # not tested here
 
     async def _stream_events_impl(self, message_or_approvals, extra_tools):
-        yield  # no-op: we only test the MCP setup failure path
+        if False:
+            yield  # make this an async generator without yielding anything
 
 
 class TestBuildContextMessage:
@@ -96,7 +106,7 @@ class TestAgentExecutionMCPSetupFailures:
             async for event in service.stream_events_for_message_or_approval("hello"):
                 events.append(event)
 
-        error_events = [e for e in events if isinstance(e, SystemEvent) and e.type == SystemEventType.STREAM_ERROR]
+        error_events = [e for e in events if isinstance(e, SystemEvent) and e.sub_type == SystemEventType.STREAM_ERROR]
         assert len(error_events) == 2
 
         assert error_events[0].data == {
@@ -125,5 +135,195 @@ class TestAgentExecutionMCPSetupFailures:
             async for event in service.stream_events_for_message_or_approval("hello"):
                 events.append(event)
 
-        error_events = [e for e in events if isinstance(e, SystemEvent) and e.type == SystemEventType.STREAM_ERROR]
+        error_events = [e for e in events if isinstance(e, SystemEvent) and e.sub_type == SystemEventType.STREAM_ERROR]
         assert len(error_events) == 0
+
+
+def _make_patched_factory():
+    """Return a mock MCPToolFactory context manager with no failures or tools."""
+    mock_factory = Mock()
+    mock_factory.setup_failures = []
+    mock_factory.get_tools.return_value = []
+    mock_factory.__aenter__ = AsyncMock(return_value=mock_factory)
+    mock_factory.__aexit__ = AsyncMock(return_value=False)
+    return mock_factory
+
+
+class TestAgentExecutionLifecycleEvents:
+    """Tests for AgentRunStartedEvent / AgentRunCompletedEvent emission in stream_events_for_message_or_approval."""
+
+    @pytest.mark.asyncio
+    async def test_happy_path_starts_and_completes(self):
+        """First event is AgentRunStartedEvent; last is AgentRunCompletedEvent(status='completed')."""
+        service = _make_concrete_service()
+
+        with patch("devboard.agents.execution.agent_execution.MCPToolFactory", return_value=_make_patched_factory()):
+            events = []
+            async for event in service.stream_events_for_message_or_approval("hello"):
+                events.append(event)
+
+        assert len(events) == 2
+        assert isinstance(events[0], AgentRunStartedEvent)
+        assert events[0].conversation_id == 1
+        assert isinstance(events[1], AgentRunCompletedEvent)
+        assert events[1].status == "completed"
+        assert events[1].error is None
+
+    @pytest.mark.asyncio
+    async def test_interrupted_yields_completed_then_reraises(self):
+        """On AgentInterruptedError: AgentRunCompletedEvent(status='interrupted') is yielded, then error is re-raised."""
+
+        class InterruptingService(AgentExecutionService):
+            async def _run_impl(self, message, extra_tools):
+                raise NotImplementedError
+
+            async def _stream_events_impl(self, message_or_approvals, extra_tools):
+                raise AgentInterruptedError("stopped")
+                yield  # make this an async generator
+
+        service = InterruptingService(
+            conversation=_make_concrete_service().conversation,
+            role=Mock(),
+            conversation_repository=Mock(),
+            history_service=Mock(),
+            agent_config_service=_make_concrete_service()._agent_config_service,
+            working_dir="/test",
+        )
+
+        with patch("devboard.agents.execution.agent_execution.MCPToolFactory", return_value=_make_patched_factory()):
+            events = []
+            with pytest.raises(AgentInterruptedError):
+                async for event in service.stream_events_for_message_or_approval("hello"):
+                    events.append(event)
+
+        assert len(events) == 2
+        assert isinstance(events[0], AgentRunStartedEvent)
+        assert isinstance(events[1], AgentRunCompletedEvent)
+        assert events[1].status == "interrupted"
+        assert events[1].error is None
+
+    @pytest.mark.asyncio
+    async def test_generic_exception_yields_failed_then_reraises(self):
+        """On generic Exception: AgentRunCompletedEvent(status='failed', error=...) is yielded, then re-raised."""
+
+        class FailingService(AgentExecutionService):
+            async def _run_impl(self, message, extra_tools):
+                raise NotImplementedError
+
+            async def _stream_events_impl(self, message_or_approvals, extra_tools):
+                raise RuntimeError("something broke")
+                yield  # make this an async generator
+
+        service = FailingService(
+            conversation=_make_concrete_service().conversation,
+            role=Mock(),
+            conversation_repository=Mock(),
+            history_service=Mock(),
+            agent_config_service=_make_concrete_service()._agent_config_service,
+            working_dir="/test",
+        )
+
+        with patch("devboard.agents.execution.agent_execution.MCPToolFactory", return_value=_make_patched_factory()):
+            events = []
+            with pytest.raises(RuntimeError, match="something broke"):
+                async for event in service.stream_events_for_message_or_approval("hello"):
+                    events.append(event)
+
+        assert len(events) == 2
+        assert isinstance(events[0], AgentRunStartedEvent)
+        assert isinstance(events[1], AgentRunCompletedEvent)
+        assert events[1].status == "failed"
+        assert events[1].error == "something broke"
+
+    @pytest.mark.asyncio
+    async def test_early_termination_no_runtime_error(self):
+        """Consumer calling .aclose() after AgentRunStartedEvent does not raise RuntimeError."""
+        service = _make_concrete_service()
+
+        with patch("devboard.agents.execution.agent_execution.MCPToolFactory", return_value=_make_patched_factory()):
+            gen = service.stream_events_for_message_or_approval("hello")
+            first_event = await gen.__anext__()
+            assert isinstance(first_event, AgentRunStartedEvent)
+
+            # Close the generator early — must not raise RuntimeError
+            await gen.aclose()
+
+
+class TestContextUsageHandling:
+    """Tests for ContextUsage interception from engine streams."""
+
+    @pytest.mark.asyncio
+    async def test_context_usage_intercepted_and_not_re_yielded(self):
+        """ContextUsage yielded by engine is intercepted; not visible in output stream."""
+
+        class UsageYieldingService(AgentExecutionService):
+            async def _run_impl(self, message, extra_tools):
+                raise NotImplementedError
+
+            async def _stream_events_impl(self, message_or_approvals, extra_tools):
+                yield TextMessage(
+                    role=MessageRole.AGENT,
+                    text_content="Response",
+                    timestamp=datetime.datetime.now(datetime.UTC),
+                )
+                yield ContextUsage(
+                    input_tokens=100,
+                    output_tokens=50,
+                    cache_read_tokens=800,
+                    cache_write_tokens=200,
+                    cost_usd=0.005,
+                )
+
+        service = UsageYieldingService(
+            conversation=_make_concrete_service().conversation,
+            role=Mock(),
+            conversation_repository=Mock(),
+            history_service=Mock(),
+            agent_config_service=_make_concrete_service()._agent_config_service,
+            working_dir="/test",
+        )
+
+        with patch("devboard.agents.execution.agent_execution.MCPToolFactory", return_value=_make_patched_factory()):
+            events = []
+            async for event in service.stream_events_for_message_or_approval("hello"):
+                events.append(event)
+
+        # ContextUsage must not appear in the output stream
+        assert not any(isinstance(e, ContextUsage) for e in events)
+        # AgentRunCompletedEvent must carry the usage
+        completed = next(e for e in events if isinstance(e, AgentRunCompletedEvent))
+        assert completed.usage is not None
+        assert completed.usage.input_tokens == 100
+        assert completed.usage.output_tokens == 50
+        assert completed.usage.cost_usd == 0.005
+
+    @pytest.mark.asyncio
+    async def test_context_usage_none_when_interrupted_before_yield(self):
+        """AgentRunCompletedEvent.usage is None when engine raises before yielding ContextUsage."""
+
+        class InterruptBeforeUsageService(AgentExecutionService):
+            async def _run_impl(self, message, extra_tools):
+                raise NotImplementedError
+
+            async def _stream_events_impl(self, message_or_approvals, extra_tools):
+                raise AgentInterruptedError("stopped before usage")
+                yield  # make this an async generator
+
+        service = InterruptBeforeUsageService(
+            conversation=_make_concrete_service().conversation,
+            role=Mock(),
+            conversation_repository=Mock(),
+            history_service=Mock(),
+            agent_config_service=_make_concrete_service()._agent_config_service,
+            working_dir="/test",
+        )
+
+        with patch("devboard.agents.execution.agent_execution.MCPToolFactory", return_value=_make_patched_factory()):
+            events = []
+            with pytest.raises(AgentInterruptedError):
+                async for event in service.stream_events_for_message_or_approval("hello"):
+                    events.append(event)
+
+        completed = next(e for e in events if isinstance(e, AgentRunCompletedEvent))
+        assert completed.status == "interrupted"
+        assert completed.usage is None

@@ -97,19 +97,18 @@ Services raise specific exceptions (e.g., `DocumentConflictError`), routers conv
 
 Agent execution runs as background asyncio tasks, decoupled from HTTP requests. Events stream via WebSocket.
 
-**ConversationExecutionManager** (`backend/devboard/agents/execution_manager.py`):
-- Process-level singleton tracking active executions per conversation
-- `start_execution(conversation_id, coro_factory)` — raises `ConversationBusyError` if already active
-- Maintains `asyncio.Queue` per execution for event buffering
-- Manages interrupt flag (`asyncio.Event`) for graceful shutdown
-- Schedules cleanup after 60s grace period
+**ConversationExecutionManager** (`backend/devboard/agents/execution/manager.py`):
+- Process-level singleton: tracks `_executions` dict, owns `broadcast_queue`, routes interrupts
+- `start_agent_execution(conversation_id, message_or_approvals)` — creates asyncio task, raises `ConversationBusyError` if already active
+- `run_sub_agent_execution(...)` — runs sub-agent inline in caller's task while registering for interrupt routing
+- Does NOT own lifecycle event shape — `AgentExecutionService` defines and emits `agent_run_started` / `agent_run_completed`
 
-**Background execution coroutines** (`backend/devboard/agents/background_execution.py`):
-- `run_agent_for_conversation(event_queue, interrupt_event, *, ...)` — executes agent, pushes events to queue
+**AgentExecutionService** (`backend/devboard/agents/execution/agent_execution.py`):
+- Per-run instance: owns MCP lifecycle, engine execution, and lifecycle event emission
+- `stream_events_for_message_or_approval()` — yields `AgentRunStartedEvent` as the first event and `AgentRunCompletedEvent` as the last, on all paths (success, interrupt, failure)
 - Creates DB sessions via `SessionLocal()` (cannot use FastAPI `Depends()` in background tasks)
-- Service factory: `create_execution_services(db)` in `backend/devboard/agents/execution_dependencies.py`
 
-**Conversation message/approval pattern**: HTTP endpoint validates request, calls `conversation_execution_manager.start_execution()`, returns `{"conversation_id": N}` immediately. WebSocket endpoint (`/api/conversations/{id}/ws`) polls for executions and streams events from queue.
+**Conversation message/approval pattern**: HTTP endpoint validates request, calls `manager.start_agent_execution()`, returns `{"conversation_id": N}` immediately. WebSocket endpoint (`/api/conversations/{id}/ws`) polls for executions and streams events from queue.
 
 **Workflow action pattern**: Workflow actions run synchronously within the HTTP request handler. Each action's `run()` method performs procedural steps (state transitions, DB changes) and returns either a prompt string or `None`. If a prompt is returned, the endpoint starts a background agent execution on the task's active conversation and returns `{"conversation_id": N}`. If `None`, returns `{"status": "completed"}`.
 
@@ -150,7 +149,7 @@ Hierarchical configuration: environment variables > database > code defaults
 - **PydanticAI**: Checks after each streaming event, raises on interrupt
 - **Claude Code**: Spawns monitor task that calls `client.interrupt()` (native SDK signal) when flag is set
 
-**On interrupt**: `ConversationExecutionManager` catches `AgentInterruptedError`, marks status as INTERRUPTED, pushes None sentinel to queue, WebSocket sends `execution_completed` with `status: "interrupted"`.
+**On interrupt**: `AgentExecutionService.stream_events_for_message_or_approval` catches `AgentInterruptedError`, yields `AgentRunCompletedEvent(status="interrupted")`, then re-raises. `ConversationExecutionManager._run_wrapper` catches the re-raised error and marks the in-memory `ConversationExecution.status` as INTERRUPTED.
 
 ### Context Assembly Strategy
 

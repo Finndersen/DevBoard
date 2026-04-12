@@ -4,13 +4,22 @@ import asyncio
 import datetime
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import logfire
 from pydantic_ai import Tool
 
 from devboard.agents.conversation_history import ConversationHistoryService
-from devboard.agents.events import ContextUsage, ConversationEvent, SystemEvent, SystemEventType, TextMessage
+from devboard.agents.events import (
+    AgentRunCompletedEvent,
+    AgentRunStartedEvent,
+    ContextUsage,
+    ConversationEvent,
+    SystemEvent,
+    SystemEventType,
+    TextMessage,
+)
+from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.roles.base import AgentRole
 from devboard.agents.system_message_tags import wrap_system_message
 from devboard.api.schemas.agent_conversation import ToolApprovals
@@ -24,23 +33,15 @@ if TYPE_CHECKING:
 
 
 class AgentExecutionService(ABC):
-    """Abstract base class for agent execution services.
+    """Runs one agent turn within a known working directory.
 
-    This class uses the template method pattern for agent execution:
-    - `stream_events_for_message_or_approval()` handles MCP tool lifecycle
-    - `_stream_events_impl()` is implemented by subclasses for engine-specific execution
+    Manages MCP tool lifecycle, delegates to the engine via the template method
+    pattern (`_stream_events_impl` / `_run_impl`), and emits `AgentRunStartedEvent`
+    and `AgentRunCompletedEvent` as the first and last events of every stream,
+    including on interrupt and failure paths.
 
-    Implementations should handle:
-    - Agent initialization and configuration
-    - Message/approval processing
-    - Tool approval workflows
-    - Response formatting and event streaming
-
-    Attributes:
-        conversation: The conversation instance this service manages
-        role: The Role defining agent behavior
-        conversation_repo: Repository for conversation operations
-        agent_config_service: Service for loading agent configuration (custom instructions, MCP tools)
+    Instances are per-run: created by `create_agent_execution_service()` and
+    discarded after the stream ends.
     """
 
     def __init__(
@@ -81,7 +82,6 @@ class AgentExecutionService(ABC):
         self._oauth_service = oauth_service
         self._interrupt_event = interrupt_event
         self.additional_write_dirs = additional_write_dirs
-        self.last_usage: ContextUsage | None = None
 
     async def _build_context_message(self, user_message: str) -> str:
         """Wrap context snapshot into the user message for the first run.
@@ -145,8 +145,13 @@ class AgentExecutionService(ABC):
     ) -> AsyncIterator[ConversationEvent]:
         """Stream conversation events from agent execution.
 
-        This method handles MCP tool lifecycle (connecting/disconnecting to MCP servers)
-        and delegates to `_stream_events_impl()` for engine-specific execution.
+        Yields `AgentRunStartedEvent` as the first event, then all events from
+        MCP setup and engine execution, and finally `AgentRunCompletedEvent` as
+        the last event (even on interrupt or failure paths).
+
+        `GeneratorExit` (consumer calling `.aclose()`) is caught to set a flag
+        that suppresses the `yield` in the `finally` block — yielding in `finally`
+        while `GeneratorExit` is active raises `RuntimeError`.
 
         Args:
             message_or_approvals: Either a user message string or ToolApprovals model
@@ -155,6 +160,10 @@ class AgentExecutionService(ABC):
             ConversationEvent instances as they are generated during agent execution
         """
         is_approval = isinstance(message_or_approvals, ToolApprovals)
+        status: Literal["completed", "interrupted", "failed"] = "completed"
+        error: str | None = None
+        cancelled = False
+        last_usage: ContextUsage | None = None
 
         with logfire.span(
             "agent_execution.stream_events",
@@ -162,22 +171,48 @@ class AgentExecutionService(ABC):
             engine=self.conversation.engine.value,
             is_approval=is_approval,
         ):
-            mcp_tool_configs = self._agent_config_service.get_enabled_mcp_tools(self.conversation.agent_role)
-            async with MCPToolFactory(mcp_tool_configs, oauth_service=self._oauth_service) as mcp_factory:
-                for failure in mcp_factory.setup_failures:
-                    yield SystemEvent(
-                        type=SystemEventType.STREAM_ERROR,
-                        data={
-                            "error_code": "MCP_SERVER_SETUP_FAILED",
-                            "message": f"MCP server '{failure.server_name}' failed to connect: {failure.error}",
-                        },
+            yield AgentRunStartedEvent(
+                conversation_id=self.conversation.id,
+                timestamp=datetime.datetime.now(tz=datetime.UTC),
+            )
+            try:
+                mcp_tool_configs = self._agent_config_service.get_enabled_mcp_tools(self.conversation.agent_role)
+                async with MCPToolFactory(mcp_tool_configs, oauth_service=self._oauth_service) as mcp_factory:
+                    for failure in mcp_factory.setup_failures:
+                        yield SystemEvent(
+                            sub_type=SystemEventType.STREAM_ERROR,
+                            data={
+                                "error_code": "MCP_SERVER_SETUP_FAILED",
+                                "message": f"MCP server '{failure.server_name}' failed to connect: {failure.error}",
+                            },
+                            timestamp=datetime.datetime.now(tz=datetime.UTC),
+                        )
+
+                    # MCP server tools for the role plus any others added dynamically for the specific run
+                    extra_tools = self._additional_tools + mcp_factory.get_tools()
+                    async for event in self._stream_events_impl(message_or_approvals, extra_tools):
+                        if isinstance(event, ContextUsage):
+                            last_usage = event
+                            continue  # out-of-band return value — not re-yielded
+                        yield event
+            except AgentInterruptedError:
+                status = "interrupted"
+                raise
+            except GeneratorExit:
+                cancelled = True
+                raise
+            except Exception as e:
+                status = "failed"
+                error = str(e)
+                raise
+            finally:
+                if not cancelled:
+                    yield AgentRunCompletedEvent(
+                        status=status,
+                        error=error,
+                        usage=last_usage,
                         timestamp=datetime.datetime.now(tz=datetime.UTC),
                     )
-
-                # MCP server tools for the role plus any others added dynamically for the specific run
-                extra_tools = self._additional_tools + mcp_factory.get_tools()
-                async for event in self._stream_events_impl(message_or_approvals, extra_tools):
-                    yield event
 
     @abstractmethod
     async def _run_impl(
@@ -203,18 +238,25 @@ class AgentExecutionService(ABC):
         self,
         message_or_approvals: str | ToolApprovals,
         extra_tools: list[Tool],
-    ) -> AsyncIterator[ConversationEvent]:
+    ) -> AsyncIterator[ConversationEvent | ContextUsage]:
         """Engine-specific implementation of event streaming.
 
         Subclasses implement this method to handle the actual agent execution.
         MCP tool lifecycle is managed by the parent `stream_events_for_message_or_approval()`.
+
+        Implementations should yield a `ContextUsage` as their final value to
+        report the run's cumulative token usage. The base class intercepts it
+        and attaches it to `AgentRunCompletedEvent`; it is never emitted to
+        clients. This is the idiomatic way to "return" data from an async
+        generator (PEP 525 disallows non-None return values).
 
         Args:
             message_or_approvals: Either a user message string or ToolApprovals model
             extra_tools: MCP server tools for the role plus any others added dynamically for the run
 
         Yields:
-            ConversationEvent instances as they are generated during agent execution
+            ConversationEvent instances as they are generated during agent execution,
+            followed by a ContextUsage as the final out-of-band return value.
         """
         if False:
             yield  # type: ignore[unreachable]  # Required for async generator type inference

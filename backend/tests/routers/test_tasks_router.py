@@ -692,6 +692,35 @@ class TestWorkflowActions:
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
 
+    def test_workflow_action_passes_correct_conversation_to_start_agent_execution(
+        self, client_with_mock_workflow_deps, test_task_for_workflow, db_session
+    ):
+        """Regression: workflow-action must call start_agent_execution with the task's conversation.
+
+        last_activity_at is bumped inside _run_agent_for_conversation (not in the router),
+        so the router must reach start_agent_execution with the correct conversation id
+        for the bump to happen.
+        """
+        conversation_repo = ConversationRepository(db_session)
+        conversation = conversation_repo.get_active_conversation_for_entity(
+            ParentEntityType.TASK, test_task_for_workflow.id
+        )
+
+        with patch("devboard.api.routers.tasks.get_execution_manager") as mock_get_mgr:
+            mock_manager = MagicMock()
+            mock_get_mgr.return_value = mock_manager
+            response = client_with_mock_workflow_deps.post(
+                f"/api/tasks/{test_task_for_workflow.id}/workflow-action",
+                json={"action_key": "task.create_implementation_plan"},
+            )
+
+        assert response.status_code == 200
+        # start_agent_execution must be called with the correct conversation id so that
+        # _run_agent_for_conversation can bump last_activity_at for the right conversation
+        call_args = mock_manager.start_agent_execution.call_args
+        assert call_args is not None
+        assert call_args.args[0] == conversation.id
+
 
 @pytest.mark.asyncio
 async def test_get_task_diff(client, db_session):

@@ -5,7 +5,7 @@ import datetime
 import time
 from collections.abc import AsyncIterator, Coroutine
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any
 
 import logfire
 from opentelemetry import context as otel_context
@@ -13,15 +13,12 @@ from sqlalchemy.orm import Session
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.events import (
-    ContextUsage,
     ConversationEvent,
-    ExecutionCompleteEvent,
     SystemEvent,
     SystemEventType,
     TextMessage,
 )
 from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError
-from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.agents.execution.types import ConversationExecution, ExecutionStatus, SubAgentResult
 from devboard.agents.roles.base import AgentRole
 from devboard.api.dependencies.factories import create_agent_execution_service, create_agent_role_for_conversation
@@ -30,8 +27,7 @@ from devboard.api.dependencies.services import ExecutionServices, get_execution_
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.database import SessionLocal, get_db
 from devboard.db.models import Codebase, Conversation, Project, Task, TaskStatus
-from devboard.db.repositories import ConversationRepository
-from devboard.db.repositories.log_entry import LogEntryRepository
+from devboard.db.repositories import ConversationRepository, LogEntryRepository
 from devboard.services.project_directory import ensure_project_directory
 from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_git.service import TaskBranchNotFoundException
@@ -39,12 +35,12 @@ from devboard.services.workspace.types import AllSlotsLockedException, BranchInU
 
 
 class ConversationExecutionManager:
-    """Manages all active agent executions.
+    """Process-wide registry of active agent executions.
 
-    Tracks background task lifecycle and interrupt signaling.
-    Keyed by conversation_id — at most one execution per conversation at a time.
-
-    Created and registered during FastAPI lifespan startup via the execution registry.
+    Tracks all in-flight runs via `_executions` (conversation_id → ConversationExecution),
+    owns the `broadcast_queue` consumed by the WebSocket fan-out, routes interrupt signals,
+    and enforces at-most-one execution per conversation. Singleton created during FastAPI
+    lifespan startup.
     """
 
     def __init__(self) -> None:
@@ -54,9 +50,14 @@ class ConversationExecutionManager:
     async def _run_wrapper(
         self,
         conversation_id: int,
-        coro: Coroutine[Any, Any, ContextUsage | None],
+        coro: Coroutine[Any, Any, None],
     ) -> None:
-        """Run the coroutine and handle lifecycle transitions."""
+        """Run the coroutine and handle lifecycle transitions.
+
+        Drives execution status on the ConversationExecution entry and detaches
+        the OTel trace context. All broadcast events (including ExecutionCompleteEvent)
+        are emitted by _run_agent_for_conversation.
+        """
         execution = self._executions.get(conversation_id)
         if not execution:
             raise RuntimeError(f"No execution found for conversation {conversation_id} — this is a programming error")
@@ -64,11 +65,10 @@ class ConversationExecutionManager:
         # Detach from the request's trace context — background tasks run outside
         # the request lifecycle and should produce their own root span in Logfire.
         token = otel_context.attach(otel_context.Context())
-        last_usage: ContextUsage | None = None
         try:
             with logfire.span("background.agent_execution", conversation_id=conversation_id):
                 try:
-                    last_usage = await coro
+                    await coro
                     execution.status = ExecutionStatus.COMPLETED
                     logfire.info(f"Execution completed for conversation {conversation_id}")
                 except AgentInterruptedError:
@@ -80,19 +80,7 @@ class ConversationExecutionManager:
                     logfire.exception(f"Execution failed for conversation {conversation_id}: {e}")
                 finally:
                     execution.completed_at = datetime.datetime.now(datetime.UTC)
-                    await self.broadcast_queue.put(
-                        (
-                            conversation_id,
-                            ExecutionCompleteEvent(
-                                status=cast(Literal["completed", "interrupted", "failed"], execution.status),
-                                error=execution.error,
-                                usage=last_usage,
-                                timestamp=datetime.datetime.now(datetime.UTC),
-                            ),
-                        )
-                    )
                     self._executions.pop(conversation_id, None)
-                    await _emit_agent_run_event(conversation_id, execution.status, execution.error)
         finally:
             otel_context.detach(token)
 
@@ -203,16 +191,6 @@ class ConversationExecutionManager:
                     if isinstance(event, TextMessage):
                         last_text_message = event
                 conversation_repo.commit()
-                await self.broadcast_queue.put(
-                    (
-                        conversation_id,
-                        ExecutionCompleteEvent(
-                            status="completed",
-                            error=None,
-                            timestamp=datetime.datetime.now(datetime.UTC),
-                        ),
-                    )
-                )
                 result_text = last_text_message.text_content if last_text_message else ""
                 logfire.info(
                     f"Sub-agent execution completed for conversation {conversation_id}",
@@ -248,44 +226,6 @@ class ConversationExecutionManager:
         return False
 
 
-async def _emit_agent_run_event(
-    conversation_id: int,
-    status: ExecutionStatus,
-    error: str | None,
-) -> None:
-    """Emit an agent_run.completed LogEntry after execution finishes.
-
-    Opens its own DB session since _run_wrapper has no session context.
-    Errors are logged but not propagated — emission is a best-effort side effect.
-    """
-    db = SessionLocal()
-    try:
-        conversation = ConversationRepository(db).get_by_id(conversation_id)
-        if not conversation:
-            return
-        project_id: int | None = None
-        task_id: int | None = None
-        parent = conversation.get_parent_entity()
-        if isinstance(parent, Task):
-            task_id = parent.id
-            project_id = parent.project_id
-        elif isinstance(parent, Project):
-            project_id = parent.id
-        SystemEventEmitter(LogEntryRepository(db)).emit_agent_run_completed(
-            conversation_id=conversation_id,
-            agent_role=conversation.agent_role.value,
-            status=status.value,
-            project_id=project_id,
-            task_id=task_id,
-            error=error,
-        )
-        await asyncio.to_thread(db.commit)
-    except Exception:
-        logfire.exception(f"Failed to emit agent_run.completed for conversation {conversation_id}")
-    finally:
-        await asyncio.to_thread(db.close)
-
-
 async def _drain_events(
     stream: AsyncIterator[ConversationEvent],
     db: Session,
@@ -312,8 +252,11 @@ async def _create_agent_stream(
     interrupt_event: asyncio.Event,
     working_dir: str,
     additional_write_dirs: list[str] | None = None,
-) -> tuple[AsyncIterator[ConversationEvent], AgentExecutionService]:
+) -> AsyncIterator[ConversationEvent]:
     """Create an agent execution stream for a conversation.
+
+    The returned stream includes lifecycle events:
+    `AgentRunStartedEvent` as the first event and `AgentRunCompletedEvent` as the last.
 
     Args:
         additional_write_dirs: Extra directories to grant write access to (e.g. the main
@@ -337,7 +280,110 @@ async def _create_agent_stream(
         interrupt_event=interrupt_event,
         additional_write_dirs=additional_write_dirs,
     )
-    return exec_service.stream_events_for_message_or_approval(message_or_approvals), exec_service
+    return exec_service.stream_events_for_message_or_approval(message_or_approvals)
+
+
+async def _emit_stream_error(
+    broadcast_queue: asyncio.Queue[tuple[int, ConversationEvent]],
+    conversation_id: int,
+    error_code: str,
+    message: str,
+) -> None:
+    """Broadcast a STREAM_ERROR SystemEvent for the given conversation."""
+    await broadcast_queue.put(
+        (
+            conversation_id,
+            SystemEvent(
+                sub_type=SystemEventType.STREAM_ERROR,
+                data={"error_code": error_code, "message": message},
+                timestamp=datetime.datetime.now(datetime.UTC),
+            ),
+        )
+    )
+
+
+async def _run_task_agent(
+    services: ExecutionServices,
+    conversation: Conversation,
+    task: Task,
+    message_or_approvals: str | ToolApprovals,
+    interrupt_event: asyncio.Event,
+    db: Session,
+    broadcast_queue: asyncio.Queue[tuple[int, ConversationEvent]],
+    conversation_id: int,
+) -> None:
+    """Allocate a workspace for the task and run the agent within it.
+
+    Handles workspace-allocation-specific errors by broadcasting STREAM_ERROR
+    SystemEvents; all other errors propagate to the caller.
+    """
+    try:
+        async with services.workspace_service.allocate_workspace(task) as allocation:
+            if not allocation.reused:
+                await broadcast_queue.put(
+                    (
+                        conversation_id,
+                        SystemEvent(
+                            sub_type=SystemEventType.WORKSPACE_ALLOCATE,
+                            data={"task_id": task.id, "slot_id": allocation.slot.id},
+                            timestamp=datetime.datetime.now(datetime.UTC),
+                        ),
+                    )
+                )
+            codebase_local_path = task.codebase.local_path
+            additional_write_dirs = (
+                [codebase_local_path] if Path(allocation.slot.path) != Path(codebase_local_path) else None
+            )
+            agent_stream = await _create_agent_stream(
+                services,
+                conversation,
+                message_or_approvals,
+                interrupt_event,
+                working_dir=allocation.slot.path,
+                additional_write_dirs=additional_write_dirs,
+            )
+            # Allocate workspace and emit any relevant events
+            await _drain_events(
+                services.workspace_service.prepare_workspace(task, allocation.slot),
+                db,
+                broadcast_queue,
+                conversation_id,
+            )
+            # Run agent stream loop and emit events until completion or error
+            await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
+    except BranchInUseException as e:
+        await _emit_stream_error(broadcast_queue, conversation_id, "BRANCH_IN_USE", str(e))
+    except TaskBranchNotFoundException as e:
+        await _emit_stream_error(
+            broadcast_queue,
+            conversation_id,
+            "BRANCH_NOT_FOUND",
+            f"Task branch '{e.branch_name}' does not exist. It may have been deleted or is not available on this machine. Please recreate the branch or fetch it from a remote.",
+        )
+    except AllSlotsLockedException:
+        await _emit_stream_error(
+            broadcast_queue,
+            conversation_id,
+            "SLOTS_EXHAUSTED",
+            "No workspace slots available. Either increase max_worktrees in codebase settings, or wait for an existing task to finish.",
+        )
+    except SetupCommandError as e:
+        await _emit_stream_error(
+            broadcast_queue,
+            conversation_id,
+            "SETUP_COMMAND_FAILED",
+            f"Workspace setup command failed: {e.message}",
+        )
+    except AgentInterruptedError:
+        raise
+    except Exception as e:
+        logfire.exception(f"Agent execution failed for conversation {conversation_id}: {e}")
+        await _emit_stream_error(
+            broadcast_queue,
+            conversation_id,
+            "AGENT_EXECUTION_ERROR",
+            f"Agent execution failed: {e}",
+        )
 
 
 async def _run_agent_for_conversation(
@@ -346,158 +392,82 @@ async def _run_agent_for_conversation(
     *,
     conversation_id: int,
     message_or_approvals: str | ToolApprovals,
-) -> ContextUsage | None:
+) -> None:
     """Run agent execution for a conversation and push events to the broadcast queue.
 
-    Opens its own DB session, constructs services, runs the agent, and pushes
-    (conversation_id, ConversationEvent) tuples to the broadcast_queue.
-    The ExecutionCompleteEvent is pushed by ConversationExecutionManager._run_wrapper
-    after this returns.
-
-    For task conversations, workspace allocation happens first so that the
-    role is created with a valid working directory.
-
-    Returns:
-        ContextUsage from the agent execution if available, otherwise None.
+    Opens its own DB session, commits `update_last_activity` before the stream starts
+    (so `last_activity_at` is persisted before `AgentRunStartedEvent` reaches the
+    frontend), allocates a workspace for task conversations, drains the agent stream
+    into the broadcast queue, and writes the `agent_run.completed` LogEntry.
     """
     db = SessionLocal()
-    last_usage: ContextUsage | None = None
-    try:
-        async with DependencyResolver(dependency_overrides={get_db: lambda: db}) as resolver:
-            services = await resolver.run(get_execution_services)
-        conversation = services.conversation_repo.get_by_id(conversation_id)
-        if not conversation:
-            raise ValueError(f"Conversation {conversation_id} not found")
+    status: ExecutionStatus = ExecutionStatus.COMPLETED
+    error: str | None = None
 
-        t0 = time.monotonic()
-        conversation_parent = conversation.get_parent_entity()
-        parent_ms = (time.monotonic() - t0) * 1000
-        if parent_ms > 50:
-            logfire.warn(
-                "Slow get_parent_entity",
-                conversation_id=conversation_id,
-                parent_ms=f"{parent_ms:.0f}",
-            )
-        if isinstance(conversation_parent, Task) and conversation_parent.status != TaskStatus.COMPLETE:
-            try:
-                async with services.workspace_service.allocate_workspace(conversation_parent) as allocation:
-                    if not allocation.reused:
-                        await broadcast_queue.put(
-                            (
-                                conversation_id,
-                                SystemEvent(
-                                    type=SystemEventType.WORKSPACE_ALLOCATE,
-                                    data={"task_id": conversation_parent.id, "slot_id": allocation.slot.id},
-                                    timestamp=datetime.datetime.now(datetime.UTC),
-                                ),
-                            )
-                        )
-                    codebase_local_path = conversation_parent.codebase.local_path
-                    additional_write_dirs = (
-                        [codebase_local_path] if Path(allocation.slot.path) != Path(codebase_local_path) else None
+    async with DependencyResolver(dependency_overrides={get_db: lambda: db}) as resolver:
+        services = await resolver.run(get_execution_services)
+    conversation = services.conversation_repo.get_by_id(conversation_id)
+    if not conversation:
+        raise ValueError(f"Conversation {conversation_id} not found")
+
+    try:
+        # ── Start-of-run side effects (shared session) ──────────────────────
+        # Commit before the stream starts so last_activity_at is persisted before
+        # AgentRunStartedEvent (the first event from the stream) reaches the frontend.
+        services.conversation_repo.update_last_activity(conversation)
+        await asyncio.to_thread(db.commit)
+
+        # ── Agent execution ─────────────────────────────────────────────────
+        try:
+            conversation_parent = conversation.get_parent_entity()
+            if isinstance(conversation_parent, Task):
+                if conversation_parent.status == TaskStatus.COMPLETE:
+                    raise ValueError(
+                        f"Cannot run agent for completed task {conversation_parent.id} (conversation {conversation_id})"
                     )
-                    agent_stream, exec_service = await _create_agent_stream(
-                        services,
-                        conversation,
-                        message_or_approvals,
-                        interrupt_event,
-                        working_dir=allocation.slot.path,
-                        additional_write_dirs=additional_write_dirs,
-                    )
-                    await _drain_events(
-                        services.workspace_service.prepare_workspace(conversation_parent, allocation.slot),
-                        db,
-                        broadcast_queue,
-                        conversation_id,
-                    )
-                    await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
-                    last_usage = exec_service.last_usage
-            except BranchInUseException as e:
-                await broadcast_queue.put(
-                    (
-                        conversation_id,
-                        SystemEvent(
-                            type=SystemEventType.STREAM_ERROR,
-                            data={"error_code": "BRANCH_IN_USE", "message": str(e)},
-                            timestamp=datetime.datetime.now(datetime.UTC),
-                        ),
-                    )
+                await _run_task_agent(
+                    services,
+                    conversation,
+                    conversation_parent,
+                    message_or_approvals,
+                    interrupt_event,
+                    db,
+                    broadcast_queue,
+                    conversation_id,
                 )
-            except TaskBranchNotFoundException as e:
-                await broadcast_queue.put(
-                    (
-                        conversation_id,
-                        SystemEvent(
-                            type=SystemEventType.STREAM_ERROR,
-                            data={
-                                "error_code": "BRANCH_NOT_FOUND",
-                                "message": f"Task branch '{e.branch_name}' does not exist. It may have been deleted or is not available on this machine. Please recreate the branch or fetch it from a remote.",
-                            },
-                            timestamp=datetime.datetime.now(datetime.UTC),
-                        ),
-                    )
-                )
-            except AllSlotsLockedException:
-                await broadcast_queue.put(
-                    (
-                        conversation_id,
-                        SystemEvent(
-                            type=SystemEventType.STREAM_ERROR,
-                            data={
-                                "error_code": "SLOTS_EXHAUSTED",
-                                "message": "No workspace slots available. Either increase max_worktrees in codebase settings, or wait for an existing task to finish.",
-                            },
-                            timestamp=datetime.datetime.now(datetime.UTC),
-                        ),
-                    )
-                )
-            except SetupCommandError as e:
-                await broadcast_queue.put(
-                    (
-                        conversation_id,
-                        SystemEvent(
-                            type=SystemEventType.STREAM_ERROR,
-                            data={
-                                "error_code": "SETUP_COMMAND_FAILED",
-                                "message": f"Workspace setup command failed: {e.message}",
-                            },
-                            timestamp=datetime.datetime.now(datetime.UTC),
-                        ),
-                    )
-                )
-            except AgentInterruptedError:
-                raise
-            except Exception as e:
-                logfire.exception(f"Agent execution failed for conversation {conversation_id}: {e}")
-                await broadcast_queue.put(
-                    (
-                        conversation_id,
-                        SystemEvent(
-                            type=SystemEventType.STREAM_ERROR,
-                            data={
-                                "error_code": "AGENT_EXECUTION_ERROR",
-                                "message": f"Agent execution failed: {e}",
-                            },
-                            timestamp=datetime.datetime.now(datetime.UTC),
-                        ),
-                    )
-                )
-        else:
-            if isinstance(conversation_parent, Project):
+            elif isinstance(conversation_parent, Project):
                 working_dir = str(ensure_project_directory(conversation_parent))
-            elif isinstance(conversation_parent, Codebase):
+                agent_stream = await _create_agent_stream(
+                    services, conversation, message_or_approvals, interrupt_event, working_dir=working_dir
+                )
+                await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
+            elif isinstance(conversation_parent, Codebase):  # pyright: ignore[reportUnnecessaryIsInstance]
                 working_dir = conversation_parent.local_path
+                agent_stream = await _create_agent_stream(
+                    services, conversation, message_or_approvals, interrupt_event, working_dir=working_dir
+                )
+                await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
             else:
                 raise ValueError(f"Unsupported parent entity type: {type(conversation_parent).__name__}")
-
-            agent_stream, exec_service = await _create_agent_stream(
-                services, conversation, message_or_approvals, interrupt_event, working_dir=working_dir
-            )
-            await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
-            last_usage = exec_service.last_usage
+        except AgentInterruptedError:
+            status = ExecutionStatus.INTERRUPTED
+            raise
+        except Exception as e:
+            status = ExecutionStatus.FAILED
+            error = str(e)
+            raise
 
     finally:
+        # ── End-of-run side effects ─────────────────────────────────────────
+        # AgentRunCompletedEvent is emitted by AgentExecutionService.stream_events_for_message_or_approval;
+        # only the DB log entry is written here.
+        try:
+            SystemEventEmitter(LogEntryRepository(db)).emit_agent_run_completed(
+                conversation=conversation,
+                status=status.value,
+                error=error,
+            )
+        except Exception:
+            logfire.exception(f"Failed to emit agent_run.completed for conversation {conversation_id}")
         await asyncio.to_thread(db.commit)
         await asyncio.to_thread(db.close)
-
-    return last_usage

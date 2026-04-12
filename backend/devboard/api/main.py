@@ -9,8 +9,9 @@ from pathlib import Path
 
 import logfire
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from devboard.agents.execution.manager import ConversationExecutionManager
@@ -221,6 +222,13 @@ app = FastAPI(
 )
 
 setup_logfire(app)
+
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
+    logfire.warning(f"ValueError in request {request.method} {request.url.path}: {exc}")
+    return JSONResponse({"detail": str(exc)}, status_code=400)
+
 
 # Configure CORS - allow all localhost ports in development
 app.add_middleware(

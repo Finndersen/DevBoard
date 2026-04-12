@@ -94,6 +94,8 @@ def mock_task_service():
     service.task_repo.db = Mock()
     service.get_custom_fields.return_value = []
     service.create_task = AsyncMock()
+    service.is_task_agent_running.return_value = False
+    service.is_agents_running_for_tasks.return_value = {}
     return service
 
 
@@ -118,6 +120,7 @@ class TestTaskToToonRecord:
             "created_at": "2024-01-15T10:00:00+00:00",
             "codebase": "backend",
             "branch": "implement-feature-x",
+            "agent_running": False,
             "custom_fields": '{"priority": "high"}',
         }
 
@@ -529,6 +532,7 @@ class TestCreateCreateTaskTool:
             "branch_name": "feature/implement-feature-x",
             "base_branch": "main",
             "codebase_name": "backend",
+            "agent_running": False,
         }
 
     @pytest.mark.asyncio
@@ -891,6 +895,7 @@ class TestCreateEditTaskTool:
             "task_id": 1,
             "title": "New Title",
             "custom_fields": {"priority": "high"},
+            "agent_running": False,
         }
 
     @pytest.mark.asyncio
@@ -909,6 +914,7 @@ class TestCreateEditTaskTool:
             "task_id": 1,
             "title": "Implement feature X",
             "custom_fields": {"priority": "high", "team": "backend"},
+            "agent_running": False,
         }
 
     @pytest.mark.asyncio
@@ -928,6 +934,7 @@ class TestCreateEditTaskTool:
         result_data = json.loads(result)
         assert result_data["specification_updated"] is True
         assert result_data["task_id"] == 1
+        assert result_data["agent_running"] is False
 
     @pytest.mark.asyncio
     async def test_edit_task_specification_content_empty(
@@ -1003,6 +1010,7 @@ class TestCreateEditTaskTool:
             "title": "New Title",
             "custom_fields": {"priority": "high"},
             "specification_updated": True,
+            "agent_running": False,
         }
 
     @pytest.mark.asyncio
@@ -1128,6 +1136,7 @@ class TestCreateEditOwnTaskTool:
         result_data = json.loads(result)
         assert result_data["task_id"] == 1
         assert result_data["title"] == "Updated Title"
+        assert result_data["agent_running"] is False
 
     @pytest.mark.asyncio
     async def test_edit_own_task_specification_content(self, mock_task, mock_task_service, mock_document_repo):
@@ -1140,6 +1149,7 @@ class TestCreateEditOwnTaskTool:
         result_data = json.loads(result)
         assert result_data["specification_updated"] is True
         assert result_data["task_id"] == 1
+        assert result_data["agent_running"] is False
 
     @pytest.mark.asyncio
     async def test_edit_own_task_nothing_to_update(self, mock_task, mock_task_service, mock_document_repo):

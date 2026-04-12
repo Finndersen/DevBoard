@@ -41,6 +41,11 @@ def test_task_data():
 class TestProjectsRouter:
     """Test projects router endpoints."""
 
+    @pytest.fixture(autouse=True)
+    def mock_project_directory(self):
+        with patch("devboard.services.project_service.ensure_project_directory"):
+            yield
+
     def test_list_projects_empty(self, client):
         """Test listing projects when none exist."""
         response = client.get("/api/projects/")
@@ -199,6 +204,11 @@ class TestProjectsRouter:
 class TestProjectCustomFieldsRouter:
     """Test project custom fields endpoints."""
 
+    @pytest.fixture(autouse=True)
+    def mock_project_directory(self):
+        with patch("devboard.services.project_service.ensure_project_directory"):
+            yield
+
     def test_create_project_with_custom_fields(self, client, db_session):
         """Test creating a project with custom field values persists them."""
         project_data = {
@@ -350,8 +360,11 @@ class TestProjectTasksRouter:
 
     @pytest.fixture(autouse=True)
     def mock_git(self):
+        from devboard.integrations.base import IntegrationConnectionResult
+
         with patch("devboard.services.task_git.service.GitRepoIntegration") as mock_cls:
             mock_instance = mock_cls.return_value
+            mock_instance.validate = AsyncMock(return_value=IntegrationConnectionResult(success=True, message="ok"))
             mock_instance.branch_exists = AsyncMock(return_value=True)
             yield mock_cls
 

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock, PropertyMock, patch
 import pytest
 
 from devboard.db.models.task import Task
+from devboard.integrations.base import IntegrationConnectionResult
 from devboard.integrations.shell import ShellCommandExecutionError, ShellCommandTimeoutError
 from devboard.integrations.types import BranchComparison
 from devboard.services.task_git.service import TaskBranchNotFoundException, TaskGitService
@@ -205,6 +206,7 @@ class TestCreateTaskBranch:
 
         with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
             git = Mock()
+            git.validate = AsyncMock(return_value=IntegrationConnectionResult(success=True, message="ok"))
             git.list_remotes = AsyncMock(return_value=["origin"])
 
             async def mock_fetch(**kwargs):
@@ -235,6 +237,7 @@ class TestCreateTaskBranch:
 
         with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
             git = Mock()
+            git.validate = AsyncMock(return_value=IntegrationConnectionResult(success=True, message="ok"))
             git.list_remotes = AsyncMock(return_value=["origin"])
             git.fetch = AsyncMock(side_effect=ShellCommandExecutionError("network error"))
             git.branch_exists = AsyncMock(return_value=False)
@@ -253,6 +256,7 @@ class TestCreateTaskBranch:
 
         with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
             git = Mock()
+            git.validate = AsyncMock(return_value=IntegrationConnectionResult(success=True, message="ok"))
             git.list_remotes = AsyncMock(return_value=["origin"])
             git.fetch = AsyncMock(side_effect=ShellCommandTimeoutError("timed out"))
             git.branch_exists = AsyncMock(return_value=False)
@@ -270,6 +274,7 @@ class TestCreateTaskBranch:
 
         with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
             git = Mock()
+            git.validate = AsyncMock(return_value=IntegrationConnectionResult(success=True, message="ok"))
             git.list_remotes = AsyncMock(return_value=["origin"])
             git.fetch = AsyncMock()
             git.branch_exists = AsyncMock(return_value=True)
@@ -286,6 +291,7 @@ class TestCreateTaskBranch:
 
         with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
             git = Mock()
+            git.validate = AsyncMock(return_value=IntegrationConnectionResult(success=True, message="ok"))
             git.list_remotes = AsyncMock(return_value=["origin"])
             git.fetch = AsyncMock()
             git.branch_exists = AsyncMock(return_value=False)
@@ -296,6 +302,27 @@ class TestCreateTaskBranch:
 
         git.fetch.assert_not_called()
         git.create_branch.assert_called_once_with("feature/test-branch", "main")
+
+    @pytest.mark.asyncio
+    async def test_raises_value_error_when_codebase_path_invalid(self, mock_task_no_worktree):
+        """ValueError with the validation message is raised when the codebase path is invalid."""
+        mock_task_no_worktree.codebase.local_path = "/nonexistent/path"
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as MockGit:
+            git = Mock()
+            git.validate = AsyncMock(
+                return_value=IntegrationConnectionResult(
+                    success=False,
+                    message="Codebase path does not exist: /nonexistent/path",
+                )
+            )
+            MockGit.return_value = git
+
+            with pytest.raises(ValueError, match="Codebase path does not exist: /nonexistent/path"):
+                await TaskGitService.create_task_branch(mock_task_no_worktree)
+
+        # branch_exists should never be called when validation fails
+        git.branch_exists.assert_not_called()
 
 
 class TestVerifyTaskBranchExists:

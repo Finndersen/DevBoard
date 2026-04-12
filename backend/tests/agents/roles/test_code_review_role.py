@@ -62,10 +62,10 @@ class TestCodeReviewAgentRole:
         assert "read_file" in tool_names
 
     def test_allowed_builtin_tools(self, mock_task):
-        """Test allowed builtin tools is Bash only."""
+        """Test allowed builtin tools includes Bash and read-only tools."""
         role = CodeReviewAgentRole(task=mock_task, working_dir=str(mock_task.codebase.local_path))
 
-        assert role.allowed_builtin_tools == ["Bash"]
+        assert role.allowed_builtin_tools == ["Bash", "Skill", "Read", "Grep", "Glob"]
 
     def test_uses_provided_working_dir(self, mock_task, tmp_path):
         """Test that the provided working_dir is used for codebase integration."""

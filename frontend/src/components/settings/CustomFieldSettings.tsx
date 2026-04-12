@@ -91,7 +91,7 @@ export function CustomFieldSettings() {
       setEditingField(null)
     } catch (err) {
       console.error('Failed to save custom field:', err)
-      throw err
+      setError(err instanceof Error ? err.message : 'Failed to save custom field')
     } finally {
       setIsSaving(false)
     }

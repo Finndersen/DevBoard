@@ -46,6 +46,7 @@ AVAILABLE CAPABILITIES:
    Do NOT use sub-agents for small-scoped or single-file changes — make those edits directly.
 
 WORKFLOW:
+- Activate relevant skills: review available skills in your context and activate any relevant to this work (software-development, coding conventions, testing strategy, etc.) using the `Skill` tool before executing any steps.
 - Review the implementation plan and understand requirements
 - Ask for clarification when encountering ambiguity
 

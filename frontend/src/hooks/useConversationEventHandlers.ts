@@ -160,7 +160,7 @@ export function useToolResultHandler(handler: ToolResultHandler): void {
  * @example
  * Handle specific event type:
  * useSystemEventHandler((event) => {
- *   if (event.type === 'task_updated') {
+ *   if (event.sub_type === 'task_updated') {
  *     refetchTask()
  *   }
  * })
@@ -168,7 +168,7 @@ export function useToolResultHandler(handler: ToolResultHandler): void {
  * @example
  * Handle multiple event types:
  * useSystemEventHandler((event) => {
- *   if (event.type === 'task_updated' || event.type === 'conversation_updated') {
+ *   if (event.sub_type === 'task_updated' || event.sub_type === 'conversation_updated') {
  *     console.log('Entity updated')
  *   }
  * })
@@ -176,7 +176,7 @@ export function useToolResultHandler(handler: ToolResultHandler): void {
  * @example
  * Filter by entity ID:
  * useSystemEventHandler((event) => {
- *   if (event.type === 'task_updated' && event.data.task_id === myTaskId) {
+ *   if (event.sub_type === 'task_updated' && event.data.task_id === myTaskId) {
  *     const { updated_fields } = event.data
  *     if ('status' in updated_fields) {
  *       setStatus(updated_fields.status)

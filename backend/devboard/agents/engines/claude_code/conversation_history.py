@@ -41,7 +41,7 @@ class ClaudeCodeConversationHistoryService(ConversationHistoryService):
             return ConversationHistory(
                 messages=[
                     SystemEvent(
-                        type=SystemEventType.SESSION_EXPIRED,
+                        sub_type=SystemEventType.SESSION_EXPIRED,
                         data={
                             "message": "Claude Code session file not found. Clear this conversation to start a new one."
                         },

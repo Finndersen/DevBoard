@@ -8,10 +8,13 @@ import { Button, Card, ErrorMessage } from '../components/ui'
 import CreateCodebaseModal from '../components/modals/CreateCodebaseModal'
 import { loadingSpinner } from '../styles/designSystem'
 import ViewHeader from '../components/layout/ViewHeader'
+import { useNotificationStore } from '../stores/notificationStore'
+import { reportMutationError } from '../lib/errors'
 
 export default function CodebasesList() {
   const { navigateTo } = useUIStore()
   const { fetchCodebases } = useDataStore()
+  const { addNotification } = useNotificationStore()
 
   const { data: codebases, loading, error, refetch } = useCodebases()
   const { mutate: deleteCodebase } = useDeleteCodebase()
@@ -41,7 +44,12 @@ export default function CodebasesList() {
       await refetch()
       await fetchCodebases()
     } catch (error) {
-      console.error('Failed to delete codebase:', error)
+      reportMutationError(addNotification, error, {
+        entityType: 'codebase',
+        entityId: String(codebaseId),
+        entityTitle: null,
+        fallbackMessage: 'Failed to delete codebase',
+      })
     }
   }
 

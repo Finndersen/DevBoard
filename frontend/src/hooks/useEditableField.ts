@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNotificationStore } from '../stores/notificationStore'
 
 /**
  * Custom hook for managing editable field state with save/cancel functionality
@@ -12,6 +13,7 @@ export function useEditableField<T>(
   const [editedValue, setEditedValue] = useState(originalValue)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const addNotification = useNotificationStore(s => s.addNotification)
   
   // Update edited value when original value changes
   useEffect(() => {
@@ -41,10 +43,20 @@ export function useEditableField<T>(
       const errorMessage = err instanceof Error ? err.message : 'Save failed'
       setError(errorMessage)
       console.error('Save failed:', err)
+      addNotification({
+        type: 'system_error',
+        priority: 'high',
+        entityType: null,
+        entityId: null,
+        entityTitle: null,
+        conversationId: null,
+        message: errorMessage,
+        actions: [],
+      })
     } finally {
       setSaving(false)
     }
-  }, [editedValue, saveFunction])
+  }, [editedValue, saveFunction, addNotification])
   
   return {
     isEditing,

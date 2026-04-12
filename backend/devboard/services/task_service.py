@@ -10,12 +10,14 @@ from typing import Any
 
 import logfire
 
+from devboard.agents.execution.registry import get_execution_manager
 from devboard.agents.roles import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.custom_field import CustomFieldDefinition
 from devboard.db.models.document import DocumentType
 from devboard.db.models.enums import EntityType
 from devboard.db.models.task import Task, TaskStatus
+from devboard.db.repositories.conversation import NoActiveConversationError
 from devboard.db.repositories.custom_field import CustomFieldRepository
 from devboard.db.repositories.document import DocumentRepository
 from devboard.db.repositories.task import TaskRepository
@@ -414,6 +416,44 @@ class TaskService:
     def get_mandatory_custom_fields(self) -> list[CustomFieldDefinition]:
         """Get all mandatory custom field definitions."""
         return self.custom_field_repo.get_mandatory_fields(entity_type=EntityType.TASK)
+
+    def is_task_agent_running(self, task_id: int) -> bool:
+        """True if the task's active conversation has a running execution."""
+        try:
+            conv = self.conversation_service.conversation_repo.get_active_conversation_for_entity(
+                entity_type=ParentEntityType.TASK,
+                entity_id=task_id,
+            )
+        except NoActiveConversationError:
+            return False
+        return get_execution_manager().has_active_execution(conv.id)
+
+    def is_agents_running_for_tasks(self, task_ids: list[int]) -> dict[int, bool]:
+        """Return a mapping of task_id -> agent_running for a batch of tasks.
+
+        Fetches active conversations for all task_ids in one query, then checks
+        the in-memory execution manager for each.
+        """
+        if not task_ids:
+            return {}
+        conversation_repo = self.conversation_service.conversation_repo
+        conversations = conversation_repo.get_active_conversations_for_entities(
+            entity_type=ParentEntityType.TASK,
+            entity_ids=task_ids,
+        )
+        # Map task_id -> conversation_id for tasks that have an active conversation
+        # Use parent_entity_id since Conversation tracks entity via parent_entity_id
+        task_conv_map: dict[int, int] = {}
+        for conv in conversations:
+            # Only keep the first (most recently created) conversation per task
+            if conv.parent_entity_id not in task_conv_map:
+                task_conv_map[conv.parent_entity_id] = conv.id
+
+        manager = get_execution_manager()
+        return {
+            task_id: manager.has_active_execution(task_conv_map[task_id]) if task_id in task_conv_map else False
+            for task_id in task_ids
+        }
 
     def get_project_task_summaries(
         self,

@@ -40,6 +40,7 @@ def _make_mock_exec_service(stream_fn):
     """Create a mock execution service whose stream_events_for_message_or_approval returns the given async generator."""
     exec_service = Mock()
     exec_service.stream_events_for_message_or_approval.return_value = stream_fn()
+    exec_service.last_usage = None  # must be None or ContextUsage for ExecutionCompleteEvent validation
     return exec_service
 
 
@@ -152,8 +153,13 @@ class TestRunAgentForConversation:
                 message_or_approvals="Hello",
             )
 
-        assert broadcast_queue.qsize() == 1
-        conv_id, queued = broadcast_queue.get_nowait()
+        # Queue now contains: AgentRunStartedEvent, the agent event, AgentRunCompletedEvent
+        items = []
+        while not broadcast_queue.empty():
+            items.append(broadcast_queue.get_nowait())
+        agent_events = [(cid, e) for cid, e in items if isinstance(e, TextMessage)]
+        assert len(agent_events) == 1
+        conv_id, queued = agent_events[0]
         assert conv_id == 1
         assert queued == event
 
@@ -196,7 +202,9 @@ class TestRunAgentForConversation:
                 message_or_approvals="Hello",
             )
 
-        mock_db.commit.assert_called_once()
+        # commit is called twice: once for update_last_activity (start-of-run) and
+        # once in the finally block for the agent_run.completed log
+        assert mock_db.commit.call_count == 2
         mock_db.rollback.assert_not_called()
         mock_db.close.assert_called_once()
 
@@ -240,7 +248,9 @@ class TestRunAgentForConversation:
                     message_or_approvals="Hello",
                 )
 
-        mock_db.commit.assert_called_once()
+        # commit is called twice: once for update_last_activity (start-of-run) and
+        # once in the finally block
+        assert mock_db.commit.call_count == 2
         mock_db.rollback.assert_not_called()
         mock_db.close.assert_called_once()
 

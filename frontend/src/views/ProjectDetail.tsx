@@ -19,6 +19,7 @@ import { useUIStore } from '../stores/uiStore'
 import { useConversationStore } from '../stores/conversationStore'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { useNotificationStore } from '../stores/notificationStore'
+import { reportMutationError } from '../lib/errors'
 import { useIsNarrowContainer } from '../hooks/useMediaQuery'
 import CollapsedPanelStrip from '../components/ui/CollapsedPanelStrip'
 import { CustomFieldsPopover } from '../components/common/CustomFieldsPanel'
@@ -167,24 +168,33 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     try {
       await apiClient.updateProject(id!, { custom_fields: { [fieldName]: value } })
       await refetchProject()
-    } catch {
-      addNotification({ type: 'error', message: `Failed to update custom field "${fieldName}"` })
+    } catch (err) {
+      reportMutationError(addNotification, err, {
+        entityType: 'project',
+        entityId: id ?? null,
+        entityTitle: project?.name ?? null,
+        fallbackMessage: `Failed to update custom field "${fieldName}"`,
+      })
     } finally {
       setCustomFieldSaving(false)
     }
   }, [project, id, refetchProject, addNotification])
 
   // Handle project specification updates from MCP tools during stream processing
-  const projectSpecificationMatcher = useCallback(
-    (toolName: string) => toolName.includes('edit_project_specification') || toolName.includes('set_project_specification_content'),
-    []
-  )
-
-  const projectSpecificationHandler = useCallback(async () => {
-    await refetchSpecification()
+  const projectSpecificationHandler = useCallback(async (toolName: string) => {
+    if (
+      toolName.includes('edit_project_specification') ||
+      toolName.includes('set_project_specification_content')
+    ) {
+      try {
+        await refetchSpecification()
+      } catch (error) {
+        console.error('Failed to refetch project specification document:', error)
+      }
+    }
   }, [refetchSpecification])
 
-  useToolResultHandler(projectSpecificationMatcher, projectSpecificationHandler)
+  useToolResultHandler(projectSpecificationHandler)
 
   // Panel toggle state — based on container width, not viewport
   const [isNarrow, containerRef] = useIsNarrowContainer()
@@ -243,8 +253,12 @@ function ProjectDetail({ id }: ProjectDetailProps) {
       updateConversationUrl(result.id)
       invalidateConversations()
     } catch (error) {
-      console.error('Failed to create conversation:', error)
-      addNotification({ type: 'error', message: 'Failed to create new conversation' })
+      reportMutationError(addNotification, error, {
+        entityType: 'project',
+        entityId: project?.id.toString() ?? null,
+        entityTitle: project?.name ?? null,
+        fallbackMessage: 'Failed to create new conversation',
+      })
     }
   }, [project, addNotification, updateConversationUrl, invalidateConversations])
 
@@ -269,20 +283,28 @@ function ProjectDetail({ id }: ProjectDetailProps) {
         updateConversationUrl(updatedProject.default_conversation_id)
       }
     } catch (error) {
-      console.error('Failed to delete conversation:', error)
-      addNotification({ type: 'error', message: 'Failed to delete conversation' })
+      reportMutationError(addNotification, error, {
+        entityType: 'project',
+        entityId: id ?? null,
+        entityTitle: project?.name ?? null,
+        fallbackMessage: 'Failed to delete conversation',
+      })
     }
-  }, [activeConversationId, id, addNotification, setProject, updateConversationUrl, removeConversation, invalidateConversations])
+  }, [activeConversationId, id, addNotification, setProject, updateConversationUrl, removeConversation, invalidateConversations, project])
 
   // Handle renaming a conversation
   const handleRenameConversation = useCallback(async (conversationId: number, title: string) => {
     try {
       await apiClient.updateConversationTitle(conversationId, title)
     } catch (error) {
-      console.error('Failed to rename conversation:', error)
-      addNotification({ type: 'error', message: 'Failed to rename conversation' })
+      reportMutationError(addNotification, error, {
+        entityType: 'project',
+        entityId: id ?? null,
+        entityTitle: project?.name ?? null,
+        fallbackMessage: 'Failed to rename conversation',
+      })
     }
-  }, [addNotification])
+  }, [addNotification, id, project])
 
   // Compute unlinked codebases for dropdown
   const unlinkedCodebases = useMemo(() => {
@@ -299,9 +321,14 @@ function ProjectDetail({ id }: ProjectDetailProps) {
       await refetchProjectCodebases()
       setSelectedCodebaseToLink('')
     } catch (error) {
-      console.error('Failed to link codebase:', error)
+      reportMutationError(addNotification, error, {
+        entityType: 'project',
+        entityId: id ?? null,
+        entityTitle: project?.name ?? null,
+        fallbackMessage: 'Failed to link codebase',
+      })
     }
-  }, [selectedCodebaseToLink, id, linkCodebase, refetchProjectCodebases])
+  }, [selectedCodebaseToLink, id, linkCodebase, refetchProjectCodebases, addNotification, project])
 
   // Handle unlinking a codebase from the project
   const handleUnlinkCodebase = useCallback(async (codebaseId: number) => {
@@ -309,9 +336,14 @@ function ProjectDetail({ id }: ProjectDetailProps) {
       await unlinkCodebase({ projectId: id!, codebaseId })
       await refetchProjectCodebases()
     } catch (error) {
-      console.error('Failed to unlink codebase:', error)
+      reportMutationError(addNotification, error, {
+        entityType: 'project',
+        entityId: id ?? null,
+        entityTitle: project?.name ?? null,
+        fallbackMessage: 'Failed to unlink codebase',
+      })
     }
-  }, [id, unlinkCodebase, refetchProjectCodebases])
+  }, [id, unlinkCodebase, refetchProjectCodebases, addNotification, project])
 
   // Handle new codebase created - link it to the project
   const handleCodebaseCreated = useCallback(async (codebase: Codebase) => {
@@ -320,9 +352,14 @@ function ProjectDetail({ id }: ProjectDetailProps) {
       await refetchProjectCodebases()
       await refetchAllCodebases()
     } catch (error) {
-      console.error('Failed to link newly created codebase:', error)
+      reportMutationError(addNotification, error, {
+        entityType: 'project',
+        entityId: id ?? null,
+        entityTitle: project?.name ?? null,
+        fallbackMessage: 'Failed to link newly created codebase',
+      })
     }
-  }, [id, linkCodebase, refetchProjectCodebases, refetchAllCodebases])
+  }, [id, linkCodebase, refetchProjectCodebases, refetchAllCodebases, addNotification, project])
 
   // Only show loading spinner on initial load (when project data doesn't exist yet)
   // Don't show during refetches to avoid UI flash

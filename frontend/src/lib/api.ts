@@ -179,7 +179,7 @@ export interface DocumentResponse {
 // New agent conversation interfaces matching backend schemas
 export type MessageRole = 'user' | 'agent'
 
-export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system' | 'meta_message' | 'local_command' | 'thinking' | 'execution_complete'
+export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system' | 'meta_message' | 'local_command' | 'thinking' | 'agent_run_started' | 'agent_run_completed'
 
 export type MetaMessageType = 'compact_summary' | 'skill_content' | 'initial_context'
 
@@ -243,7 +243,7 @@ export interface ToolCallRequest {
 
 export interface SystemEvent {
   event_type: 'system'
-  type: SystemEventType
+  sub_type: SystemEventType
   data: Record<string, unknown> | null
   timestamp: string
 }
@@ -263,13 +263,21 @@ export interface ContextUsage {
   cost_usd: number | null
 }
 
-export interface ExecutionCompleteEvent {
-  event_type: 'execution_complete'
-  status: 'completed' | 'interrupted' | 'failed'
-  error: string | null
-  timestamp: string
+export interface AgentRunStartedEvent {
+  event_type: 'agent_run_started'
   conversation_id: number
+  timestamp: string
+  uuid?: string | null
+}
+
+export interface AgentRunCompletedEvent {
+  event_type: 'agent_run_completed'
+  status: 'completed' | 'interrupted' | 'failed'
+  error?: string | null
   usage?: ContextUsage | null
+  conversation_id: number
+  timestamp: string
+  uuid?: string | null
 }
 
 export interface ConversationMessagesResponse {
@@ -278,7 +286,7 @@ export interface ConversationMessagesResponse {
 }
 
 // Union type for all conversation events
-export type ConversationEvent = ConversationMessage | ToolCall | ToolResult | ToolCallRequest | SystemEvent | MetaMessage | LocalCommand | ThinkingEvent | ExecutionCompleteEvent
+export type ConversationEvent = ConversationMessage | ToolCall | ToolResult | ToolCallRequest | SystemEvent | MetaMessage | LocalCommand | ThinkingEvent | AgentRunStartedEvent | AgentRunCompletedEvent
 
 export interface UserPrompt {
   message: string

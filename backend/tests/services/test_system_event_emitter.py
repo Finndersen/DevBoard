@@ -125,24 +125,55 @@ class TestEmitProjectUpdated:
 
 
 class TestEmitAgentRunCompleted:
+    """Tests for emit_agent_run_completed.
+
+    Conversation instances are mocked to keep the tests focused on emitter logic.
+    """
+
+    def _make_task_conversation(self, task) -> object:
+        from unittest.mock import Mock
+
+        from devboard.agents.roles import AgentRoleType
+
+        conv = Mock()
+        conv.id = 42
+        conv.agent_role = AgentRoleType.TASK_IMPLEMENTATION
+        conv.get_parent_entity.return_value = task
+        return conv
+
+    def _make_project_conversation(self, project) -> object:
+        from unittest.mock import Mock
+
+        from devboard.agents.roles import AgentRoleType
+
+        conv = Mock()
+        conv.id = 99
+        conv.agent_role = AgentRoleType.PROJECT
+        conv.get_parent_entity.return_value = project
+        return conv
+
+    def _make_codebase_conversation(self) -> object:
+        from unittest.mock import Mock
+
+        from devboard.agents.roles import AgentRoleType
+
+        conv = Mock()
+        conv.id = 7
+        conv.agent_role = AgentRoleType.CODE_REVIEW
+        conv.get_parent_entity.return_value = Mock(spec=[])  # not Task or Project — no FK derived
+        return conv
+
     def test_correct_source_and_type(self, emitter: SystemEventEmitter, test_task):
-        entry = emitter.emit_agent_run_completed(
-            conversation_id=42,
-            agent_role="task_implementation",
-            status="completed",
-            project_id=test_task.project_id,
-            task_id=test_task.id,
-        )
+        conv = self._make_task_conversation(test_task)
+        entry = emitter.emit_agent_run_completed(conversation=conv, status="completed")
         assert entry.source == LogEntrySource.SYSTEM
         assert entry.type == "agent_run.completed"
 
     def test_metadata_all_fields(self, emitter: SystemEventEmitter, test_task):
+        conv = self._make_task_conversation(test_task)
         entry = emitter.emit_agent_run_completed(
-            conversation_id=42,
-            agent_role="task_implementation",
+            conversation=conv,
             status="failed",
-            project_id=test_task.project_id,
-            task_id=test_task.id,
             error="Something went wrong",
         )
         assert entry.entry_metadata == {
@@ -152,55 +183,32 @@ class TestEmitAgentRunCompleted:
             "error": "Something went wrong",
         }
 
-    def test_error_is_none_when_not_provided(self, emitter: SystemEventEmitter):
-        entry = emitter.emit_agent_run_completed(
-            conversation_id=1,
-            agent_role="project_qa",
-            status="completed",
-        )
-        assert entry.entry_metadata == {
-            "conversation_id": 1,
-            "agent_role": "project_qa",
-            "status": "completed",
-            "error": None,
-        }
+    def test_error_is_none_when_not_provided(self, emitter: SystemEventEmitter, test_task):
+        conv = self._make_project_conversation(test_task.project)
+        entry = emitter.emit_agent_run_completed(conversation=conv, status="completed")
+        assert entry.entry_metadata["error"] is None
 
     def test_task_conversation_sets_both_fks(self, emitter: SystemEventEmitter, test_task):
-        entry = emitter.emit_agent_run_completed(
-            conversation_id=1,
-            agent_role="task_implementation",
-            status="completed",
-            project_id=test_task.project_id,
-            task_id=test_task.id,
-        )
+        conv = self._make_task_conversation(test_task)
+        entry = emitter.emit_agent_run_completed(conversation=conv, status="completed")
         assert entry.project_id == test_task.project_id
         assert entry.task_id == test_task.id
 
     def test_project_conversation_omits_task_id(self, emitter: SystemEventEmitter, test_task):
-        entry = emitter.emit_agent_run_completed(
-            conversation_id=1,
-            agent_role="project_qa",
-            status="interrupted",
-            project_id=test_task.project_id,
-        )
-        assert entry.project_id == test_task.project_id
+        conv = self._make_project_conversation(test_task.project)
+        entry = emitter.emit_agent_run_completed(conversation=conv, status="interrupted")
+        assert entry.project_id == test_task.project.id
         assert entry.task_id is None
 
     def test_codebase_conversation_omits_both_fks(self, emitter: SystemEventEmitter):
-        entry = emitter.emit_agent_run_completed(
-            conversation_id=1,
-            agent_role="codebase_documentation",
-            status="completed",
-        )
+        conv = self._make_codebase_conversation()
+        entry = emitter.emit_agent_run_completed(conversation=conv, status="completed")
         assert entry.project_id is None
         assert entry.task_id is None
 
-    def test_defaults(self, emitter: SystemEventEmitter):
-        entry = emitter.emit_agent_run_completed(
-            conversation_id=1,
-            agent_role="project_qa",
-            status="completed",
-        )
+    def test_defaults(self, emitter: SystemEventEmitter, test_task):
+        conv = self._make_project_conversation(test_task.project)
+        entry = emitter.emit_agent_run_completed(conversation=conv, status="completed")
         assert entry.status == LogEntryStatus.ACTIVE
         assert entry.pinned is False
 

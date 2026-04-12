@@ -15,7 +15,7 @@ Real-time agent conversation updates using WebSocket connections. Agent executio
 1. **Client sends message/action** → POST to HTTP endpoint → server starts background agent execution → returns `{"conversation_id": N}` immediately
 2. **Background execution** → agent runs as asyncio task, pushes `ConversationEvent` objects to an in-memory `asyncio.Queue`
 3. **Client consumes events** → WebSocket connection to `/api/conversations/{id}/ws` → server drains queue and sends events as JSON
-4. **Completion** → server sends `execution_completed` lifecycle event → client terminates stream
+4. **Completion** → server sends `agent_run_completed` lifecycle event → client terminates stream
 
 ### Why WebSocket Instead of NDJSON HTTP Streaming
 
@@ -40,9 +40,9 @@ All messages are JSON. Discriminated by `event_type` field:
 - `{ "event_type": "tool_call_request", ... }` — requires user approval
 - `{ "event_type": "system", "type": "task_updated", ... }`
 
-**Execution lifecycle events** (internal, not conversation messages):
-- `{ "event_type": "execution_lifecycle", "event": "execution_started" }`
-- `{ "event_type": "execution_lifecycle", "event": "execution_completed", "status": "completed|interrupted|failed", "error": null }`
+**Execution lifecycle events** (emitted by `AgentExecutionService` as first/last stream events):
+- `{ "event_type": "agent_run_started", "conversation_id": <int> }`
+- `{ "event_type": "agent_run_completed", "status": "completed|interrupted|failed", "error": null, "usage": null }`
 
 ### Connection Lifecycle
 
@@ -51,13 +51,13 @@ Client                          Server
   |                               |
   |--- GET /ws ------------------>|  WebSocket handshake
   |                               |
-  |<-- execution_started ---------|  Agent execution begins
+  |<-- agent_run_started ---------|  Agent execution begins
   |<-- ConversationEvent ----------|  Events stream as agent runs
   |<-- ConversationEvent ----------|
-  |<-- execution_completed --------|  Execution done
+  |<-- agent_run_completed --------|  Execution done
   |                               |
   |  (waits for next execution)   |
-  |<-- execution_started ---------|  Next approval/message
+  |<-- agent_run_started ---------|  Next approval/message
   ...
 ```
 
@@ -90,7 +90,7 @@ async function* createWebSocketEventStream(conversationId: number): AsyncGenerat
 - Registers a handler with `WebSocketManager` for message routing
 - Buffers incoming events in a local array
 - Yields events as they arrive via a Promise-based wait mechanism
-- Terminates when `execution_completed` lifecycle event is received
+- Terminates when `agent_run_completed` lifecycle event is received
 
 ### API Client Methods
 
@@ -119,7 +119,7 @@ Conversation streaming methods POST to the backend first (starting/resuming exec
 
 **Store behavior**: Calls `apiClient.interruptConversation(conversationId)` (fire-and-forget HTTP POST), optimistically marks stream as not streaming.
 
-**Server behavior**: Sets `interrupt_event` asyncio.Event → agent checks flag between tool calls → raises `AgentInterruptedError` → persists completed turns → pushes `execution_completed` with status `interrupted`.
+**Server behavior**: Sets `interrupt_event` asyncio.Event → agent checks flag between tool calls → raises `AgentInterruptedError` → `AgentExecutionService` catches it, yields `agent_run_completed` with status `interrupted`, then re-raises.
 
 **Result**: All messages processed before interruption are persisted. WebSocket stream terminates naturally.
 

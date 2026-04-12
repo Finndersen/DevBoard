@@ -137,7 +137,7 @@ class SystemEvent(BaseModel):
     """System-level event for entity changes and workflow notifications.
 
     System events notify about entity changes without requiring conversation context.
-    The data structure varies by event type.
+    The data structure varies by sub_type.
 
     Example (TASK_UPDATED):
         {
@@ -153,7 +153,7 @@ class SystemEvent(BaseModel):
     """
 
     event_type: Literal["system"] = "system"
-    type: SystemEventType
+    sub_type: SystemEventType
     data: dict[str, Any] | None = None
     timestamp: datetime.datetime
     uuid: str | None = None
@@ -169,10 +169,19 @@ class ContextUsage(BaseModel):
     cost_usd: float | None = None
 
 
-class ExecutionCompleteEvent(BaseModel):
+class AgentRunStartedEvent(BaseModel):
+    """Signals that an agent execution has begun."""
+
+    event_type: Literal["agent_run_started"] = "agent_run_started"
+    conversation_id: int
+    timestamp: datetime.datetime
+    uuid: str | None = None
+
+
+class AgentRunCompletedEvent(BaseModel):
     """Signals that an agent execution has finished."""
 
-    event_type: Literal["execution_complete"] = "execution_complete"
+    event_type: Literal["agent_run_completed"] = "agent_run_completed"
     status: Literal["completed", "interrupted", "failed"]
     error: str | None = None
     usage: ContextUsage | None = None
@@ -207,13 +216,15 @@ def describe_event(event: "ConversationEvent") -> str:
         return f"MetaMessage(type={event.meta_type})"
     elif isinstance(event, ThinkingEvent):
         return "ThinkingEvent()"
-    elif isinstance(event, ExecutionCompleteEvent):
+    elif isinstance(event, AgentRunStartedEvent):
+        return f"AgentRunStartedEvent(conversation_id={event.conversation_id})"
+    elif isinstance(event, AgentRunCompletedEvent):
         if event.usage:
             total_ctx = event.usage.cache_read_tokens + event.usage.cache_write_tokens + event.usage.input_tokens
-            return f"ExecutionCompleteEvent(status={event.status}, ctx={total_ctx:,} tokens)"
-        return f"ExecutionCompleteEvent(status={event.status})"
+            return f"AgentRunCompletedEvent(status={event.status}, ctx={total_ctx:,} tokens)"
+        return f"AgentRunCompletedEvent(status={event.status})"
     else:
-        return f"SystemEvent(type={event.type})"
+        return f"SystemEvent(sub_type={event.sub_type})"
 
 
 # Union type for all conversation events
@@ -226,6 +237,7 @@ type ConversationEvent = Annotated[
     | MetaMessage
     | LocalCommand
     | ThinkingEvent
-    | ExecutionCompleteEvent,
+    | AgentRunStartedEvent
+    | AgentRunCompletedEvent,
     Field(discriminator="event_type"),
 ]

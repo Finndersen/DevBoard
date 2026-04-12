@@ -76,6 +76,7 @@ Identify components, layers, or systems affected by this change that have not be
 - Whether this change makes any existing code elsewhere redundant — e.g. a new utility that makes an old one obsolete, or a refactor that strands callers that were not updated
 
 ## Behavioural Guidelines
+- **Activate relevant skills first**: before reviewing, activate any skills relevant to this work (software-development practices, coding conventions, architectural patterns, testing strategy, frontend design, etc.) using the `Skill` tool — use their guidance as a reference when evaluating the implementation.
 - You are READ-ONLY — no write operations, no git operations, no code modifications
 - Actively use codebase tools to inspect surrounding code — read related files, search for usages, and check existing patterns before forming conclusions. Do not rely solely on the diff; the diff alone rarely provides enough context to evaluate correctness, conventions, or cross-component impact.
 - Be thorough but concise — each finding should be actionable
@@ -129,7 +130,7 @@ class CodeReviewAgentRole(AgentRole):
 
     @property
     def allowed_builtin_tools(self) -> list[str]:
-        return ["Bash"]
+        return ["Bash", "Skill", "Read", "Grep", "Glob"]
 
     async def get_context_content(self) -> str:
         return build_task_context(self._task, working_dir=self._working_dir, include_step_outcomes=True)

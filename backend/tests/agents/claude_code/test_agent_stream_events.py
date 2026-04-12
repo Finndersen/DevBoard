@@ -926,7 +926,7 @@ class TestStreamEventsApi500Retry:
         assert "API Error: 500" in events[0].text_content
         # Second event is the retry notification
         assert isinstance(events[1], SystemEvent)
-        assert events[1].type == SystemEventType.API_ERROR_RETRY
+        assert events[1].sub_type == SystemEventType.API_ERROR_RETRY
         assert events[1].data["attempt"] == 1
         assert events[1].data["max_attempts"] == 3
         # Third event is the successful response
@@ -966,7 +966,7 @@ class TestStreamEventsApi500Retry:
         assert len(text_events) == 4  # One error message per attempt
         assert len(system_events) == 3  # Three retry notifications
         for i, event in enumerate(system_events):
-            assert event.type == SystemEventType.API_ERROR_RETRY
+            assert event.sub_type == SystemEventType.API_ERROR_RETRY
             assert event.data["attempt"] == i + 1
 
     @pytest.mark.asyncio
@@ -1162,7 +1162,7 @@ class TestStreamEventsApi400Retry:
         assert "tool_use ids must be unique" in events[0].text_content
         # Second event is the retry notification
         assert isinstance(events[1], SystemEvent)
-        assert events[1].type == SystemEventType.API_ERROR_RETRY
+        assert events[1].sub_type == SystemEventType.API_ERROR_RETRY
         assert events[1].data["attempt"] == 1
         assert events[1].data["max_attempts"] == 3
         # Third event is the successful response
@@ -1241,7 +1241,7 @@ class TestStreamEventsApi400Retry:
         assert len(text_events) == 4  # One error message per attempt
         assert len(system_events) == 3  # Three retry notifications
         for i, event in enumerate(system_events):
-            assert event.type == SystemEventType.API_ERROR_RETRY
+            assert event.sub_type == SystemEventType.API_ERROR_RETRY
             assert event.data["attempt"] == i + 1
 
     @pytest.mark.asyncio

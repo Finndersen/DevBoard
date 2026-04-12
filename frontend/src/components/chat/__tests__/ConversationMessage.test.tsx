@@ -360,7 +360,7 @@ describe('ConversationMessage', () => {
     it('renders workspace_create event as inline badge', () => {
       const systemEvent: SystemEvent = {
         event_type: 'system',
-        type: 'workspace_create',
+        sub_type: 'workspace_create',
         data: { task_id: 123 },
         timestamp: '2024-01-01T10:00:00Z',
       }
@@ -384,7 +384,7 @@ describe('ConversationMessage', () => {
     it('renders workspace_allocate event as system badge', () => {
       const systemEvent: SystemEvent = {
         event_type: 'system',
-        type: 'workspace_allocate',
+        sub_type: 'workspace_allocate',
         data: { task_id: 123, slot_id: 1 },
         timestamp: '2024-01-01T10:00:00Z',
       }
@@ -399,7 +399,7 @@ describe('ConversationMessage', () => {
     it('renders workspace_branch_checkout event as system badge', () => {
       const systemEvent: SystemEvent = {
         event_type: 'system',
-        type: 'workspace_branch_checkout',
+        sub_type: 'workspace_branch_checkout',
         data: { task_id: 123, branch: 'main' },
         timestamp: '2024-01-01T10:00:00Z',
       }
@@ -414,7 +414,7 @@ describe('ConversationMessage', () => {
     it('renders workspace_setup event as system badge', () => {
       const systemEvent: SystemEvent = {
         event_type: 'system',
-        type: 'workspace_setup',
+        sub_type: 'workspace_setup',
         data: { task_id: 123, codebase_id: 1, setup_command: 'npm install' },
         timestamp: '2024-01-01T10:00:00Z',
       }
@@ -429,7 +429,7 @@ describe('ConversationMessage', () => {
     it('does not render task_updated event (hidden)', () => {
       const systemEvent: SystemEvent = {
         event_type: 'system',
-        type: 'task_updated',
+        sub_type: 'task_updated',
         data: { task_id: 123, updated_fields: { status: 'planning' } },
         timestamp: '2024-01-01T10:00:00Z',
       }
@@ -443,7 +443,7 @@ describe('ConversationMessage', () => {
     it('does not render conversation_updated event (hidden)', () => {
       const systemEvent: SystemEvent = {
         event_type: 'system',
-        type: 'conversation_updated',
+        sub_type: 'conversation_updated',
         data: { conversation_id: 456, updated_fields: { external_session_id: 'abc123' } },
         timestamp: '2024-01-01T10:00:00Z',
       }
@@ -457,7 +457,7 @@ describe('ConversationMessage', () => {
     it('renders branch_rebased event with message from data', () => {
       const systemEvent: SystemEvent = {
         event_type: 'system',
-        type: 'branch_rebased',
+        sub_type: 'branch_rebased',
         data: { task_id: 123, message: 'Rebased onto main', new_head: 'abc123' },
         timestamp: '2024-01-01T10:00:00Z',
       }
@@ -472,7 +472,7 @@ describe('ConversationMessage', () => {
     it('renders stash_apply_conflict event as system badge', () => {
       const systemEvent: SystemEvent = {
         event_type: 'system',
-        type: 'stash_apply_conflict',
+        sub_type: 'stash_apply_conflict',
         data: { task_id: 123, message: 'Stash apply had conflicts', conflicted_files: ['file.ts'] },
         timestamp: '2024-01-01T10:00:00Z',
       }
@@ -487,7 +487,7 @@ describe('ConversationMessage', () => {
     it('renders compacting_conversation event as system badge', () => {
       const systemEvent: SystemEvent = {
         event_type: 'system',
-        type: 'compacting_conversation',
+        sub_type: 'compacting_conversation',
         data: null,
         timestamp: '2024-01-01T10:00:00Z',
       }
@@ -502,7 +502,7 @@ describe('ConversationMessage', () => {
     it('does not render unknown system event types', () => {
       const systemEvent = {
         event_type: 'system',
-        type: 'unknown_system_event',
+        sub_type: 'unknown_system_event',
         data: null,
         timestamp: '2024-01-01T10:00:00Z',
       } as unknown as SystemEvent

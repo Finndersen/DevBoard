@@ -4,8 +4,9 @@ import datetime
 from typing import Any
 
 from devboard.agents.events import (
+    AgentRunCompletedEvent,
+    AgentRunStartedEvent,
     ContextUsage,
-    ExecutionCompleteEvent,
     MessageRole,
     SystemEvent,
     SystemEventType,
@@ -22,13 +23,13 @@ class TestSystemEvent:
         """Test creating a SystemEvent for task update."""
         event = SystemEvent(
             event_type="system",
-            type=SystemEventType.TASK_UPDATED,
+            sub_type=SystemEventType.TASK_UPDATED,
             data={"task_id": 123, "updated_fields": {"status": "planning"}},
             timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
         )
 
         assert event.event_type == "system"
-        assert event.type == SystemEventType.TASK_UPDATED
+        assert event.sub_type == SystemEventType.TASK_UPDATED
         assert event.data["task_id"] == 123
         assert event.data["updated_fields"]["status"] == "planning"
         assert event.timestamp == datetime.datetime(2024, 1, 1, 0, 0, 0)
@@ -37,19 +38,19 @@ class TestSystemEvent:
         """Test creating a SystemEvent without data."""
         event = SystemEvent(
             event_type="system",
-            type=SystemEventType.CONVERSATION_UPDATED,
+            sub_type=SystemEventType.CONVERSATION_UPDATED,
             timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
         )
 
         assert event.event_type == "system"
-        assert event.type == SystemEventType.CONVERSATION_UPDATED
+        assert event.sub_type == SystemEventType.CONVERSATION_UPDATED
         assert event.data is None
 
     def test_system_event_serialization(self):
         """Test SystemEvent can be serialized to JSON."""
         event = SystemEvent(
             event_type="system",
-            type=SystemEventType.TASK_UPDATED,
+            sub_type=SystemEventType.TASK_UPDATED,
             data={"task_id": 456, "updated_fields": {"implementation_plan_id": 789, "status": "implementing"}},
             timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
         )
@@ -58,7 +59,7 @@ class TestSystemEvent:
         event_dict = event.model_dump(mode="json")
 
         assert event_dict["event_type"] == "system"
-        assert event_dict["type"] == "task_updated"
+        assert event_dict["sub_type"] == "task_updated"
         assert event_dict["data"]["task_id"] == 456
         assert event_dict["data"]["updated_fields"]["implementation_plan_id"] == 789
         assert event_dict["data"]["updated_fields"]["status"] == "implementing"
@@ -68,7 +69,7 @@ class TestSystemEvent:
         """Test SystemEvent can be deserialized from JSON."""
         event_data = {
             "event_type": "system",
-            "type": "conversation_updated",
+            "sub_type": "conversation_updated",
             "data": {"conversation_id": 789, "updated_fields": {"external_session_id": "abc123"}},
             "timestamp": "2024-01-01T00:00:00",
         }
@@ -76,7 +77,7 @@ class TestSystemEvent:
         event = SystemEvent.model_validate(event_data)
 
         assert event.event_type == "system"
-        assert event.type == SystemEventType.CONVERSATION_UPDATED
+        assert event.sub_type == SystemEventType.CONVERSATION_UPDATED
         assert event.data["conversation_id"] == 789
         assert event.data["updated_fields"]["external_session_id"] == "abc123"
 
@@ -95,7 +96,7 @@ class TestConversationEventUnion:
             },
             {
                 "event_type": "system",
-                "type": "task_updated",
+                "sub_type": "task_updated",
                 "data": {"task_id": 123, "updated_fields": {"status": "planning"}},
                 "timestamp": "2024-01-01T00:00:00",
             },
@@ -209,11 +210,11 @@ class TestContextUsage:
         assert usage.cost_usd is None
 
 
-class TestExecutionCompleteEvent:
-    """Tests for ExecutionCompleteEvent with usage field."""
+class TestAgentRunCompletedEvent:
+    """Tests for AgentRunCompletedEvent with usage field."""
 
     def test_execution_complete_without_usage(self):
-        event = ExecutionCompleteEvent(
+        event = AgentRunCompletedEvent(
             status="completed",
             timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
         )
@@ -227,7 +228,7 @@ class TestExecutionCompleteEvent:
             cache_read_tokens=5000,
             cache_write_tokens=1000,
         )
-        event = ExecutionCompleteEvent(
+        event = AgentRunCompletedEvent(
             status="completed",
             usage=usage,
             timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
@@ -237,13 +238,13 @@ class TestExecutionCompleteEvent:
         assert event.usage.cache_read_tokens == 5000
 
     def test_execution_complete_serialization_without_usage(self):
-        event = ExecutionCompleteEvent(
+        event = AgentRunCompletedEvent(
             status="failed",
             error="Something went wrong",
             timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
         )
         data = event.model_dump(mode="json")
-        assert data["event_type"] == "execution_complete"
+        assert data["event_type"] == "agent_run_completed"
         assert data["status"] == "failed"
         assert data["usage"] is None
 
@@ -255,7 +256,7 @@ class TestExecutionCompleteEvent:
             cache_write_tokens=1000,
             cost_usd=0.01,
         )
-        event = ExecutionCompleteEvent(
+        event = AgentRunCompletedEvent(
             status="completed",
             usage=usage,
             timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
@@ -267,15 +268,15 @@ class TestExecutionCompleteEvent:
 
 
 class TestDescribeEventWithUsage:
-    """Tests for describe_event with ExecutionCompleteEvent usage."""
+    """Tests for describe_event with AgentRunCompletedEvent usage."""
 
     def test_describe_execution_complete_without_usage(self):
-        event = ExecutionCompleteEvent(
+        event = AgentRunCompletedEvent(
             status="completed",
             timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
         )
         description = describe_event(event)
-        assert description == "ExecutionCompleteEvent(status=completed)"
+        assert description == "AgentRunCompletedEvent(status=completed)"
 
     def test_describe_execution_complete_with_usage(self):
         usage = ContextUsage(
@@ -284,14 +285,22 @@ class TestDescribeEventWithUsage:
             cache_read_tokens=5000,
             cache_write_tokens=1000,
         )
-        event = ExecutionCompleteEvent(
+        event = AgentRunCompletedEvent(
             status="completed",
             usage=usage,
             timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
         )
         description = describe_event(event)
         # total_ctx = 400 + 5000 + 1000 = 6400
-        assert description == "ExecutionCompleteEvent(status=completed, ctx=6,400 tokens)"
+        assert description == "AgentRunCompletedEvent(status=completed, ctx=6,400 tokens)"
+
+    def test_describe_agent_run_started(self):
+        event = AgentRunStartedEvent(
+            conversation_id=42,
+            timestamp=datetime.datetime(2024, 1, 1, 0, 0, 0),
+        )
+        description = describe_event(event)
+        assert description == "AgentRunStartedEvent(conversation_id=42)"
 
 
 class TestToolCallRequestModelField:

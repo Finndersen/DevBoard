@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.internal import PydanticAIAgentExecutionService, PydanticAIConversationHistoryService
-from devboard.agents.events import ContextUsage, MessageRole, TextMessage
+from devboard.agents.events import AgentRunCompletedEvent, ContextUsage, MessageRole, TextMessage
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.db.models import Conversation, ParentEntityType
 from devboard.db.repositories.conversation import ConversationRepository
@@ -122,8 +122,8 @@ class TestPydanticAIAgentExecutionService:
         assert result.role == MessageRole.AGENT
 
     @pytest.mark.asyncio
-    async def test_stream_events_sets_last_usage(self, service, monkeypatch):
-        """last_usage is populated from agent.get_context_usage() after stream completes."""
+    async def test_stream_events_usage_on_completed_event(self, service, monkeypatch):
+        """AgentRunCompletedEvent carries usage from agent.get_context_usage() after stream completes."""
         expected_usage = ContextUsage(
             input_tokens=200,
             output_tokens=80,
@@ -150,12 +150,13 @@ class TestPydanticAIAgentExecutionService:
         async for event in service.stream_events_for_message_or_approval("Hello"):
             events.append(event)
 
-        assert service.last_usage == expected_usage
+        completed = next(e for e in events if isinstance(e, AgentRunCompletedEvent))
+        assert completed.usage == expected_usage
         mock_agent.get_context_usage.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_stream_events_last_usage_none_when_no_result(self, service, monkeypatch):
-        """last_usage remains None when agent has no run result."""
+    async def test_stream_events_usage_none_on_completed_event_when_no_result(self, service, monkeypatch):
+        """AgentRunCompletedEvent.usage is None when agent has no run result."""
 
         async def mock_stream_events(_msg_or_approvals):
             yield TextMessage(
@@ -176,4 +177,5 @@ class TestPydanticAIAgentExecutionService:
         async for event in service.stream_events_for_message_or_approval("Hello"):
             events.append(event)
 
-        assert service.last_usage is None
+        completed = next(e for e in events if isinstance(e, AgentRunCompletedEvent))
+        assert completed.usage is None

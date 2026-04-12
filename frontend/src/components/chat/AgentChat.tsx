@@ -78,14 +78,14 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
   // Handle session ID updates from system events
   const sessionEventHandler = useCallback((event: SystemEvent) => {
     // Handle session_expired - clear session ID
-    if (event.type === 'session_expired') {
+    if (event.sub_type === 'session_expired') {
       setConversation(prev => prev ? { ...prev, external_session_id: null } : null)
       setSessionExpired(true)
       return
     }
 
     // Handle conversation_updated with external_session_id change
-    if (event.type === 'conversation_updated' &&
+    if (event.sub_type === 'conversation_updated' &&
         event.data?.conversation_id === conversationId &&
         'external_session_id' in (event.data?.updated_fields ?? {})) {
       const newSessionId = event.data?.updated_fields?.external_session_id

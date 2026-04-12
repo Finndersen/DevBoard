@@ -5,6 +5,7 @@ import { useUIStore } from '../stores/uiStore'
 import { useProjects, useCreateProject } from '../hooks'
 import { apiClient } from '../lib/api'
 import type { Project, CustomFieldDefinition } from '../lib/api'
+import Alert from '../components/ui/Alert'
 import { Button, Card, Modal, Input, Textarea, ErrorMessage } from '../components/ui'
 import { loadingSpinner } from '../styles/designSystem'
 import ViewHeader from '../components/layout/ViewHeader'
@@ -19,6 +20,7 @@ export default function ProjectsList() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newProject, setNewProject] = useState({ name: '', description: '' })
 
+  const [createProjectError, setCreateProjectError] = useState<string | null>(null)
   const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>({})
   const [customFieldsLoading, setCustomFieldsLoading] = useState(false)
@@ -65,6 +67,7 @@ export default function ProjectsList() {
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault()
+    setCreateProjectError(null)
     try {
       const customFields: Record<string, unknown> = {}
       Object.entries(customFieldValues).forEach(([name, value]) => {
@@ -93,6 +96,7 @@ export default function ProjectsList() {
       navigate(`/projects/${createdProject.id}?tab=settings`)
     } catch (error) {
       console.error('Failed to create project:', error)
+      setCreateProjectError(error instanceof Error ? error.message : 'Failed to create project')
     }
   }
 
@@ -156,7 +160,7 @@ export default function ProjectsList() {
 
       <Modal
         isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        onClose={() => { setShowCreateModal(false); setCreateProjectError(null) }}
         title="Create New Project"
       >
         <form onSubmit={handleCreateProject} className="space-y-4">
@@ -179,8 +183,9 @@ export default function ProjectsList() {
             onChange={handleCustomFieldChange}
             loading={customFieldsLoading}
           />
+          {createProjectError && <Alert variant="error">{createProjectError}</Alert>}
           <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" onClick={() => setShowCreateModal(false)}>
+            <Button type="button" onClick={() => { setShowCreateModal(false); setCreateProjectError(null) }}>
               Cancel
             </Button>
             <Button type="submit" disabled={creatingProject || !newProject.name || !areMandatoryFieldsFilled()}>

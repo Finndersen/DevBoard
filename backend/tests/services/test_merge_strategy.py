@@ -236,6 +236,7 @@ async def test_squash_merge_squashes_multiple_commits_via_soft_reset_in_feature_
 ):
     """SquashMerge squashes multiple commits via soft_reset+commit on the feature worktree."""
     mock_feature_git = MagicMock(spec=GitRepoIntegration)
+    mock_feature_git.checkout_branch = AsyncMock()
     mock_feature_git.soft_reset = AsyncMock()
     mock_feature_git.commit = AsyncMock(return_value="squashed_sha")
     mock_feature_git.rebase_onto = AsyncMock()
@@ -243,16 +244,14 @@ async def test_squash_merge_squashes_multiple_commits_via_soft_reset_in_feature_
     mock_base_git = MagicMock(spec=GitRepoIntegration)
     mock_base_git.fast_forward_merge = AsyncMock(return_value="ff_sha")
 
-    mock_git.get_checked_out_location = AsyncMock(
-        side_effect=lambda branch: "/worktrees/feature" if branch == mock_task.branch_name else "/worktrees/main"
-    )
+    mock_git.get_checked_out_location = AsyncMock(return_value="/worktrees/main")
     mock_git.get_commits_in_range = AsyncMock(return_value=mock_commits)
 
     def git_factory(path):
         return mock_feature_git if path == "/worktrees/feature" else mock_base_git
 
     with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", side_effect=git_factory):
-        result = await SquashMerge().execute(mock_task, mock_git)
+        result = await SquashMerge().execute(mock_task, mock_git, feature_worktree_path="/worktrees/feature")
 
     mock_feature_git.soft_reset.assert_called_once_with("merge_base_sha")
     mock_feature_git.commit.assert_called_once()
@@ -267,6 +266,7 @@ async def test_squash_merge_squashes_multiple_commits_via_soft_reset_in_feature_
 async def test_squash_merge_skips_soft_reset_for_single_commit(mock_task, mock_git):
     """SquashMerge skips soft_reset when the feature branch already has a single commit."""
     mock_feature_git = MagicMock(spec=GitRepoIntegration)
+    mock_feature_git.checkout_branch = AsyncMock()
     mock_feature_git.soft_reset = AsyncMock()
     mock_feature_git.commit = AsyncMock(return_value="sha")
     mock_feature_git.rebase_onto = AsyncMock()
@@ -274,9 +274,7 @@ async def test_squash_merge_skips_soft_reset_for_single_commit(mock_task, mock_g
     mock_base_git = MagicMock(spec=GitRepoIntegration)
     mock_base_git.fast_forward_merge = AsyncMock(return_value="ff_sha")
 
-    mock_git.get_checked_out_location = AsyncMock(
-        side_effect=lambda branch: "/worktrees/feature" if branch == mock_task.branch_name else "/worktrees/main"
-    )
+    mock_git.get_checked_out_location = AsyncMock(return_value="/worktrees/main")
     # Single commit — squash step is a no-op
     single_commit = MagicMock(spec=GitLogEntry, subject="feat: only commit")
     mock_git.get_commits_in_range = AsyncMock(return_value=[single_commit])
@@ -285,7 +283,7 @@ async def test_squash_merge_skips_soft_reset_for_single_commit(mock_task, mock_g
         return mock_feature_git if path == "/worktrees/feature" else mock_base_git
 
     with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", side_effect=git_factory):
-        result = await SquashMerge().execute(mock_task, mock_git)
+        result = await SquashMerge().execute(mock_task, mock_git, feature_worktree_path="/worktrees/feature")
 
     mock_feature_git.soft_reset.assert_not_called()
     mock_feature_git.commit.assert_not_called()
@@ -329,23 +327,19 @@ async def test_merge_commit_no_stash_in_worktree_path(mock_task, mock_git, mock_
 async def test_squash_merge_restores_original_branch_on_ff_failure_when_base_not_checked_out(mock_task, mock_git):
     """SquashMerge restores original branch when fast-forward fails and base is not in a worktree."""
     mock_feature_git = MagicMock(spec=GitRepoIntegration)
+    mock_feature_git.checkout_branch = AsyncMock()
     mock_feature_git.soft_reset = AsyncMock()
     mock_feature_git.commit = AsyncMock(return_value="squashed_sha")
     mock_feature_git.rebase_onto = AsyncMock()
 
     mock_git.get_current_branch = AsyncMock(return_value="some-other-branch")
     mock_git.fast_forward_merge = AsyncMock(side_effect=Exception("ff failed"))
-    # Feature is in a worktree, base is not
-    mock_git.get_checked_out_location = AsyncMock(
-        side_effect=lambda branch: "/worktrees/feature" if branch == mock_task.branch_name else None
-    )
+    # Base branch is not checked out anywhere
+    mock_git.get_checked_out_location = AsyncMock(return_value=None)
 
-    def git_factory(path):
-        return mock_feature_git
-
-    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", side_effect=git_factory):
+    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_feature_git):
         with pytest.raises(Exception, match="ff failed"):
-            await SquashMerge().execute(mock_task, mock_git)
+            await SquashMerge().execute(mock_task, mock_git, feature_worktree_path="/worktrees/feature")
 
     mock_git.checkout_branch.assert_called_with("some-other-branch")
 
@@ -382,25 +376,26 @@ async def test_rebase_merge_restores_original_branch_on_failure_when_base_not_ch
 
 @pytest.mark.asyncio
 async def test_squash_merge_does_not_restore_branch_when_ff_fails_and_feature_was_current(mock_task, mock_git):
-    """SquashMerge does not restore branch when ff fails and current branch is the feature branch."""
+    """SquashMerge does not restore branch when ff fails and current branch is the feature branch.
+
+    With feature_worktree_path set, the strategy operates in the worktree without touching main repo HEAD.
+    When the ff merge then fails (base not in worktree, main repo is used), and current branch
+    was already the task branch, no restore is needed.
+    """
     mock_feature_git = MagicMock(spec=GitRepoIntegration)
+    mock_feature_git.checkout_branch = AsyncMock()
     mock_feature_git.soft_reset = AsyncMock()
     mock_feature_git.commit = AsyncMock(return_value="squashed_sha")
     mock_feature_git.rebase_onto = AsyncMock()
 
     mock_git.get_current_branch = AsyncMock(return_value=mock_task.branch_name)
     mock_git.fast_forward_merge = AsyncMock(side_effect=Exception("ff failed"))
-    # Feature is in a worktree, base is not
-    mock_git.get_checked_out_location = AsyncMock(
-        side_effect=lambda branch: "/worktrees/feature" if branch == mock_task.branch_name else None
-    )
+    # Base branch is not checked out anywhere
+    mock_git.get_checked_out_location = AsyncMock(return_value=None)
 
-    def git_factory(path):
-        return mock_feature_git
-
-    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", side_effect=git_factory):
+    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_feature_git):
         with pytest.raises(Exception, match="ff failed"):
-            await SquashMerge().execute(mock_task, mock_git)
+            await SquashMerge().execute(mock_task, mock_git, feature_worktree_path="/worktrees/feature")
 
     mock_git.checkout_branch.assert_not_called()
 
@@ -419,8 +414,9 @@ async def test_squash_merge_rebases_feature_onto_base_when_not_in_worktree(mock_
 
 @pytest.mark.asyncio
 async def test_squash_merge_rebases_feature_worktree_onto_base(mock_task, mock_git):
-    """SquashMerge calls rebase_onto on the feature worktree git when feature branch is checked out in a worktree."""
+    """SquashMerge calls rebase_onto on the feature worktree git when feature_worktree_path is provided."""
     mock_feature_git = MagicMock(spec=GitRepoIntegration)
+    mock_feature_git.checkout_branch = AsyncMock()
     mock_feature_git.soft_reset = AsyncMock()
     mock_feature_git.commit = AsyncMock(return_value="squashed_sha")
     mock_feature_git.rebase_onto = AsyncMock()
@@ -428,15 +424,13 @@ async def test_squash_merge_rebases_feature_worktree_onto_base(mock_task, mock_g
     mock_base_git = MagicMock(spec=GitRepoIntegration)
     mock_base_git.fast_forward_merge = AsyncMock(return_value="ff_sha")
 
-    mock_git.get_checked_out_location = AsyncMock(
-        side_effect=lambda branch: "/worktrees/feature" if branch == mock_task.branch_name else "/worktrees/main"
-    )
+    mock_git.get_checked_out_location = AsyncMock(return_value="/worktrees/main")
 
     def git_factory(path):
         return mock_feature_git if path == "/worktrees/feature" else mock_base_git
 
     with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", side_effect=git_factory):
-        result = await SquashMerge().execute(mock_task, mock_git)
+        result = await SquashMerge().execute(mock_task, mock_git, feature_worktree_path="/worktrees/feature")
 
     mock_feature_git.rebase_onto.assert_called_once_with(mock_task.base_branch)
     mock_git.rebase_branch.assert_not_called()
@@ -445,20 +439,20 @@ async def test_squash_merge_rebases_feature_worktree_onto_base(mock_task, mock_g
 
 @pytest.mark.asyncio
 async def test_squash_merge_remote_base_fetches_squashes_rebases_and_pushes(mock_task, mock_git, mock_commits):
-    """SquashMerge for remote base: squashes on feature, fetches, rebases, then pushes."""
+    """SquashMerge for remote base: squashes on feature worktree, fetches, rebases, then pushes."""
     mock_task.base_branch = "origin/main"
 
     mock_feature_git = MagicMock(spec=GitRepoIntegration)
+    mock_feature_git.checkout_branch = AsyncMock()
     mock_feature_git.soft_reset = AsyncMock()
     mock_feature_git.commit = AsyncMock(return_value="squashed_sha")
     mock_feature_git.rebase_onto = AsyncMock(return_value="rebased_sha")
 
     mock_git.get_commits_in_range = AsyncMock(return_value=mock_commits)
-    mock_git.get_checked_out_location = AsyncMock(return_value="/worktrees/feature")
     mock_git.run_git_command = AsyncMock(return_value="pushed_sha")
 
     with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_feature_git):
-        result = await SquashMerge().execute(mock_task, mock_git)
+        result = await SquashMerge().execute(mock_task, mock_git, feature_worktree_path="/worktrees/feature")
 
     mock_feature_git.soft_reset.assert_called_once_with("merge_base_sha")
     mock_feature_git.commit.assert_called_once()
@@ -483,3 +477,164 @@ async def test_rebase_merge_does_not_restore_branch_on_failure_when_feature_bran
             await RebaseMerge().execute(mock_task, mock_git)
 
     mock_git.checkout_branch.assert_not_called()
+
+
+# ── feature_worktree_path tests (Fix 1: operate in worktree, not main repo) ────
+
+
+@pytest.mark.asyncio
+async def test_squash_merge_uses_feature_worktree_path_for_squash_and_rebase(mock_task, mock_git, mock_commits):
+    """SquashMerge uses feature_worktree_path to squash and rebase when branch not currently checked out."""
+    mock_feature_git = MagicMock(spec=GitRepoIntegration)
+    mock_feature_git.checkout_branch = AsyncMock()
+    mock_feature_git.soft_reset = AsyncMock()
+    mock_feature_git.commit = AsyncMock(return_value="squashed_sha")
+    mock_feature_git.rebase_onto = AsyncMock()
+
+    mock_base_git = MagicMock(spec=GitRepoIntegration)
+    mock_base_git.fast_forward_merge = AsyncMock(return_value="ff_sha")
+
+    # Branch not currently checked out anywhere (was released from worktree)
+    mock_git.get_checked_out_location = AsyncMock(
+        side_effect=lambda branch: "/worktrees/main" if branch == mock_task.base_branch else None
+    )
+    mock_git.get_commits_in_range = AsyncMock(return_value=mock_commits)
+
+    def git_factory(path):
+        return mock_feature_git if path == "/worktrees/feature" else mock_base_git
+
+    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", side_effect=git_factory):
+        result = await SquashMerge().execute(mock_task, mock_git, feature_worktree_path="/worktrees/feature")
+
+    # Should re-checkout branch in the feature worktree and squash there
+    mock_feature_git.checkout_branch.assert_called_with(mock_task.branch_name)
+    mock_feature_git.soft_reset.assert_called_once_with("merge_base_sha")
+    mock_feature_git.commit.assert_called_once()
+    # Should rebase within the worktree (not the main repo)
+    mock_feature_git.rebase_onto.assert_called_with(mock_task.base_branch)
+    mock_git.rebase_branch.assert_not_called()
+    assert result.outcome == MergeOutcome.SUCCESS
+
+
+@pytest.mark.asyncio
+async def test_squash_merge_uses_feature_worktree_path_for_rebase_single_commit(mock_task, mock_git):
+    """SquashMerge uses feature_worktree_path for rebase even for single-commit (no-squash) case."""
+    mock_feature_git = MagicMock(spec=GitRepoIntegration)
+    mock_feature_git.checkout_branch = AsyncMock()
+    mock_feature_git.rebase_onto = AsyncMock()
+
+    mock_base_git = MagicMock(spec=GitRepoIntegration)
+    mock_base_git.fast_forward_merge = AsyncMock(return_value="ff_sha")
+
+    # Single commit — squash is a no-op
+    single_commit = MagicMock(spec=GitLogEntry, subject="feat: only commit")
+    mock_git.get_commits_in_range = AsyncMock(return_value=[single_commit])
+
+    # Branch not currently checked out anywhere
+    mock_git.get_checked_out_location = AsyncMock(
+        side_effect=lambda branch: "/worktrees/main" if branch == mock_task.base_branch else None
+    )
+
+    def git_factory(path):
+        return mock_feature_git if path == "/worktrees/feature" else mock_base_git
+
+    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", side_effect=git_factory):
+        result = await SquashMerge().execute(mock_task, mock_git, feature_worktree_path="/worktrees/feature")
+
+    # No squash, but rebase should use worktree
+    mock_feature_git.soft_reset.assert_not_called()
+    mock_feature_git.checkout_branch.assert_called_with(mock_task.branch_name)
+    mock_feature_git.rebase_onto.assert_called_once_with(mock_task.base_branch)
+    mock_git.rebase_branch.assert_not_called()
+    assert result.outcome == MergeOutcome.SUCCESS
+
+
+@pytest.mark.asyncio
+async def test_rebase_merge_uses_feature_worktree_path(mock_task, mock_git):
+    """RebaseMerge uses feature_worktree_path to rebase when branch not currently checked out."""
+    mock_task.codebase.merge_method = MergeMethod.REBASE
+    mock_feature_git = MagicMock(spec=GitRepoIntegration)
+    mock_feature_git.checkout_branch = AsyncMock()
+    mock_feature_git.rebase_onto = AsyncMock()
+
+    mock_base_git = MagicMock(spec=GitRepoIntegration)
+    mock_base_git.fast_forward_merge = AsyncMock(return_value="ff_sha")
+
+    # Branch not currently checked out anywhere (was released)
+    mock_git.get_checked_out_location = AsyncMock(
+        side_effect=lambda branch: "/worktrees/main" if branch == mock_task.base_branch else None
+    )
+
+    def git_factory(path):
+        return mock_feature_git if path == "/worktrees/feature" else mock_base_git
+
+    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", side_effect=git_factory):
+        result = await RebaseMerge().execute(mock_task, mock_git, feature_worktree_path="/worktrees/feature")
+
+    # Should re-checkout branch in feature worktree and use rebase_onto there
+    mock_feature_git.checkout_branch.assert_called_with(mock_task.branch_name)
+    mock_feature_git.rebase_onto.assert_called_once_with(mock_task.base_branch)
+    mock_git.rebase_branch.assert_not_called()
+    assert result.outcome == MergeOutcome.SUCCESS
+
+
+# ── Regression tests: HEAD-leak bug (Fix 2: main repo HEAD restored before delete) ─
+
+
+@pytest.mark.asyncio
+async def test_squash_merge_restores_main_repo_head_before_branch_delete_when_no_worktree(mock_task, mock_git):
+    """SquashMerge restores main repo HEAD after rebase so delete_branch succeeds.
+
+    Regression test for the bug where rebase_branch left the main repo on the task branch,
+    causing 'git branch -D' to fail with 'used by worktree'.
+    """
+    # Simulate: main repo is currently on base branch, no feature worktree
+    call_count = 0
+
+    async def get_current_branch_side_effect():
+        nonlocal call_count
+        call_count += 1
+        # After rebase, git would put HEAD on task.branch_name; simulate that on 2nd call
+        if call_count == 1:
+            return mock_task.base_branch  # before rebase
+        return mock_task.branch_name  # after rebase (the bug condition)
+
+    mock_git.get_checked_out_location = AsyncMock(return_value=None)
+    mock_git.get_current_branch = AsyncMock(side_effect=get_current_branch_side_effect)
+
+    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_git):
+        result = await SquashMerge().execute(mock_task, mock_git)
+
+    # Main repo HEAD should have been restored to base branch so delete_branch can succeed
+    mock_git.checkout_branch.assert_any_call(mock_task.base_branch)
+    mock_git.delete_branch.assert_called_once_with(mock_task.branch_name, force=True)
+    assert result.outcome == MergeOutcome.SUCCESS
+
+
+@pytest.mark.asyncio
+async def test_rebase_merge_restores_main_repo_head_before_branch_delete_when_no_worktree(mock_task, mock_git):
+    """RebaseMerge restores main repo HEAD after rebase so delete_branch succeeds.
+
+    Regression test for the bug where rebase_branch left the main repo on the task branch,
+    causing 'git branch -D' to fail with 'used by worktree'.
+    """
+    mock_task.codebase.merge_method = MergeMethod.REBASE
+    call_count = 0
+
+    async def get_current_branch_side_effect():
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return mock_task.base_branch  # before rebase
+        return mock_task.branch_name  # after rebase (the bug condition)
+
+    mock_git.get_checked_out_location = AsyncMock(return_value=None)
+    mock_git.get_current_branch = AsyncMock(side_effect=get_current_branch_side_effect)
+
+    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_git):
+        result = await RebaseMerge().execute(mock_task, mock_git)
+
+    # Main repo HEAD should have been restored to base branch so delete_branch can succeed
+    mock_git.checkout_branch.assert_any_call(mock_task.base_branch)
+    mock_git.delete_branch.assert_called_once_with(mock_task.branch_name, force=True)
+    assert result.outcome == MergeOutcome.SUCCESS

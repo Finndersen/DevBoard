@@ -111,7 +111,7 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         assert len(history.messages) == 1
         event = history.messages[0]
         assert event.event_type == "system"
-        assert event.type == SystemEventType.SESSION_EXPIRED
+        assert event.sub_type == SystemEventType.SESSION_EXPIRED
         assert (
             event.data["message"] == "Claude Code session file not found. Clear this conversation to start a new one."
         )
@@ -170,20 +170,28 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         async for event in execution_service.stream_events_for_message_or_approval("Test message"):
             events.append(event)
 
-        # Verify we got the initial event and then the SESSION_EXPIRED event
-        assert len(events) == 2
+        # Events: AgentRunStartedEvent, TextMessage, SESSION_EXPIRED SystemEvent, AgentRunCompletedEvent
+        assert len(events) == 4
 
-        # First event is the text message before the error
-        assert events[0].event_type == "message"
-        assert events[0].text_content == "Starting..."
+        # First event is the lifecycle start event
+        assert events[0].event_type == "agent_run_started"
 
-        # Second event is the SESSION_EXPIRED system event
-        assert events[1].event_type == "system"
-        assert events[1].type == SystemEventType.SESSION_EXPIRED
+        # Second event is the text message before the error
+        assert events[1].event_type == "message"
+        assert events[1].text_content == "Starting..."
+
+        # Third event is the SESSION_EXPIRED system event
+        assert events[2].event_type == "system"
+        assert events[2].sub_type == SystemEventType.SESSION_EXPIRED
         assert (
-            events[1].data["message"]
+            events[2].data["message"]
             == "Claude Code session file not found. Clear this conversation to start a new one."
         )
+
+        # Last event is the lifecycle completed event (SESSION_EXPIRED is handled inside _stream_events_impl,
+        # so the stream completes normally from the base class's perspective)
+        assert events[3].event_type == "agent_run_completed"
+        assert events[3].status == "completed"
 
         # Verify the session ID is preserved
         db_session.refresh(conversation)
@@ -214,10 +222,13 @@ class TestClaudeCodeConversationHistoryServiceSessionExpiration:
         async for event in execution_service.stream_events_for_message_or_approval("Test message"):
             events.append(event)
 
-        # Verify only the SESSION_EXPIRED event is returned
-        assert len(events) == 1
-        assert events[0].event_type == "system"
-        assert events[0].type == SystemEventType.SESSION_EXPIRED
+        # Events: AgentRunStartedEvent, SESSION_EXPIRED SystemEvent, AgentRunCompletedEvent
+        assert len(events) == 3
+        assert events[0].event_type == "agent_run_started"
+        assert events[1].event_type == "system"
+        assert events[1].sub_type == SystemEventType.SESSION_EXPIRED
+        assert events[2].event_type == "agent_run_completed"
+        assert events[2].status == "completed"
 
         # Verify the session ID is preserved
         db_session.refresh(conversation)

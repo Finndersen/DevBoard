@@ -266,7 +266,7 @@ class ClaudeCodeAgent(BaseAgent):
                         if _should_retry_error_result(message.result) and api_error_retry_count < MAX_RETRY_ATTEMPTS:
                             api_error_retry_count += 1
                             yield SystemEvent(
-                                type=SystemEventType.API_ERROR_RETRY,
+                                sub_type=SystemEventType.API_ERROR_RETRY,
                                 data={
                                     "attempt": api_error_retry_count,
                                     "max_attempts": MAX_RETRY_ATTEMPTS,
@@ -295,7 +295,7 @@ class ClaudeCodeAgent(BaseAgent):
                         # Emit compaction event when conversation is being compacted
                         if message.subtype == "status" and message.data.get("status") == "compacting":
                             yield SystemEvent(
-                                type=SystemEventType.COMPACTING_CONVERSATION,
+                                sub_type=SystemEventType.COMPACTING_CONVERSATION,
                                 timestamp=datetime.datetime.now(datetime.UTC),
                             )
                         continue
@@ -310,7 +310,7 @@ class ClaudeCodeAgent(BaseAgent):
                                 rate_limit_type=info.rate_limit_type,
                             )
                             yield SystemEvent(
-                                type=SystemEventType.RATE_LIMIT,
+                                sub_type=SystemEventType.RATE_LIMIT,
                                 data={
                                     "status": info.status,
                                     "utilization": info.utilization,

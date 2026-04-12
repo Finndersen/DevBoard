@@ -98,7 +98,7 @@ function ConversationDetailsPanel({ conversationId }: { conversationId: number }
 
   // Handle conversation updates
   useSystemEventHandler((event) => {
-    if (event.type === 'conversation_updated' && event.data.conversation_id === conversationId) {
+    if (event.sub_type === 'conversation_updated' && event.data.conversation_id === conversationId) {
       const { updated_fields } = event.data
 
       // Check which fields were updated and update local state
@@ -132,7 +132,7 @@ function TaskStatusBadge({ taskId }: { taskId: number }) {
   const [status, setStatus] = useState<string>('planning')
 
   useSystemEventHandler((event) => {
-    if (event.type === 'task_updated' && event.data.task_id === taskId) {
+    if (event.sub_type === 'task_updated' && event.data.task_id === taskId) {
       const { updated_fields } = event.data
 
       // Check if status was updated
@@ -160,7 +160,7 @@ import { useSystemEventHandler } from '../hooks/useConversationEventHandlers'
 function DebugEventMonitor() {
   useSystemEventHandler((event) => {
     console.log('System event received:', {
-      type: event.type,
+      type: event.sub_type,
       data: event.data,
       timestamp: event.timestamp
     })
@@ -182,7 +182,7 @@ function TaskPage({ taskId }: { taskId: number }) {
 
   // Handle task status changes
   useSystemEventHandler((event) => {
-    if (event.type === 'task_updated' && event.data.task_id === taskId) {
+    if (event.sub_type === 'task_updated' && event.data.task_id === taskId) {
       const { updated_fields } = event.data
 
       // Refetch based on what changed

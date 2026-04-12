@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import type { ConversationEvent, ContextUsage, ExecutionCompleteEvent, ToolApprovalRequest, ToolCallRequest, ToolCall, ToolResult, SystemEvent } from '../lib/api'
+import type { ConversationEvent, ContextUsage, AgentRunCompletedEvent, AgentRunStartedEvent, ToolApprovalRequest, ToolCallRequest, ToolCall, ToolResult, SystemEvent } from '../lib/api'
 import { apiClient } from '../lib/api'
 import type { EventHandlerRegistry } from '../hooks/useConversationEventHandlers'
 import { invokeStreamCompleteHandlers, invokeEventHandlers } from '../hooks/useConversationEventHandlers'
@@ -100,13 +100,13 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
     conversationMessages: new Map(),
 
     handleWebSocketEvent: (conversationId, rawEvent) => {
-      // execution_complete finalises the stream regardless of whether it is currently marked active
-      if (rawEvent.event_type === 'execution_complete') {
-        const completeEvent = rawEvent as unknown as ExecutionCompleteEvent
+      // agent_run_completed finalises the stream regardless of whether it is currently marked active
+      if (rawEvent.event_type === 'agent_run_completed') {
+        const completeEvent = rawEvent as unknown as AgentRunCompletedEvent
         if (completeEvent.status === 'failed') {
           const errorEvent: SystemEvent = {
             event_type: 'system',
-            type: 'stream_error',
+            sub_type: 'stream_error',
             data: {
               error_code: 'EXECUTION_FAILED',
               message: completeEvent.error || 'Agent execution failed',
@@ -144,6 +144,32 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           }
           get().completeStream(conversationId)
         }
+        return
+      }
+
+      // Handle agent_run_started: mark stream active and fire the 'active' lifecycle callback
+      // so the conversations list refetches immediately without waiting for the first model token.
+      if (rawEvent.event_type === 'agent_run_started') {
+        const runStartedConvId = (rawEvent as AgentRunStartedEvent).conversation_id ?? conversationId
+        if (!get().activeStreams.get(runStartedConvId)) {
+          set((draft) => {
+            draft.activeStreams.set(runStartedConvId, {
+              isStreaming: true,
+              error: null,
+              startedAt: Date.now(),
+              lastEventAt: Date.now(),
+              pendingToolRequests: [],
+              isQueued: false,
+            })
+          })
+          initToolTracking(runStartedConvId)
+        } else {
+          set((draft) => {
+            const s = draft.activeStreams.get(runStartedConvId)
+            if (s) s.isStreaming = true
+          })
+        }
+        notifyStreamLifecycle(runStartedConvId, 'active')
         return
       }
 
@@ -209,7 +235,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         return
       }
 
-      if (event.event_type === 'system' && (event as SystemEvent).type === 'stream_error') {
+      if (event.event_type === 'system' && (event as SystemEvent).sub_type === 'stream_error') {
         const errorMessage = ((event as SystemEvent).data?.message as string) || 'An error occurred'
         get().addEvent(conversationId, event)
         get().setError(conversationId, new Error(errorMessage))
@@ -371,7 +397,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         eventType: event.event_type,
         currentMessageCount: messagesBefore?.messages?.length ?? 0,
         ...(event.event_type === 'tool_call' && { toolName: (event as ToolCall).tool_name }),
-        ...(event.event_type === 'system' && { systemType: (event as SystemEvent).type })
+        ...(event.event_type === 'system' && { systemType: (event as SystemEvent).sub_type })
       })
 
       set((draft) => {

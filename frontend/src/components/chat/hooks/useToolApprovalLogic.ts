@@ -2,6 +2,8 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import type { ToolCallRequest, ToolApprovalRequest } from '../../../lib/api'
 import { useApprovals, useApprovalActions, type PendingApprovalWithContext } from '../../../stores/approvalsStore'
 import { createConversationApprovalKey } from '../../../utils/approvalKeys'
+import { useNotificationStore } from '../../../stores/notificationStore'
+import { reportMutationError } from '../../../lib/errors'
 
 export function useToolApprovalLogic(
   conversationId: number,
@@ -14,6 +16,7 @@ export function useToolApprovalLogic(
   const { setApprovals, clearApprovals } = useApprovalActions()
   const hasSetApprovalsRef = useRef(false)
   const [approvalError, setApprovalError] = useState<string | null>(null)
+  const addNotification = useNotificationStore(s => s.addNotification)
 
   useEffect(() => {
     if (pendingToolRequests && pendingToolRequests.length > 0) {
@@ -53,9 +56,14 @@ export function useToolApprovalLogic(
       clearPendingToolRequests(conversationId)
       await approveTools(conversationId, approvalRequest.approvals)
     } catch (error) {
-      console.error('Failed to process tool approval:', error)
       const errorMsg = error instanceof Error ? error.message : 'An unknown error occurred'
       setApprovalError(`Failed to process approval: ${errorMsg}. Please try again.`)
+      reportMutationError(addNotification, error, {
+        entityType: null,
+        entityId: null,
+        entityTitle: null,
+        fallbackMessage: 'Failed to process tool approval',
+      })
     }
   }
 

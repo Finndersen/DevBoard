@@ -69,6 +69,10 @@ class TaskGitService:
 
         git = GitRepoIntegration(task.codebase.local_path)
 
+        validation = await git.validate()
+        if not validation.success:
+            raise ValueError(validation.message)
+
         if not await git.branch_exists(branch_name):
             await cls._fetch_remote_gracefully(git, task.base_branch)
             await git.create_branch(branch_name, task.base_branch)
@@ -360,7 +364,7 @@ class TaskGitService:
 
         strategy = get_merge_strategy(merge_method)
         try:
-            return await strategy.execute(task, repo_git)
+            return await strategy.execute(task, repo_git, feature_worktree_path=release_result.worktree_path)
         except Exception as e:
             logfire.error(f"Merge failed for task {task.id}: {e}")
             return MergeResult(

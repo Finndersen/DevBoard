@@ -1,5 +1,6 @@
 """Utility for emitting system LogEntry events for entity lifecycle operations."""
 
+from devboard.db.models.conversation import Conversation
 from devboard.db.models.log_entry import LogEntry, LogEntrySource, LogEntryStatus
 from devboard.db.models.project import Project
 from devboard.db.models.task import Task
@@ -82,23 +83,28 @@ class SystemEventEmitter:
 
     def emit_agent_run_completed(
         self,
-        conversation_id: int,
-        agent_role: str,
+        conversation: Conversation,
         status: str,
-        project_id: int | None = None,
-        task_id: int | None = None,
         error: str | None = None,
     ) -> LogEntry:
         """Emit an agent_run.completed event."""
+        project_id: int | None = None
+        task_id: int | None = None
+        parent = conversation.get_parent_entity()
+        if isinstance(parent, Task):
+            task_id = parent.id
+            project_id = parent.project_id
+        elif isinstance(parent, Project):
+            project_id = parent.id
         return self.log_entry_repo.create(
             source=LogEntrySource.SYSTEM,
             type="agent_run.completed",
-            content=f"Agent run {status} for conversation {conversation_id}",
+            content=f"Agent run {status} for conversation {conversation.id}",
             project_id=project_id,
             task_id=task_id,
             entry_metadata={
-                "conversation_id": conversation_id,
-                "agent_role": agent_role,
+                "conversation_id": conversation.id,
+                "agent_role": conversation.agent_role.value,
                 "status": status,
                 "error": error,
             },

@@ -24,7 +24,7 @@ from devboard.services.task_service import TaskService
 MAX_TASKS_LIMIT = 20
 
 
-def _task_to_toon_record(task: Task) -> dict[str, Any]:
+def _task_to_toon_record(task: Task, agent_running: bool = False) -> dict[str, Any]:
     """Convert a Task to a dict for TOON encoding."""
     return {
         "id": task.id,
@@ -33,16 +33,17 @@ def _task_to_toon_record(task: Task) -> dict[str, Any]:
         "created_at": task.created_at.isoformat(),
         "codebase": task.codebase.name,
         "branch": task.branch_name,
+        "agent_running": agent_running,
         "custom_fields": json.dumps(task.custom_fields or {}),
     }
 
 
-def _format_tasks_as_toon(tasks: list[Task], limit: int) -> str:
+def _format_tasks_as_toon(tasks: list[Task], limit: int, running_map: dict[int, bool] | None = None) -> str:
     """Format tasks as TOON-encoded output string."""
     if not tasks:
         return "No tasks found matching the filters."
 
-    task_records = [_task_to_toon_record(task) for task in tasks]
+    task_records = [_task_to_toon_record(task, (running_map or {}).get(task.id, False)) for task in tasks]
     toon_output = toons.dumps(task_records)
 
     if len(tasks) == limit:
@@ -113,7 +114,8 @@ def create_list_tasks_tool(project: Project, task_service: TaskService) -> Tool:
             limit=max_results,
         )
 
-        return _format_tasks_as_toon(tasks, max_results)
+        running_map = task_service.is_agents_running_for_tasks([t.id for t in tasks])
+        return _format_tasks_as_toon(tasks, max_results, running_map)
 
     # Dynamically set the Literal annotation for codebase_name parameter if codebases exist
     if codebase_names:
@@ -163,10 +165,13 @@ def create_view_task_details_tool(project: Project, task_service: TaskService) -
         if task.project_id != project.id:
             raise ModelRetry(f"Task with ID {task_id} does not belong to this project.")
 
+        agent_running = task_service.is_task_agent_running(task.id)
+
         # Format task metadata
         lines = [
             f"# Task #{task.id}: {task.title}\n",
             f"**Status:** {task.status.value}",
+            f"**Agent running:** {'yes' if agent_running else 'no'}",
             f"**Created:** {task.created_at.isoformat()}",
             f"**Codebase:** {task.codebase.name}",
         ]
@@ -406,6 +411,8 @@ async def _apply_task_edits(
     title: str | None = None,
     custom_fields: dict[str, Any] | None = None,
     specification_content: str | None = None,
+    *,
+    include_agent_running: bool = True,
 ) -> str:
     """Apply edits to a task and return a JSON result.
 
@@ -443,6 +450,8 @@ async def _apply_task_edits(
         }
         if spec_updated:
             result["specification_updated"] = True
+        if include_agent_running:
+            result["agent_running"] = task_service.is_task_agent_running(updated_task.id)
 
         return json.dumps(result)
     except ModelRetry:
@@ -619,6 +628,7 @@ def create_create_task_tool(
             "branch_name": task.branch_name,
             "base_branch": task.base_branch,
             "codebase_name": codebase.name,
+            "agent_running": active_conversation_id is not None,
         }
         if active_conversation_id is not None:
             result["active_conversation_id"] = active_conversation_id

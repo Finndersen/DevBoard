@@ -165,6 +165,29 @@ class ConversationRepository(BaseRepository[Conversation]):
             conversation.archived_at = datetime.datetime.now(datetime.UTC)
             self.db.flush()
 
+    def get_active_conversations_for_entities(
+        self,
+        entity_type: ParentEntityType,
+        entity_ids: list[int],
+    ) -> list[Conversation]:
+        """Get the active top-level conversation for each entity in entity_ids (batch lookup).
+
+        Returns at most one active conversation per entity_id (the most recently created one).
+        """
+        if not entity_ids:
+            return []
+        stmt = (
+            select(Conversation)
+            .where(
+                Conversation.parent_entity_type == entity_type,
+                Conversation.parent_entity_id.in_(entity_ids),
+                Conversation.is_active == True,  # noqa: E712
+                Conversation.parent_conversation_id.is_(None),
+            )
+            .order_by(Conversation.created_at.desc())
+        )
+        return list(self.db.execute(stmt).scalars().all())
+
     def get_active_conversations_for_entity(
         self,
         entity_type: ParentEntityType,

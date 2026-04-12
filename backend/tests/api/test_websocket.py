@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
-from devboard.agents.events import ExecutionCompleteEvent, MessageRole, TextMessage
+from devboard.agents.events import AgentRunCompletedEvent, MessageRole, TextMessage
 
 
 class TestMultiplexedWebSocket:
@@ -37,7 +37,7 @@ class TestMultiplexedWebSocket:
 
     def test_receives_execution_complete_event_with_conversation_id(self, client):
         """ExecutionCompleteEvent should be tagged with the correct conversation_id."""
-        event = ExecutionCompleteEvent(
+        event = AgentRunCompletedEvent(
             status="completed",
             error=None,
             timestamp=datetime.datetime.now(datetime.UTC),
@@ -52,7 +52,7 @@ class TestMultiplexedWebSocket:
         with patch("devboard.api.routers.websocket.get_execution_manager", return_value=mock_mgr):
             with client.websocket_connect("/api/ws") as ws:
                 msg = ws.receive_json()
-                assert msg["event_type"] == "execution_complete"
+                assert msg["event_type"] == "agent_run_completed"
                 assert msg["status"] == "completed"
                 assert msg["error"] is None
                 assert msg["conversation_id"] == 7
@@ -116,7 +116,7 @@ class TestMultiplexedWebSocket:
 
     def test_failed_execution_complete_includes_error(self, client):
         """ExecutionCompleteEvent with failed status should include error message."""
-        event = ExecutionCompleteEvent(
+        event = AgentRunCompletedEvent(
             status="failed",
             error="Agent crashed unexpectedly",
             timestamp=datetime.datetime.now(datetime.UTC),
@@ -131,14 +131,14 @@ class TestMultiplexedWebSocket:
         with patch("devboard.api.routers.websocket.get_execution_manager", return_value=mock_mgr):
             with client.websocket_connect("/api/ws") as ws:
                 msg = ws.receive_json()
-                assert msg["event_type"] == "execution_complete"
+                assert msg["event_type"] == "agent_run_completed"
                 assert msg["status"] == "failed"
                 assert msg["error"] == "Agent crashed unexpectedly"
                 assert msg["conversation_id"] == 3
 
     def test_interrupted_execution_complete_has_no_error(self, client):
         """ExecutionCompleteEvent with interrupted status should have no error."""
-        event = ExecutionCompleteEvent(
+        event = AgentRunCompletedEvent(
             status="interrupted",
             error=None,
             timestamp=datetime.datetime.now(datetime.UTC),
@@ -153,7 +153,7 @@ class TestMultiplexedWebSocket:
         with patch("devboard.api.routers.websocket.get_execution_manager", return_value=mock_mgr):
             with client.websocket_connect("/api/ws") as ws:
                 msg = ws.receive_json()
-                assert msg["event_type"] == "execution_complete"
+                assert msg["event_type"] == "agent_run_completed"
                 assert msg["status"] == "interrupted"
                 assert msg["error"] is None
                 assert msg["conversation_id"] == 5

@@ -8,7 +8,7 @@ from pydantic_ai.messages import ModelMessage
 
 from devboard.agents.engines.internal.agent import InternalAgent
 from devboard.agents.engines.internal.conversation_history import convert_messages_to_pydantic
-from devboard.agents.events import ConversationEvent, TextMessage
+from devboard.agents.events import ContextUsage, ConversationEvent, TextMessage
 from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.api.schemas.agent_conversation import ToolApprovals
@@ -60,7 +60,7 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
         self,
         message_or_approvals: str | ToolApprovals,
         extra_tools: list[Tool],
-    ) -> AsyncIterator[ConversationEvent]:
+    ) -> AsyncIterator[ConversationEvent | ContextUsage]:
         """Engine-specific implementation of event streaming.
 
         Args:
@@ -109,7 +109,9 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
             raise AgentInterruptedError("Agent execution interrupted")
 
         self._store_new_messages(agent.get_new_messages())
-        self.last_usage = agent.get_context_usage()
+        usage = agent.get_context_usage()
+        if usage is not None:
+            yield usage
 
     def _get_agent(
         self, conversation_history: list[ModelMessage], extra_tools: list[Tool] | None = None

@@ -660,7 +660,7 @@ async def test_prepare_workspace_creates_worktree_if_invalid(service, sample_tas
 
     system_events = [e for e in events if isinstance(e, SystemEvent)]
     assert len(system_events) == 1
-    assert system_events[0].type == SystemEventType.WORKSPACE_CREATE
+    assert system_events[0].sub_type == SystemEventType.WORKSPACE_CREATE
     mock_create.assert_called_once_with(sample_slot, sample_task)
 
 
@@ -706,7 +706,7 @@ async def test_prepare_workspace_runs_setup_after_checkout(service, sample_task,
             events.append(event)
 
     system_events = [e for e in events if isinstance(e, SystemEvent)]
-    event_types = [e.type for e in system_events]
+    event_types = [e.sub_type for e in system_events]
     assert SystemEventType.WORKSPACE_BRANCH_CHECKOUT in event_types
     assert SystemEventType.WORKSPACE_SETUP in event_types
     mock_setup.assert_called_once_with(sample_slot, sample_task.codebase, sample_task)
@@ -734,7 +734,7 @@ async def test_prepare_workspace_runs_setup_after_worktree_creation(service, sam
             events.append(event)
 
     system_events = [e for e in events if isinstance(e, SystemEvent)]
-    event_types = [e.type for e in system_events]
+    event_types = [e.sub_type for e in system_events]
     assert SystemEventType.WORKSPACE_CREATE in event_types
     assert SystemEventType.WORKSPACE_SETUP in event_types
     mock_setup.assert_called_once_with(sample_slot, sample_task.codebase, sample_task)
@@ -1507,7 +1507,7 @@ async def test_prepare_workspace_skips_setup_when_not_configured(service, sample
             events.append(event)
 
     system_events = [e for e in events if isinstance(e, SystemEvent)]
-    setup_events = [e for e in system_events if e.type == SystemEventType.WORKSPACE_SETUP]
+    setup_events = [e for e in system_events if e.sub_type == SystemEventType.WORKSPACE_SETUP]
     assert len(setup_events) == 0
 
 

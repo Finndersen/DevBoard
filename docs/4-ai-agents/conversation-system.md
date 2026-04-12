@@ -24,6 +24,7 @@
 - **SystemEvent**: `event_type="system"`, `type` (SystemEventType enum), `data` (dict), `timestamp`. System-level notifications for entity changes and workflow events. Not displayed in chat UI - processed by registered event handlers for side effects (data refetching, UI updates). Types include:
   - `TASK_UPDATED`: Task state/field changes. Data includes `task_id` and `updated_fields` (e.g., `status`, `conversation_id`, `implementation_plan_id`)
   - `CONVERSATION_UPDATED`: Conversation changes. Data includes `conversation_id` and `updated_fields`
+  - `AGENT_RUN_STARTED` / `AGENT_RUN_COMPLETED`: Lifecycle events emitted by `AgentExecutionService.stream_events_for_message_or_approval` as the first and last events of every run (including interrupt and failure paths). `AGENT_RUN_STARTED` data: `{"conversation_id": <int>}`. `AGENT_RUN_COMPLETED` data: `{"status": "completed|interrupted|failed", "error": <str|null>, "usage": <ContextUsage|null>}`. Frontend uses `AGENT_RUN_STARTED` to mark the stream active and refetch the Active Conversations list before the first model token arrives. Sub-agent conversations also receive both lifecycle events.
 
 ## Event Generation
 
@@ -61,9 +62,9 @@
 - `run()`: Synchronous, returns complete event list
 - `stream_events()`: Async generator, yields events as generated
 
-**ConversationService Interface**:
-- `send_message_or_approval()`: Synchronous
-- `stream_events_for_message_or_approval()`: Streaming
+**AgentExecutionService Interface** (`backend/devboard/agents/execution/agent_execution.py`):
+- `send_message_or_approval()`: Non-streaming, returns final TextMessage
+- `stream_events_for_message_or_approval()`: Async generator — the sole emitter of `AgentRunStartedEvent` and `AgentRunCompletedEvent`. Always yields these lifecycle events as the first and last events, regardless of success, interrupt, or failure.
 
 **Benefits**: Immediate feedback, progress tracking, responsive UI, incremental events
 

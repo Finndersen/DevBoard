@@ -1,6 +1,6 @@
 """Tests for ProjectService — verifies system event emission on project lifecycle."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -49,6 +49,11 @@ def project_service(mock_conversation_service, mock_document_repo, mock_project_
 
 
 class TestProjectServiceCreateProject:
+    @pytest.fixture(autouse=True)
+    def mock_project_directory(self):
+        with patch("devboard.services.project_service.ensure_project_directory"):
+            yield
+
     def test_emits_project_created_event(self, project_service, mock_project_repo, mock_system_event_emitter):
         """create_project() emits a project.created system event."""
         project = project_service.create_project(name="My Project")

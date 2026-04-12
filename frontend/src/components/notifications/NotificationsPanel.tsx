@@ -3,6 +3,7 @@ import { BellIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { surfaces, borderColors, textColors, hoverColors } from '../../styles/designSystem'
 import { useAllApprovals, useApprovalActions } from '../../stores/approvalsStore'
 import { useNotificationStore } from '../../stores/notificationStore'
+import { reportMutationError } from '../../lib/errors'
 import DocumentDiffModal from '../documents/DocumentDiffModal'
 import { getDocumentTypeFromToolName, getReasoningFromToolArgs } from '../../utils/toolTypeUtils'
 import type { PendingApproval, ToolApprovalDecision } from '../../lib/api'
@@ -21,7 +22,8 @@ export default function NotificationsPanel() {
     markAsRead,
     markAllAsRead,
     dismissNotification,
-    getUnreadCount
+    getUnreadCount,
+    addNotification,
   } = useNotificationStore()
 
   const getTotalCount = () => {
@@ -95,9 +97,13 @@ export default function NotificationsPanel() {
       await processApprovalDecision(selectedApprovalKey, toolCallId, decision)
       handleModalClose()
     } catch (error) {
-      console.error('NotificationsPanel: Failed to process approval decision:', error)
-      // TODO: Show error notification to user
-      // For now, still close the modal even on error to prevent UI lockup
+      reportMutationError(addNotification, error, {
+        entityType: null,
+        entityId: null,
+        entityTitle: null,
+        fallbackMessage: 'Failed to process approval decision',
+      })
+      // Still close the modal to prevent UI lockup
       handleModalClose()
     }
   }

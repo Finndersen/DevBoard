@@ -92,8 +92,8 @@ Expandable card displaying tool invocation with arguments and results.
 **Architecture**: Provider wraps parent views (TaskDetail, ProjectDetail) at TabContentContainer level, ensuring single registry per conversation context. Child components register handlers via hooks that execute automatically when matching events stream through ConversationChat.
 
 **Hooks** (`hooks/useConversationEventHandlers.ts`):
-- `useToolResultHandler(matcher, handler)`: Register handlers for specific tool completions. Matcher receives tool name and event, handler receives ToolResult. Error results automatically filtered out.
-- `useSystemEventHandler(matcher, handler)`: Register handlers for system events. Matcher receives SystemEvent, handler processes data (e.g., refetch on task status change).
+- `useToolResultHandler(handler)`: Register a handler that receives `(toolName, result)` for every successful tool completion. Handler does its own name matching internally. Error results are filtered out before the handler runs.
+- `useSystemEventHandler(handler)`: Register a handler that receives each SystemEvent. Handler does its own matching internally (e.g., refetch on task status change).
 - `useEventHandlerRegistryForStream()`: Internal hook for ConversationChat to retrieve registry for stream processor integration.
 
 **Use Cases**:

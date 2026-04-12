@@ -108,8 +108,8 @@ class TestClaudeCodeAgentGetContextUsage:
         assert usage.cache_write_tokens == 0
 
 
-class TestClaudeCodeExecutionServiceLastUsage:
-    """Tests for ClaudeCodeAgentExecutionService.last_usage set after streaming."""
+class TestClaudeCodeExecutionServiceUsage:
+    """Tests for usage propagation in ClaudeCodeAgentExecutionService via AgentRunCompletedEvent."""
 
     @pytest.fixture
     def conversation(self, db_session: Session) -> Conversation:
@@ -140,8 +140,10 @@ class TestClaudeCodeExecutionServiceLastUsage:
         )
 
     @pytest.mark.asyncio
-    async def test_last_usage_set_after_successful_stream(self, execution_service, monkeypatch):
-        """last_usage is populated from agent.get_context_usage() after stream completes."""
+    async def test_usage_on_completed_event_after_successful_stream(self, execution_service, monkeypatch):
+        """AgentRunCompletedEvent carries usage from agent.get_context_usage() after stream completes."""
+        from devboard.agents.events import AgentRunCompletedEvent
+
         expected_usage = ContextUsage(
             input_tokens=100,
             output_tokens=50,
@@ -168,12 +170,14 @@ class TestClaudeCodeExecutionServiceLastUsage:
         async for event in execution_service.stream_events_for_message_or_approval("Test message"):
             events.append(event)
 
-        assert execution_service.last_usage == expected_usage
+        completed = next(e for e in events if isinstance(e, AgentRunCompletedEvent))
+        assert completed.usage == expected_usage
         mock_agent.get_context_usage.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_last_usage_none_when_agent_has_no_usage(self, execution_service, monkeypatch):
-        """last_usage remains None when agent.get_context_usage() returns None."""
+    async def test_usage_none_on_completed_event_when_agent_has_no_usage(self, execution_service, monkeypatch):
+        """AgentRunCompletedEvent.usage is None when agent.get_context_usage() returns None."""
+        from devboard.agents.events import AgentRunCompletedEvent
 
         async def mock_stream_events(_msg_or_approvals, **kwargs):
             yield TextMessage(
@@ -193,11 +197,13 @@ class TestClaudeCodeExecutionServiceLastUsage:
         async for event in execution_service.stream_events_for_message_or_approval("Test message"):
             events.append(event)
 
-        assert execution_service.last_usage is None
+        completed = next(e for e in events if isinstance(e, AgentRunCompletedEvent))
+        assert completed.usage is None
 
     @pytest.mark.asyncio
-    async def test_last_usage_not_set_on_file_not_found_error(self, execution_service, monkeypatch):
-        """last_usage is not set when streaming fails with FileNotFoundError."""
+    async def test_usage_not_set_on_file_not_found_error(self, execution_service, monkeypatch):
+        """AgentRunCompletedEvent.usage is None when streaming fails with FileNotFoundError."""
+        from devboard.agents.events import AgentRunCompletedEvent
 
         async def mock_stream_events_raise(_msg_or_approvals, **kwargs):
             raise FileNotFoundError("Session not found")
@@ -216,8 +222,9 @@ class TestClaudeCodeExecutionServiceLastUsage:
         async for event in execution_service.stream_events_for_message_or_approval("Test message"):
             events.append(event)
 
-        # get_context_usage should NOT be called since FileNotFoundError was raised
+        # get_context_usage should NOT be called since FileNotFoundError was raised before the yield
         mock_agent.get_context_usage.assert_not_called()
-        assert execution_service.last_usage is None
+        completed = next(e for e in events if isinstance(e, AgentRunCompletedEvent))
+        assert completed.usage is None
         # Should have SESSION_EXPIRED event
-        assert any(e.event_type == "system" and e.type == SystemEventType.SESSION_EXPIRED for e in events)
+        assert any(e.event_type == "system" and e.sub_type == SystemEventType.SESSION_EXPIRED for e in events)

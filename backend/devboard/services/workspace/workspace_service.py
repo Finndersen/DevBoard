@@ -192,7 +192,7 @@ class WorkspaceService:
         worktree_created = False
         if not self._check_worktree_valid(slot):
             yield SystemEvent(
-                type=SystemEventType.WORKSPACE_CREATE,
+                sub_type=SystemEventType.WORKSPACE_CREATE,
                 data={"task_id": task.id, "slot_id": slot.id},
                 timestamp=datetime.datetime.now(datetime.UTC),
             )
@@ -205,7 +205,7 @@ class WorkspaceService:
 
         if checkout_performed:
             yield SystemEvent(
-                type=SystemEventType.WORKSPACE_BRANCH_CHECKOUT,
+                sub_type=SystemEventType.WORKSPACE_BRANCH_CHECKOUT,
                 data={"task_id": task.id, "branch": task.branch_name},
                 timestamp=datetime.datetime.now(datetime.UTC),
             )
@@ -213,7 +213,7 @@ class WorkspaceService:
         needs_setup = (worktree_created or checkout_performed) and task.codebase.setup_command
         if needs_setup:
             yield SystemEvent(
-                type=SystemEventType.WORKSPACE_SETUP,
+                sub_type=SystemEventType.WORKSPACE_SETUP,
                 data={
                     "task_id": task.id,
                     "codebase_id": task.codebase.id,

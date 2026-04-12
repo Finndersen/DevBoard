@@ -15,8 +15,15 @@ class MergeStrategy(ABC):
     """Abstract base class for merge strategies."""
 
     @abstractmethod
-    async def execute(self, task: Task, repo_git: GitRepoIntegration) -> MergeResult:
-        """Execute the merge strategy and return the result."""
+    async def execute(
+        self, task: Task, repo_git: GitRepoIntegration, feature_worktree_path: str | None = None
+    ) -> MergeResult:
+        """Execute the merge strategy and return the result.
+
+        feature_worktree_path: path to the feature worktree that was detached by the pre-merge
+        release_branch_from_worktree call. When provided, the strategy operates in that worktree
+        rather than the main repo, avoiding HEAD mutations in the main repo.
+        """
         ...
 
 
@@ -41,7 +48,9 @@ class SquashMerge(MergeStrategy):
     that if the squash commit fails (e.g. hook timeout), the base branch remains clean.
     """
 
-    async def execute(self, task: Task, repo_git: GitRepoIntegration) -> MergeResult:
+    async def execute(
+        self, task: Task, repo_git: GitRepoIntegration, feature_worktree_path: str | None = None
+    ) -> MergeResult:
         merge_method = MergeMethod.SQUASH
         is_remote_base = task.base_branch.startswith("origin/")
 
@@ -49,9 +58,9 @@ class SquashMerge(MergeStrategy):
 
         try:
             if is_remote_base:
-                merge_commit = await self._squash_to_remote_base(task, repo_git)
+                merge_commit = await self._squash_to_remote_base(task, repo_git, feature_worktree_path)
             else:
-                merge_commit = await self._squash_to_local_base(task, repo_git)
+                merge_commit = await self._squash_to_local_base(task, repo_git, feature_worktree_path)
 
             await repo_git.delete_branch(task.branch_name, force=True)
             logfire.info(f"Deleted local branch {task.branch_name}")
@@ -89,12 +98,20 @@ class SquashMerge(MergeStrategy):
             merge_commit=merge_commit,
         )
 
-    async def _squash_feature_branch_commits(self, task: Task, repo_git: GitRepoIntegration) -> None:
+    async def _squash_feature_branch_commits(
+        self,
+        task: Task,
+        repo_git: GitRepoIntegration,
+        feature_worktree_path: str | None = None,
+    ) -> None:
         """Squash all commits on the feature branch into one in-place (no-op if single commit).
 
         Uses soft reset + commit with --no-verify on the feature branch itself.
         --no-verify is appropriate here: we're squashing already-verified commits, not
         introducing new code, so re-running hooks would be redundant.
+
+        feature_worktree_path: path to a previously-released worktree where the branch can be
+        re-checked out. Used to avoid mutating main repo HEAD.
         """
         merge_base = await repo_git.get_merge_base(task.base_branch, task.branch_name)
         commits = await repo_git.get_commits_in_range(merge_base, task.branch_name)
@@ -104,12 +121,15 @@ class SquashMerge(MergeStrategy):
 
         message = self._build_squash_message(task, commits)
 
-        feature_path = await repo_git.get_checked_out_location(task.branch_name)
-        if feature_path:
-            feature_git = GitRepoIntegration(feature_path)
+        if feature_worktree_path:
+            # Operate in the feature worktree — avoids touching main repo HEAD.
+            # checkout_branch is idempotent if the branch is already there.
+            feature_git = GitRepoIntegration(feature_worktree_path)
+            await feature_git.checkout_branch(task.branch_name)
             await feature_git.soft_reset(merge_base)
             await feature_git.commit(message, no_verify=True)
         else:
+            # No feature worktree — fall back to checking out in the main repo.
             current_branch = await repo_git.get_current_branch()
             await repo_git.checkout_branch(task.branch_name)
             try:
@@ -129,15 +149,28 @@ class SquashMerge(MergeStrategy):
             message_lines.append(f"* {commit.subject}")
         return "\n".join(message_lines)
 
-    async def _squash_to_local_base(self, task: Task, repo_git: GitRepoIntegration) -> str:
-        await self._squash_feature_branch_commits(task, repo_git)
+    async def _squash_to_local_base(
+        self, task: Task, repo_git: GitRepoIntegration, feature_worktree_path: str | None = None
+    ) -> str:
+        await self._squash_feature_branch_commits(task, repo_git, feature_worktree_path)
 
-        feature_path = await repo_git.get_checked_out_location(task.branch_name)
-        if feature_path:
-            feature_git = GitRepoIntegration(feature_path)
+        if feature_worktree_path:
+            # Operate in the feature worktree — avoids touching main repo HEAD.
+            # checkout_branch is idempotent if already there (e.g. after multi-commit squash).
+            feature_git = GitRepoIntegration(feature_worktree_path)
+            await feature_git.checkout_branch(task.branch_name)
             await feature_git.rebase_onto(task.base_branch)
         else:
-            await repo_git.rebase_branch(task.branch_name, task.base_branch)
+            # No worktree available — fall back to operating in the main repo.
+            # Capture current branch BEFORE rebase, which leaves HEAD on task.branch_name.
+            current_branch = await repo_git.get_current_branch()
+            try:
+                await repo_git.rebase_branch(task.branch_name, task.base_branch)
+            finally:
+                # rebase_branch's 3-arg form leaves HEAD on task.branch_name — restore if we
+                # started on a different branch (if already on task branch, restore is a no-op).
+                if await repo_git.get_current_branch() == task.branch_name and current_branch != task.branch_name:
+                    await repo_git.checkout_branch(current_branch)
 
         checkout_path = await repo_git.get_checked_out_location(task.base_branch)
         if checkout_path:
@@ -151,19 +184,26 @@ class SquashMerge(MergeStrategy):
                 if current_branch != task.branch_name:
                     await repo_git.checkout_branch(current_branch)
 
-    async def _squash_to_remote_base(self, task: Task, repo_git: GitRepoIntegration) -> str:
+    async def _squash_to_remote_base(
+        self, task: Task, repo_git: GitRepoIntegration, feature_worktree_path: str | None = None
+    ) -> str:
         local_base = task.base_branch.replace("origin/", "")
 
-        await self._squash_feature_branch_commits(task, repo_git)
+        await self._squash_feature_branch_commits(task, repo_git, feature_worktree_path)
         await repo_git.run_git_command(["fetch", "origin", local_base])
 
-        feature_path = await repo_git.get_checked_out_location(task.branch_name)
-        if feature_path:
-            # Feature is in a worktree — rebase from within it to avoid "already checked out" error
-            feature_git = GitRepoIntegration(feature_path)
+        if feature_worktree_path:
+            feature_git = GitRepoIntegration(feature_worktree_path)
+            await feature_git.checkout_branch(task.branch_name)
             await feature_git.rebase_onto(task.base_branch)
         else:
-            await repo_git.rebase_branch(task.branch_name, task.base_branch)
+            # No worktree — fall back to main repo. Restore HEAD afterward.
+            current_branch = await repo_git.get_current_branch()
+            try:
+                await repo_git.rebase_branch(task.branch_name, task.base_branch)
+            finally:
+                if await repo_git.get_current_branch() == task.branch_name and current_branch != task.branch_name:
+                    await repo_git.checkout_branch(current_branch)
 
         await repo_git.run_git_command(["push", "origin", f"{task.branch_name}:{local_base}"], timeout=60.0)
         return await repo_git.run_git_command(["rev-parse", task.branch_name])
@@ -172,14 +212,32 @@ class SquashMerge(MergeStrategy):
 class RebaseMerge(MergeStrategy):
     """Rebases feature branch onto base, then fast-forward merges."""
 
-    async def execute(self, task: Task, repo_git: GitRepoIntegration) -> MergeResult:
+    async def execute(
+        self, task: Task, repo_git: GitRepoIntegration, feature_worktree_path: str | None = None
+    ) -> MergeResult:
         merge_method = MergeMethod.REBASE
         is_remote_base = task.base_branch.startswith("origin/")
 
         stash_ref = await repo_git.stash(f"DevBoard: pre-merge stash for task {task.id}")
 
         try:
-            await repo_git.rebase_branch(task.branch_name, task.base_branch)
+            if feature_worktree_path:
+                feature_git = GitRepoIntegration(feature_worktree_path)
+                await feature_git.checkout_branch(task.branch_name)
+                await feature_git.rebase_onto(task.base_branch)
+            else:
+                # No worktree — fall back to main repo. Capture branch BEFORE rebase and restore after.
+                current_branch_before_rebase = await repo_git.get_current_branch()
+                try:
+                    await repo_git.rebase_branch(task.branch_name, task.base_branch)
+                finally:
+                    # rebase_branch's 3-arg form leaves HEAD on task.branch_name — restore if we
+                    # started on a different branch (if already on task branch, restore is a no-op).
+                    if (
+                        await repo_git.get_current_branch() == task.branch_name
+                        and current_branch_before_rebase != task.branch_name
+                    ):
+                        await repo_git.checkout_branch(current_branch_before_rebase)
             logfire.info(f"Rebased {task.branch_name} onto {task.base_branch}")
 
             if is_remote_base:
@@ -242,7 +300,9 @@ class RebaseMerge(MergeStrategy):
 class MergeCommitMerge(MergeStrategy):
     """Creates a merge commit preserving full history."""
 
-    async def execute(self, task: Task, repo_git: GitRepoIntegration) -> MergeResult:
+    async def execute(
+        self, task: Task, repo_git: GitRepoIntegration, feature_worktree_path: str | None = None
+    ) -> MergeResult:
         merge_method = MergeMethod.MERGE_COMMIT
         is_remote_base = task.base_branch.startswith("origin/")
 

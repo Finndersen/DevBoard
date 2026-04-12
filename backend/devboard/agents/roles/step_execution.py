@@ -35,6 +35,7 @@ STEP_EXECUTION_BASE_PROMPT = """You are a focused implementation sub-agent execu
 {type_preamble}
 
 GUIDELINES:
+- Activate relevant skills: before starting execution, review available skills in your context and activate any relevant to this work (software-development practices, coding style and conventions, testing strategy, etc.) using the `Skill` tool.
 - Execute the step instructions completely and accurately
 - Use the implementation plan in your context to understand the full scope of work and what has been done in previous steps
 - After completing the step, provide a concise outcome summary describing what was done, any issues encountered, and important notes
@@ -77,6 +78,7 @@ class StepExecutionAgentRole(AgentRole):
             "WebFetch",
             "WebSearch",
             "Agent",
+            "Skill",
         ]
 
     @property

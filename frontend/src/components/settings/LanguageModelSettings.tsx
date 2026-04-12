@@ -115,7 +115,7 @@ export function LanguageModelSettings() {
         setError('A model with this provider and name already exists.')
       } else {
         console.error('Failed to save language model:', err)
-        throw err
+        setError(err instanceof Error ? err.message : 'Failed to save language model')
       }
     } finally {
       setIsSaving(false)

@@ -162,20 +162,20 @@ export function useTaskEventHandlers({
   useToolResultHandler(rebaseHandler)
 
   const systemEventHandler = useCallback(async (event: SystemEvent) => {
-    const isRelevantEventType = event.type === 'task_updated' || event.type === 'branch_rebased' || event.type === 'workspace_allocate'
+    const isRelevantEventType = event.sub_type === 'task_updated' || event.sub_type === 'branch_rebased' || event.sub_type === 'workspace_allocate'
     const isForThisTask = event.data?.task_id === task?.id
 
     if (isRelevantEventType && isForThisTask) {
       try {
-        if (event.type === 'task_updated') {
+        if (event.sub_type === 'task_updated') {
           await refetch()
         }
 
-        if (event.type === 'branch_rebased') {
+        if (event.sub_type === 'branch_rebased') {
           await refreshGitStatus()
         }
 
-        if (event.type === 'workspace_allocate') {
+        if (event.sub_type === 'workspace_allocate') {
           await refreshGitStatus()
         }
       } catch (error) {

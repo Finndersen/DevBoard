@@ -3,6 +3,8 @@ import { ChevronDownIcon } from '@heroicons/react/24/outline'
 import type { ConversationResponse, ModelInfo, UpdateConversationModelRequest, AgentConfigurationResponse } from '../../lib/api'
 import { apiClient } from '../../lib/api'
 import { surfaces, borderColors, statusColors } from '../../styles/designSystem'
+import { useNotificationStore } from '../../stores/notificationStore'
+import { reportMutationError } from '../../lib/errors'
 
 interface ConversationModelSelectorProps {
   conversationId: number
@@ -20,6 +22,7 @@ export default function ConversationModelSelector({
   const [updating, setUpdating] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const addNotification = useNotificationStore(s => s.addNotification)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -83,8 +86,13 @@ export default function ConversationModelSelector({
         onModelChange(conversation.engine, newModelId, newModelName)
       }
     } catch (err) {
-      console.error('Failed to update conversation model:', err)
       setError(err instanceof Error ? err.message : 'Failed to update model')
+      reportMutationError(addNotification, err, {
+        entityType: null,
+        entityId: null,
+        entityTitle: null,
+        fallbackMessage: 'Failed to update conversation model',
+      })
     } finally {
       setUpdating(false)
     }

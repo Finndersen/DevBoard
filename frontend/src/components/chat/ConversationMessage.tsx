@@ -314,7 +314,7 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
 
   // System events - render as inline badges (only for specific event types)
   if (message.event_type === 'system') {
-    if (message.type === 'stream_error') {
+    if (message.sub_type === 'stream_error') {
       const errorMessage = (message.data?.message as string) ?? 'An unknown error occurred'
       const errorCode = message.data?.error_code as string | undefined
       return (
@@ -327,15 +327,15 @@ export default function ConversationMessageComponent({ message, toolResult, isLa
       )
     }
 
-    const label = getSystemEventLabel(message.type, message.data)
+    const label = getSystemEventLabel(message.sub_type, message.data)
 
     // Only render badge if we have a label for this event type
     if (!label) {
       return null
     }
 
-    const isError = message.type === 'stream_error'
-    const isWarning = message.type === 'session_expired'
+    const isError = message.sub_type === 'stream_error'
+    const isWarning = message.sub_type === 'session_expired'
     const colorClasses = isError
       ? 'bg-red-500/10 border-red-500/20 text-red-400'
       : isWarning

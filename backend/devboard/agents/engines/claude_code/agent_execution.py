@@ -7,7 +7,7 @@ import logfire
 from pydantic_ai import Tool
 
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent
-from devboard.agents.events import ConversationEvent, SystemEvent, SystemEventType, TextMessage
+from devboard.agents.events import ContextUsage, ConversationEvent, SystemEvent, SystemEventType, TextMessage
 from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.api.schemas.agent_conversation import ToolApprovals
@@ -69,7 +69,7 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
         self,
         message_or_approvals: str | ToolApprovals,
         extra_tools: list[Tool],
-    ) -> AsyncIterator[ConversationEvent]:
+    ) -> AsyncIterator[ConversationEvent | ContextUsage]:
         """Engine-specific implementation of event streaming.
 
         Args:
@@ -100,7 +100,7 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
                     self.conversation_repo.update_external_session_id(self.conversation, agent.session_id)
                     self.conversation_repo.commit()
                     yield SystemEvent(
-                        type=SystemEventType.CONVERSATION_UPDATED,
+                        sub_type=SystemEventType.CONVERSATION_UPDATED,
                         data={
                             "conversation_id": self.conversation.id,
                             "updated_fields": {"external_session_id": agent.session_id},
@@ -110,8 +110,10 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
 
                 yield event
 
-            # Capture usage from the completed run
-            self.last_usage = agent.get_context_usage()
+            # Yield usage as out-of-band return value; base class intercepts it.
+            usage = agent.get_context_usage()
+            if usage is not None:
+                yield usage
 
             if self._interrupt_event and self._interrupt_event.is_set():
                 logfire.info(f"Claude Code agent execution interrupted for conversation {self.conversation.id}")
@@ -121,7 +123,7 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
                 f"Session file not found during streaming for conversation {self.conversation.id}, session ID preserved"
             )
             yield SystemEvent(
-                type=SystemEventType.SESSION_EXPIRED,
+                sub_type=SystemEventType.SESSION_EXPIRED,
                 data={"message": "Claude Code session file not found. Clear this conversation to start a new one."},
                 timestamp=datetime.now(UTC),
             )

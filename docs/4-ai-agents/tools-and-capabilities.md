@@ -40,11 +40,13 @@ Enables agents to generate rich visualizations like dashboards, charts, styled t
 
 ### Task Query Tools
 
-**list_tasks**: List tasks belonging to the current project with optional filtering. No approval (read-only). Params: `status_filter` (list of status values), `created_after` (ISO date), `created_before` (ISO date), `codebase_name`. Used by: ProjectQARole
+**list_tasks**: List tasks belonging to the current project with optional filtering. No approval (read-only). Params: `status_filter` (list of status values), `created_after` (ISO date), `created_before` (ISO date), `codebase_name`. Returns TOON-encoded records with fields: `id`, `title`, `status`, `created_at`, `codebase`, `branch`, `agent_running` (bool — whether the task's planning agent is currently executing), `custom_fields`. Used by: ProjectQARole
 
-**view_task_details**: View detailed information about a specific task including metadata and optional document contents. No approval (read-only). Params: `task_id`, `include_documents` (list: specification, implementation_plan, change_summary). Used by: ProjectQARole
+**view_task_details**: View detailed information about a specific task including metadata and optional document contents. No approval (read-only). Params: `task_id`, `include_documents` (list: specification, implementation_plan, change_summary). Response metadata includes `Agent running: yes/no` line indicating whether the task's agent is currently executing. Used by: ProjectQARole
 
-**create_task**: Create a new task within the current project. No approval. Params: `title`, `codebase_name`, `specification_content`, `base_branch`, `branch_name`, `custom_fields`. Used by: ProjectQARole, TaskPlanningRole, TaskImplementationRole, TaskPRReviewRole
+**create_task**: Create a new task within the current project. No approval. Params: `title`, `codebase_name`, `specification_content`, `base_branch`, `branch_name`, `custom_fields`, `initial_prompt` (optional — launches autonomous agent execution immediately). Response JSON includes `agent_running: true` when `initial_prompt` was provided and execution started successfully. Used by: ProjectQARole, TaskPlanningRole, TaskImplementationRole, TaskPRReviewRole
+
+**edit_task**: Edit metadata fields (title, custom fields) and/or specification content of an existing task. Response JSON includes `agent_running` (bool) reflecting whether the task's agent is currently executing at the time of the edit. Used by: ProjectQARole
 
 ### GitHub PR Tools
 

@@ -85,7 +85,7 @@ POST   /api/conversations/{id}/reset            Reset conversation (delete + rec
 
 **409 Conflict**: If a background execution is already active for a conversation, `POST /messages` and `POST /approve-tools` return HTTP 409.
 
-**Event-Based Architecture**: WebSocket delivers `ConversationEvent` objects. Types: `ConversationMessage`, `ToolCall`, `ToolResult`, `ToolCallRequest`, `SystemEvent`. Plus execution lifecycle events (`execution_started`, `execution_completed`).
+**Event-Based Architecture**: WebSocket delivers `ConversationEvent` objects. Types: `ConversationMessage`, `ToolCall`, `ToolResult`, `ToolCallRequest`, `SystemEvent`. Plus execution lifecycle events (`agent_run_started`, `agent_run_completed`) emitted by `AgentExecutionService` as the first and last events of every run.
 
 **Tool Approval**: When tools require approval, agent pauses and returns `ToolCallRequest` events. Frontend approves/denies via `/approve-tools`.
 

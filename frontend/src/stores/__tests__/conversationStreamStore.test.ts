@@ -154,6 +154,54 @@ describe('conversationStreamStore - addEvent deduplication', () => {
     expect(messages).toEqual(events)
   })
 
+  describe('agent_run_started system event', () => {
+    it('marks stream as active and fires active lifecycle callback for unknown conversation', () => {
+      const conversationId = 100
+      const store = useConversationStreamStore.getState()
+
+      let lifecycleEvent: string | null = null
+      let lifecycleConvId: number | null = null
+      const unsubscribe = store.registerStreamLifecycleCallback((cid, ev) => {
+        lifecycleConvId = cid
+        lifecycleEvent = ev
+      })
+
+      const agentRunStartedEvent: ConversationEvent = {
+        event_type: 'agent_run_started',
+        conversation_id: conversationId,
+        timestamp: '2024-01-01T00:00:00Z',
+      } as unknown as ConversationEvent
+
+      store.handleWebSocketEvent(conversationId, agentRunStartedEvent)
+
+      const streamState = useConversationStreamStore.getState().activeStreams.get(conversationId)
+      expect(streamState).toBeDefined()
+      expect(streamState?.isStreaming).toBe(true)
+      expect(lifecycleEvent).toBe('active')
+      expect(lifecycleConvId).toBe(conversationId)
+
+      // Should not add any message to conversationMessages
+      expect(getMessages(conversationId)).toHaveLength(0)
+
+      unsubscribe()
+    })
+
+    it('does not add any content event for agent_run_started', () => {
+      const conversationId = 101
+      const store = useConversationStreamStore.getState()
+
+      const agentRunStartedEvent: ConversationEvent = {
+        event_type: 'agent_run_started',
+        conversation_id: conversationId,
+        timestamp: '2024-01-01T00:00:00Z',
+      } as unknown as ConversationEvent
+
+      store.handleWebSocketEvent(conversationId, agentRunStartedEvent)
+
+      expect(getMessages(conversationId)).toHaveLength(0)
+    })
+  })
+
   it('should handle multiple ToolCalls with different IDs', () => {
     const conversationId = 5
 
@@ -301,11 +349,11 @@ describe('conversationStreamStore - handleWebSocketEvent', () => {
     expect(getMessages(conversationId)).toEqual([event])
   })
 
-  it('handles execution_complete with status "failed" → setError', () => {
+  it('handles agent_run_completed with status "failed" → setError', () => {
     const store = useConversationStreamStore.getState()
 
     store.handleWebSocketEvent(conversationId, {
-      event_type: 'execution_complete',
+      event_type: 'agent_run_completed',
       status: 'failed',
       error: 'Something went wrong',
     } as unknown as ConversationEvent)
@@ -316,11 +364,11 @@ describe('conversationStreamStore - handleWebSocketEvent', () => {
     expect(streamState?.error?.message).toBe('Something went wrong')
   })
 
-  it('handles execution_complete with status "completed" → completeStream', () => {
+  it('handles agent_run_completed with status "completed" → completeStream', () => {
     const store = useConversationStreamStore.getState()
 
     store.handleWebSocketEvent(conversationId, {
-      event_type: 'execution_complete',
+      event_type: 'agent_run_completed',
       status: 'completed',
     } as unknown as ConversationEvent)
 
@@ -334,7 +382,7 @@ describe('conversationStreamStore - handleWebSocketEvent', () => {
 
     store.handleWebSocketEvent(conversationId, {
       event_type: 'system',
-      type: 'stream_error',
+      sub_type: 'stream_error',
       data: { message: 'Stream broke' },
       timestamp: '2024-01-01T00:00:00Z',
     } as unknown as ConversationEvent)

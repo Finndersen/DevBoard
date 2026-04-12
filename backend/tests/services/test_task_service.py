@@ -627,3 +627,51 @@ class TestEventEmission:
 
         mock_system_event_emitter.emit_task_deleted.assert_called_once_with(task)
         assert call_order.index("emit") < call_order.index("delete")
+
+
+class TestIsTaskAgentRunning:
+    """Tests for TaskService.is_task_agent_running()."""
+
+    def test_returns_false_when_no_active_conversation(self, task_service):
+        """Returns False when no active conversation exists for the task."""
+        from devboard.db.repositories.conversation import NoActiveConversationError
+
+        task_service.conversation_service.conversation_repo.get_active_conversation_for_entity.side_effect = (
+            NoActiveConversationError("no conversation")
+        )
+
+        result = task_service.is_task_agent_running(task_id=42)
+
+        assert result is False
+
+    def test_returns_false_when_conversation_exists_but_not_running(self, task_service):
+        """Returns False when active conversation exists but no running execution."""
+        mock_conv = MagicMock()
+        mock_conv.id = 100
+        task_service.conversation_service.conversation_repo.get_active_conversation_for_entity.return_value = mock_conv
+
+        with patch("devboard.services.task_service.get_execution_manager") as mock_get_mgr:
+            mock_mgr = MagicMock()
+            mock_mgr.has_active_execution.return_value = False
+            mock_get_mgr.return_value = mock_mgr
+
+            result = task_service.is_task_agent_running(task_id=42)
+
+        assert result is False
+        mock_mgr.has_active_execution.assert_called_once_with(100)
+
+    def test_returns_true_when_conversation_has_running_execution(self, task_service):
+        """Returns True when active conversation has a running execution."""
+        mock_conv = MagicMock()
+        mock_conv.id = 100
+        task_service.conversation_service.conversation_repo.get_active_conversation_for_entity.return_value = mock_conv
+
+        with patch("devboard.services.task_service.get_execution_manager") as mock_get_mgr:
+            mock_mgr = MagicMock()
+            mock_mgr.has_active_execution.return_value = True
+            mock_get_mgr.return_value = mock_mgr
+
+            result = task_service.is_task_agent_running(task_id=42)
+
+        assert result is True
+        mock_mgr.has_active_execution.assert_called_once_with(100)
