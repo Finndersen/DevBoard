@@ -615,7 +615,7 @@ def create_create_task_tool(
                 conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task.id)
                 # Commit before starting background execution so the new DB session
                 # opened by the execution manager can see the task and conversation.
-                conversation_repo.db.commit()
+                conversation_repo.commit()
                 get_execution_manager().start_agent_execution(conversation.id, initial_prompt)
                 active_conversation_id = conversation.id
             except Exception as e:

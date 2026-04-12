@@ -28,6 +28,7 @@ from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.database import SessionLocal, get_db
 from devboard.db.models import Codebase, Conversation, Project, Task, TaskStatus
 from devboard.db.repositories import ConversationRepository, LogEntryRepository
+from devboard.db.session_lock import commit_with_lock
 from devboard.services.project_directory import ensure_project_directory
 from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_git.service import TaskBranchNotFoundException
@@ -234,7 +235,7 @@ async def _drain_events(
 ) -> None:
     async for event in stream:
         t0 = time.monotonic()
-        await asyncio.to_thread(db.commit)
+        await asyncio.to_thread(commit_with_lock, db)
         commit_ms = (time.monotonic() - t0) * 1000
         if commit_ms > 200:
             logfire.warn(
@@ -415,7 +416,7 @@ async def _run_agent_for_conversation(
         # Commit before the stream starts so last_activity_at is persisted before
         # AgentRunStartedEvent (the first event from the stream) reaches the frontend.
         services.conversation_repo.update_last_activity(conversation)
-        await asyncio.to_thread(db.commit)
+        await asyncio.to_thread(commit_with_lock, db)
 
         # ── Agent execution ─────────────────────────────────────────────────
         try:
@@ -469,5 +470,5 @@ async def _run_agent_for_conversation(
             )
         except Exception:
             logfire.exception(f"Failed to emit agent_run.completed for conversation {conversation_id}")
-        await asyncio.to_thread(db.commit)
+        await asyncio.to_thread(commit_with_lock, db)
         await asyncio.to_thread(db.close)

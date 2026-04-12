@@ -5,6 +5,8 @@ from typing import TypeVar
 import logfire
 from sqlalchemy.orm import Session
 
+from devboard.db.session_lock import commit_with_lock
+
 T = TypeVar("T")
 
 
@@ -25,4 +27,4 @@ class BaseRepository[T]:
         Commits all changes in the DB session, not just for this repository.
         """
         logfire.info("Committing DB transaction")
-        self.db.commit()
+        commit_with_lock(self.db)

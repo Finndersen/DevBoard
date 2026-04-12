@@ -67,6 +67,7 @@ class TestRunAgentForConversation:
             patch("devboard.agents.execution.manager.ensure_project_directory", return_value="/projects/test"),
         ):
             mock_db = Mock()
+            mock_db.info = {}
             mock_session_local.return_value = mock_db
 
             mock_resolver = AsyncMock()
@@ -138,6 +139,7 @@ class TestRunAgentForConversation:
             mock_resolver.run = AsyncMock(return_value=mock_services)
             mock_resolver_cls.return_value = mock_resolver
 
+            mock_db.info = {}
             mock_services.conversation_repo.get_by_id.return_value = mock_conversation
             mock_create_exec.return_value = _make_mock_exec_service(mock_stream)
 
@@ -187,6 +189,7 @@ class TestRunAgentForConversation:
             mock_resolver.run = AsyncMock(return_value=mock_services)
             mock_resolver_cls.return_value = mock_resolver
 
+            mock_db.info = {}
             mock_services.conversation_repo.get_by_id.return_value = mock_conversation
             mock_create_exec.return_value = _make_mock_exec_service(empty_stream)
 
@@ -232,6 +235,7 @@ class TestRunAgentForConversation:
             mock_resolver.run = AsyncMock(return_value=mock_services)
             mock_resolver_cls.return_value = mock_resolver
 
+            mock_db.info = {}
             mock_services.conversation_repo.get_by_id.return_value = mock_conversation
             mock_create_exec.return_value = _make_mock_exec_service(failing_stream)
 
@@ -336,8 +340,10 @@ class TestTaskConversationWriteDirs:
         mock_resolver.__aexit__ = AsyncMock(return_value=None)
         mock_resolver.run = AsyncMock(return_value=mock_services)
 
+        mock_db = Mock()
+        mock_db.info = {}
         return [
-            patch("devboard.agents.execution.manager.SessionLocal", return_value=Mock()),
+            patch("devboard.agents.execution.manager.SessionLocal", return_value=mock_db),
             patch("devboard.agents.execution.manager.DependencyResolver", return_value=mock_resolver),
             patch(
                 "devboard.agents.execution.manager.create_agent_role_for_conversation",
