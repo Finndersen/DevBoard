@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
@@ -16,7 +17,7 @@ from devboard.db.models import ParentEntity, Task
 from devboard.db.models.codebase import Codebase
 from devboard.db.models.conversation import Conversation
 from devboard.db.repositories import ConversationRepository
-from devboard.integrations.types import StructuredDiff
+from devboard.integrations.types import FileDiff, StructuredDiff
 from devboard.services.task_git.service import TaskGitService
 
 if TYPE_CHECKING:
@@ -328,6 +329,42 @@ def create_code_review_tool(
     return Tool(function=review_code_changes, name="review_code_changes")
 
 
+# Files whose diff content is replaced with a stub — not useful to review line-by-line.
+_EXCLUDED_DIFF_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"(^|/)uv\.lock$"),
+    re.compile(r"(^|/)poetry\.lock$"),
+    re.compile(r"(^|/)Pipfile\.lock$"),
+    re.compile(r"(^|/)package-lock\.json$"),
+    re.compile(r"(^|/)yarn\.lock$"),
+    re.compile(r"(^|/)pnpm-lock\.yaml$"),
+    re.compile(r"(^|/)go\.sum$"),
+    re.compile(r"(^|/)Cargo\.lock$"),
+    re.compile(r"(^|/)Gemfile\.lock$"),
+]
+
+# Maximum characters to show per file before truncating (~10k chars ≈ 2.5k tokens).
+_MAX_FILE_DIFF_CHARS = 10_000
+
+# Maximum total diff characters across all files. When exceeded, newly created files
+# are dropped from the diff (the agent can read them directly if needed).
+# ~100k chars ≈ 25k tokens, leaving ample room for the rest of the prompt.
+_MAX_TOTAL_DIFF_CHARS = 100_000
+
+
+def _is_excluded_file(file_path: str) -> bool:
+    return any(p.search(file_path) for p in _EXCLUDED_DIFF_PATTERNS)
+
+
+def _format_file_diff(file_path: str, diff_content: str, additions: int, deletions: int) -> str:
+    """Format one file's diff with per-file truncation applied."""
+    header = f"--- {file_path} ---"
+    if len(diff_content) <= _MAX_FILE_DIFF_CHARS:
+        return f"{header}\n{diff_content}"
+    truncated = diff_content[:_MAX_FILE_DIFF_CHARS]
+    omitted_chars = len(diff_content) - _MAX_FILE_DIFF_CHARS
+    return f"{header}\n{truncated}\n[... {omitted_chars:,} characters truncated (+{additions}/-{deletions} total)]"
+
+
 def build_code_review_prompt(diff: StructuredDiff, additional_context: str | None = None) -> str:
     """Build the prompt for a code review sub-agent.
 
@@ -338,7 +375,50 @@ def build_code_review_prompt(diff: StructuredDiff, additional_context: str | Non
         diff: The structured diff to review
         additional_context: Optional additional context or instructions for the reviewer
     """
-    full_diff_content = "\n".join(f"--- {file.file_path} ---\n{file.diff_content}" for file in diff.files)
+    # Separate files into three buckets:
+    # 1. Always-excluded (lock/generated files) → stub only
+    # 2. New files → include diff if budget allows, otherwise stub with read hint
+    # 3. Modified files → always include diff (with per-file truncation)
+    excluded_stubs: list[str] = []
+    new_file_sections: list[tuple[FileDiff, str]] = []  # (file, formatted_diff)
+    modified_sections: list[str] = []
+
+    for file in diff.files:
+        header = f"--- {file.file_path} ---"
+        if _is_excluded_file(file.file_path):
+            excluded_stubs.append(
+                f"{header}\n[Diff excluded: lock/generated file — +{file.additions}/-{file.deletions} lines]"
+            )
+        elif file.is_deleted:
+            excluded_stubs.append(f"{header}\n[File deleted]")
+        elif file.is_new_file:
+            formatted = _format_file_diff(file.file_path, file.diff_content, file.additions, file.deletions)
+            new_file_sections.append((file, formatted))
+        else:
+            modified_sections.append(
+                _format_file_diff(file.file_path, file.diff_content, file.additions, file.deletions)
+            )
+
+    # Check whether new files fit within the global budget.
+    modified_char_count = sum(len(s) for s in modified_sections)
+    new_file_char_count = sum(len(fmt) for _, fmt in new_file_sections)
+    budget_remaining = _MAX_TOTAL_DIFF_CHARS - modified_char_count
+
+    if new_file_char_count <= budget_remaining:
+        # Everything fits — include new files in full.
+        all_sections = modified_sections + [fmt for _, fmt in new_file_sections] + excluded_stubs
+        new_file_note = ""
+    else:
+        # Budget exceeded — drop new file diffs and tell the agent where to find them.
+        dropped_paths = [f.file_path for f, _ in new_file_sections]
+        dropped_list = "\n".join(f"  - {p}" for p in dropped_paths)
+        new_file_note = (
+            "\n\n> **Note:** The following newly created files were omitted from the diff to keep the prompt size "
+            "manageable. Read them directly if needed:\n" + dropped_list
+        )
+        all_sections = modified_sections + excluded_stubs
+
+    full_diff_content = "\n\n".join(all_sections)
 
     prompt = f"""Please review the following task changes. Calibrate the depth and thoroughness of your review to the complexity of the changes — small, trivial changes warrant a quick lightweight review, while large or complex changes warrant a thorough deep review.
 
@@ -352,7 +432,7 @@ def build_code_review_prompt(diff: StructuredDiff, additional_context: str | Non
 
 ```diff
 {full_diff_content}
-```
+```{new_file_note}
 """
 
     if additional_context is not None:

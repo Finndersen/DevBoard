@@ -19,7 +19,10 @@ from devboard.agents.execution.manager import ConversationExecutionManager
 from devboard.agents.execution.types import ExecutionStatus, SubAgentResult
 from devboard.agents.roles import AgentRoleType
 from devboard.agents.tools.sub_agent_tools import (
+    _MAX_FILE_DIFF_CHARS,
+    _MAX_TOTAL_DIFF_CHARS,
     CodebaseInvestigationContext,
+    build_code_review_prompt,
     create_multi_codebase_investigation_tool,
     create_sub_agent_conversation,
     create_task_codebase_investigation_tool,
@@ -30,6 +33,7 @@ from devboard.db.models.enums import EntityType
 from devboard.db.models.project import Project
 from devboard.db.models.task import Task
 from devboard.db.repositories import ConversationRepository
+from devboard.integrations.types import FileDiff, StructuredDiff
 
 
 @pytest.fixture
@@ -803,3 +807,113 @@ class TestRunSubAgentExecution:
             )
 
         assert interrupt_was_set.get("value") is True
+
+
+def _make_file(
+    path: str,
+    content: str = "line\n",
+    additions: int = 1,
+    deletions: int = 0,
+    is_new: bool = False,
+    is_deleted: bool = False,
+) -> FileDiff:
+    return FileDiff(
+        file_path=path,
+        diff_content=content,
+        additions=additions,
+        deletions=deletions,
+        is_new_file=is_new,
+        is_deleted=is_deleted,
+    )
+
+
+def _make_diff(*files: FileDiff) -> StructuredDiff:
+    return StructuredDiff(
+        files=list(files),
+        additions=sum(f.additions for f in files),
+        deletions=sum(f.deletions for f in files),
+    )
+
+
+class TestBuildCodeReviewPrompt:
+    """Tests for build_code_review_prompt diff filtering and truncation."""
+
+    def test_normal_file_under_limit_is_included_verbatim(self):
+        content = "+" + "\n+".join(["line"] * 10)
+        file = _make_file("src/foo.py", content, additions=10)
+        prompt = build_code_review_prompt(_make_diff(file))
+        assert content in prompt
+
+    def test_lock_file_diff_replaced_with_stub(self):
+        file = _make_file("uv.lock", "+lots of locked content\n" * 100, additions=100)
+        prompt = build_code_review_prompt(_make_diff(file))
+        assert "+lots of locked content" not in prompt
+        assert "uv.lock" in prompt
+        assert "lock/generated file" in prompt
+
+    def test_nested_lock_file_excluded(self):
+        file = _make_file("backend/uv.lock", "+content\n", additions=1)
+        prompt = build_code_review_prompt(_make_diff(file))
+        assert "+content" not in prompt
+        assert "lock/generated file" in prompt
+
+    def test_per_file_truncation_at_limit(self):
+        # Use a distinctive sentinel after the cut point so we can verify it's absent.
+        kept = "a" * _MAX_FILE_DIFF_CHARS
+        overflow = "OVERFLOW_SENTINEL"
+        long_content = kept + overflow
+        file = _make_file("src/big.py", long_content, additions=1)
+        prompt = build_code_review_prompt(_make_diff(file))
+        assert "characters truncated" in prompt
+        assert kept[:100] in prompt  # start of kept content is present
+        assert overflow not in prompt  # sentinel beyond the limit is absent
+
+    def test_file_exactly_at_limit_is_not_truncated(self):
+        content = "x" * _MAX_FILE_DIFF_CHARS
+        file = _make_file("src/exact.py", content, additions=1)
+        prompt = build_code_review_prompt(_make_diff(file))
+        assert "characters truncated" not in prompt
+
+    def test_deleted_file_diff_replaced_with_stub(self):
+        file = _make_file("src/old.py", "-lots of deleted content\n" * 50, deletions=50, is_deleted=True)
+        prompt = build_code_review_prompt(_make_diff(file))
+        assert "-lots of deleted content" not in prompt
+        assert "src/old.py" in prompt
+        assert "[File deleted]" in prompt
+
+    def test_new_files_included_when_under_global_budget(self):
+        new_file = _make_file("src/new.py", "+hello\n", additions=1, is_new=True)
+        prompt = build_code_review_prompt(_make_diff(new_file))
+        assert "+hello" in prompt
+        assert "omitted from the diff" not in prompt
+
+    def test_new_files_dropped_when_global_budget_exceeded(self):
+        # Create enough modified files to exceed _MAX_TOTAL_DIFF_CHARS after per-file truncation.
+        # Each modified file contributes _MAX_FILE_DIFF_CHARS chars; we need enough to fill the budget.
+        files_needed = _MAX_TOTAL_DIFF_CHARS // _MAX_FILE_DIFF_CHARS + 1
+        big_content = "x" * (_MAX_FILE_DIFF_CHARS + 100)  # over per-file limit → truncated to _MAX_FILE_DIFF_CHARS
+        modified_files = [_make_file(f"src/modified_{i}.py", big_content, additions=1) for i in range(files_needed)]
+        new_file = _make_file("src/brand_new.py", "+new content\n", additions=1, is_new=True)
+
+        prompt = build_code_review_prompt(_make_diff(*modified_files, new_file))
+
+        assert "+new content" not in prompt
+        assert "src/brand_new.py" in prompt
+        assert "omitted from the diff" in prompt
+
+    def test_modified_files_always_included_when_budget_exceeded(self):
+        files_needed = _MAX_TOTAL_DIFF_CHARS // _MAX_FILE_DIFF_CHARS + 1
+        big_content = "x" * (_MAX_FILE_DIFF_CHARS + 100)
+        modified_files = [_make_file(f"src/modified_{i}.py", big_content, additions=1) for i in range(files_needed)]
+        new_file = _make_file("src/new.py", "+new\n", additions=1, is_new=True)
+
+        prompt = build_code_review_prompt(_make_diff(*modified_files, new_file))
+
+        # All modified file headers should be present
+        for i in range(files_needed):
+            assert f"src/modified_{i}.py" in prompt
+
+    def test_additional_context_appended(self):
+        file = _make_file("src/foo.py", "+x\n", additions=1)
+        prompt = build_code_review_prompt(_make_diff(file), additional_context="Pay attention to security.")
+        assert "Pay attention to security." in prompt
