@@ -1,8 +1,5 @@
+import type { ContextUsage } from '../../lib/api'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
-
-interface ContextUsageDisplayProps {
-  conversationId: number
-}
 
 function formatTokenCount(n: number): string {
   if (n >= 1_000_000) {
@@ -14,14 +11,11 @@ function formatTokenCount(n: number): string {
   return String(n)
 }
 
-export default function ContextUsageDisplay({ conversationId }: ContextUsageDisplayProps) {
-  const contextUsage = useConversationStreamStore(
-    state => state.conversationMessages.get(conversationId)?.contextUsage
-  )
+interface ContextUsageBadgeProps {
+  contextUsage: ContextUsage
+}
 
-  if (!contextUsage) return null
-
-  // Total context sent to model: uncached input + cached reads + cache writes (excludes output)
+export function ContextUsageBadge({ contextUsage }: ContextUsageBadgeProps) {
   const total = contextUsage.cache_read_tokens + contextUsage.cache_write_tokens + contextUsage.input_tokens
   if (total === 0) return null
 
@@ -36,4 +30,18 @@ export default function ContextUsageDisplay({ conversationId }: ContextUsageDisp
       {totalFormatted} ctx · {cachePercent}% cached
     </span>
   )
+}
+
+interface ContextUsageDisplayProps {
+  conversationId: number
+}
+
+export default function ContextUsageDisplay({ conversationId }: ContextUsageDisplayProps) {
+  const contextUsage = useConversationStreamStore(
+    state => state.conversationMessages.get(conversationId)?.contextUsage
+  )
+
+  if (!contextUsage) return null
+
+  return <ContextUsageBadge contextUsage={contextUsage} />
 }

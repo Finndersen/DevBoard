@@ -76,11 +76,13 @@ function StandardToolCallDisplay({ toolCall, toolResult, isHighlighted = false, 
   const timingText = previousEventTimestamp ? formatEventTiming(toolCall.timestamp, previousEventTimestamp) : null
 
   // Build fetchMessages callback for the modal
-  const fetchMessages = useCallback(() => {
+  const fetchMessages = useCallback(async () => {
     if (subAgentInfo) {
-      return apiClient.getClaudeCodeSubAgentMessages(sessionId!, subAgentInfo.agentId)
+      const messages = await apiClient.getClaudeCodeSubAgentMessages(sessionId!, subAgentInfo.agentId)
+      return { messages, context_usage: null }
     }
-    return apiClient.getConversationMessages(devboardSubAgentInfo!.conversationId).then(r => r.messages)
+    const r = await apiClient.getConversationMessages(devboardSubAgentInfo!.conversationId)
+    return { messages: r.messages, context_usage: r.context_usage }
   }, [subAgentInfo, devboardSubAgentInfo, sessionId])
 
   // Determine status

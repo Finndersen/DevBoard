@@ -90,7 +90,10 @@ const StepCard = memo(function StepCard({ step, taskId, onStepUpdated }: StepCar
   const { addNotification } = useNotificationStore()
 
   const fetchMessages = useCallback(
-    () => apiClient.getConversationMessages(step.conversation_id!).then(r => r.messages),
+    async () => {
+      const r = await apiClient.getConversationMessages(step.conversation_id!)
+      return { messages: r.messages, context_usage: r.context_usage }
+    },
     [step.conversation_id]
   )
 

@@ -43,7 +43,7 @@ describe('SubAgentConversationModal', () => {
       <SubAgentConversationModal
         isOpen={false}
         onClose={() => {}}
-        fetchMessages={() => Promise.resolve([])}
+        fetchMessages={() => Promise.resolve({ messages: [], context_usage: null })}
         title="Test sub-agent"
       />
     )
@@ -52,7 +52,7 @@ describe('SubAgentConversationModal', () => {
   })
 
   it('fetches and displays messages when opened', async () => {
-    const fetchMessages = vi.fn().mockResolvedValue(mockMessages)
+    const fetchMessages = vi.fn().mockResolvedValue({ messages: mockMessages, context_usage: null })
 
     render(
       <SubAgentConversationModal
@@ -109,7 +109,7 @@ describe('SubAgentConversationModal', () => {
     const user = userEvent.setup()
     const fetchMessages = vi.fn()
       .mockRejectedValueOnce(new Error('Network error'))
-      .mockResolvedValueOnce(mockMessages)
+      .mockResolvedValueOnce({ messages: mockMessages, context_usage: null })
 
     render(
       <SubAgentConversationModal
@@ -132,7 +132,7 @@ describe('SubAgentConversationModal', () => {
   })
 
   it('shows empty state when no messages returned', async () => {
-    const fetchMessages = vi.fn().mockResolvedValue([])
+    const fetchMessages = vi.fn().mockResolvedValue({ messages: [], context_usage: null })
 
     render(
       <SubAgentConversationModal

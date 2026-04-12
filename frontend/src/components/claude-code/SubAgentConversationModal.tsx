@@ -1,15 +1,21 @@
 import { useState, useEffect, useCallback } from 'react'
 
-import type { ConversationEvent, ConversationResponse } from '../../lib/api'
+import type { ConversationEvent, ConversationResponse, ContextUsage } from '../../lib/api'
 import { apiClient } from '../../lib/api'
 import { textColors } from '../../styles/designSystem'
 import ConversationMessageList from '../chat/ConversationMessageList'
+import { ContextUsageBadge } from '../chat/ContextUsageDisplay'
 import { Modal } from '../ui'
+
+interface FetchMessagesResult {
+  messages: ConversationEvent[]
+  context_usage?: ContextUsage | null
+}
 
 interface SubAgentConversationModalProps {
   isOpen: boolean
   onClose: () => void
-  fetchMessages: () => Promise<ConversationEvent[]>
+  fetchMessages: () => Promise<FetchMessagesResult>
   title: string
   subagentType?: string
   subtitle?: string
@@ -28,6 +34,7 @@ export default function SubAgentConversationModal({
   conversationId,
 }: SubAgentConversationModalProps) {
   const [messages, setMessages] = useState<ConversationEvent[]>([])
+  const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [conversationMeta, setConversationMeta] = useState<ConversationResponse | null>(null)
@@ -37,7 +44,8 @@ export default function SubAgentConversationModal({
     setError(null)
     try {
       const data = await fetchMessages()
-      setMessages(data)
+      setMessages(data.messages)
+      setContextUsage(data.context_usage ?? null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load sub-agent conversation')
     } finally {
@@ -76,6 +84,7 @@ export default function SubAgentConversationModal({
             )}
           </>
         )}
+        {contextUsage && <ContextUsageBadge contextUsage={contextUsage} />}
       </span>
     </span>
   )

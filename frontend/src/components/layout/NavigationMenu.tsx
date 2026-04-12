@@ -12,7 +12,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   PlusIcon,
-  NewspaperIcon,
   CpuChipIcon,
 } from '@heroicons/react/24/outline'
 import { useUIStore } from '../../stores/uiStore'
