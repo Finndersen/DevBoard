@@ -30,6 +30,7 @@ from devboard.api.schemas.common import DeleteResponse, ResetConversationRespons
 from devboard.api.schemas.conversation import ConversationMessagesResponse, ConversationResponse, ConversationUpdate
 from devboard.api.schemas.integration import UpdateConversationModelRequest
 from devboard.db.models import Conversation, Project, Task, TaskStatus
+from devboard.db.models.codebase import Codebase
 from devboard.db.repositories import ConversationRepository
 from devboard.services.conversation_service import ConversationService
 from devboard.services.project_directory import ensure_project_directory
@@ -293,8 +294,10 @@ async def get_agent_config(
         working_dir = parent.codebase.local_path
     elif isinstance(parent, Project):
         working_dir = str(ensure_project_directory(parent))
-    else:
+    elif isinstance(parent, Codebase):
         working_dir = parent.local_path
+    else:
+        working_dir = "."
 
     role = await create_agent_role_for_conversation(
         conversation=conversation,

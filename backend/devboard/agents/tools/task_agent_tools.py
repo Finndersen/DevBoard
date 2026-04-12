@@ -69,7 +69,7 @@ def create_send_task_agent_prompt_tool(
             f"status: running"
         )
 
-    return Tool(function=send_task_agent_prompt, name="send_task_agent_prompt")
+    return Tool(function=send_task_agent_prompt, name="send_task_agent_prompt")  # ty:ignore[invalid-argument-type, invalid-return-type]
 
 
 def create_get_task_agent_status_tool(
@@ -135,4 +135,4 @@ def create_get_task_agent_status_tool(
 
         return "\n".join(lines)
 
-    return Tool(function=get_task_agent_status, name="get_task_agent_status")
+    return Tool(function=get_task_agent_status, name="get_task_agent_status")  # ty:ignore[invalid-argument-type, invalid-return-type]

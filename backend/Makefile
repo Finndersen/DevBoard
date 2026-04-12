@@ -20,8 +20,8 @@ lint:		## Fix formatting/lint issues with ruff (auto-fixes)
 	uv run --frozen --active ruff format .
 	uv run --frozen --active ruff check . --fix
 
-typecheck:	## Type-check code with pyright
-	uv run --frozen --active pyright
+typecheck:	## Type-check code with ty
+	uv run --frozen --active ty check devboard
 
 test:		## Run tests
 	uv run --frozen --active pytest

@@ -29,7 +29,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "ruff>=0.1.8",
-    "pyright>=1.1.338",
+    "ty",
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
     "httpx>=0.25.0",
@@ -68,18 +68,7 @@ line-ending = "auto"
 [tool.pytest.ini_options]
 log_level = "WARNING"
 
-[tool.mypy]
-exclude = [
-    "devboard/db/migrations/",
-]
-python_version = "3.12"
+[tool.ty]
 
-[tool.pyright]
-include = ["devboard"]
-exclude = ["**/node_modules", "**/__pycache__", "**/.*"]
-pythonVersion = "3.12"
-typeCheckingMode = "strict"
-reportMissingImports = true
-reportMissingTypeStubs = false
-reportUnknownArgumentType = false
-reportUnknownMemberType = false
+[tool.ty.environment]
+python-version = "3.12"

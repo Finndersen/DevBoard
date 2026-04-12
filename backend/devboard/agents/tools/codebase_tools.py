@@ -61,8 +61,8 @@ def create_text_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
         return result
 
     return Tool(
-        function=search_file_content,
-    )
+        function=search_file_content,  # ty:ignore[invalid-argument-type]
+    )  # ty:ignore[invalid-return-type]
 
 
 def create_file_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
@@ -126,9 +126,9 @@ def create_file_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
         return "\n".join(result_lines)
 
     return Tool(
-        function=search_files_by_name,
+        function=search_files_by_name,  # ty:ignore[invalid-argument-type]
         name="search_files_by_name",
-    )
+    )  # ty:ignore[invalid-return-type]
 
 
 def create_code_structure_search_tool(codebase_integration: CodebaseIntegration) -> Tool:
@@ -190,9 +190,9 @@ def create_code_structure_search_tool(codebase_integration: CodebaseIntegration)
         return result
 
     return Tool(
-        function=search_code_structure,
+        function=search_code_structure,  # ty:ignore[invalid-argument-type]
         name="search_code_structure",
-    )
+    )  # ty:ignore[invalid-return-type]
 
 
 def create_directory_tree_tool(codebase_integration: CodebaseIntegration) -> Tool:
@@ -236,8 +236,8 @@ def create_directory_tree_tool(codebase_integration: CodebaseIntegration) -> Too
         return tree
 
     return Tool(
-        function=show_directory_tree,
-    )
+        function=show_directory_tree,  # ty:ignore[invalid-argument-type]
+    )  # ty:ignore[invalid-return-type]
 
 
 def create_file_read_tool(codebase_integration: CodebaseIntegration) -> Tool:
@@ -289,6 +289,6 @@ def create_file_read_tool(codebase_integration: CodebaseIntegration) -> Tool:
             return f"Error: {e}"
 
     return Tool(
-        function=read_file,
+        function=read_file,  # ty:ignore[invalid-argument-type]
         name="read_file",
-    )
+    )  # ty:ignore[invalid-return-type]

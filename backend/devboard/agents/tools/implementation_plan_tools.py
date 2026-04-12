@@ -80,11 +80,11 @@ def create_set_implementation_plan_steps_tool(
         return f"Implementation plan created with {len(steps)} steps."
 
     return Tool(
-        function=set_implementation_plan_steps,
+        function=set_implementation_plan_steps,  # ty:ignore[invalid-argument-type]
         name="set_implementation_plan_steps",
         requires_approval=False,
         takes_ctx=False,
-    )
+    )  # ty:ignore[invalid-return-type]
 
 
 def create_add_implementation_step_tool(
@@ -119,11 +119,11 @@ def create_add_implementation_step_tool(
         return f"Step {step.step_number} '{title}' added to implementation plan."
 
     return Tool(
-        function=add_implementation_step,
+        function=add_implementation_step,  # ty:ignore[invalid-argument-type]
         name="add_implementation_step",
         requires_approval=False,
         takes_ctx=False,
-    )
+    )  # ty:ignore[invalid-return-type]
 
 
 def create_edit_implementation_step_tool(
@@ -160,11 +160,13 @@ def create_edit_implementation_step_tool(
         return f"Step {step_number} updated."
 
     return Tool(
-        function=edit_implementation_step,
+        function=edit_implementation_step,  # ty:ignore[invalid-argument-type]
         name="edit_implementation_step",
         requires_approval=False,
         takes_ctx=False,
-    )
+    )  # ty:ignore[invalid-return-type]
+
+
 
 
 def create_edit_implementation_plan_overview_tool(
@@ -186,11 +188,11 @@ def create_edit_implementation_plan_overview_tool(
         return "Implementation plan overview updated."
 
     return Tool(
-        function=edit_implementation_plan_overview,
+        function=edit_implementation_plan_overview,  # ty:ignore[invalid-argument-type]
         name="edit_implementation_plan_overview",
         requires_approval=False,
         takes_ctx=False,
-    )
+    )  # ty:ignore[invalid-return-type]
 
 
 def create_read_implementation_step_details_tool(
@@ -214,11 +216,11 @@ def create_read_implementation_step_details_tool(
         return step.details
 
     return Tool(
-        function=read_implementation_step_details,
+        function=read_implementation_step_details,  # ty:ignore[invalid-argument-type]
         name="read_implementation_step_details",
         requires_approval=False,
         takes_ctx=False,
-    )
+    )  # ty:ignore[invalid-return-type]
 
 
 def create_edit_implementation_step_details_tool(
@@ -249,11 +251,11 @@ def create_edit_implementation_step_details_tool(
         return f"Step {step_number} details updated."
 
     return Tool(
-        function=edit_implementation_step_details,
+        function=edit_implementation_step_details,  # ty:ignore[invalid-argument-type]
         name="edit_implementation_step_details",
         requires_approval=False,
         takes_ctx=False,
-    )
+    )  # ty:ignore[invalid-return-type]
 
 
 def create_get_implementation_plan_overview_tool(
@@ -281,11 +283,11 @@ def create_get_implementation_plan_overview_tool(
         return "\n".join(lines)
 
     return Tool(
-        function=get_implementation_plan_overview,
+        function=get_implementation_plan_overview,  # ty:ignore[invalid-argument-type]
         name="get_implementation_plan_overview",
         requires_approval=False,
         takes_ctx=False,
-    )
+    )  # ty:ignore[invalid-return-type]
 
 
 # --- Implementation (Coordination) Agent Tools ---
@@ -456,6 +458,6 @@ def create_execute_implementation_step_tool(
             raise ModelRetry(f"Step {step_number} failed: {e}") from e
 
     return Tool(
-        function=execute_implementation_step,
+        function=execute_implementation_step,  # ty:ignore[invalid-argument-type]
         name="execute_implementation_step",
-    )
+    )  # ty:ignore[invalid-return-type]

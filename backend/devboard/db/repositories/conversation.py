@@ -465,7 +465,7 @@ class ConversationRepository(BaseRepository[Conversation]):
         """Delete all messages in a conversation."""
         stmt = delete(ConversationMessage).where(ConversationMessage.conversation_id == conversation_id)
         result = self.db.execute(stmt)
-        return result.rowcount  # type: ignore[attr-defined]
+        return result.rowcount  # type: ignore[attr-defined]  # ty:ignore[unresolved-attribute]
 
     def delete_tool_approval_messages(self, conversation_id: int) -> int:
         """
@@ -490,7 +490,7 @@ class ConversationRepository(BaseRepository[Conversation]):
             ConversationMessage.id >= last_user_message_subq,
         )
 
-        return self.db.execute(stmt).rowcount  # type: ignore[attr-defined]
+        return self.db.execute(stmt).rowcount  # type: ignore[attr-defined]  # ty:ignore[unresolved-attribute]
 
     def delete_by_id(self, conversation_id: int) -> bool:
         """Delete a conversation, its sub-conversations, and all messages by ID.
@@ -523,7 +523,7 @@ class ConversationRepository(BaseRepository[Conversation]):
         stmt = delete(Conversation).where(Conversation.id == conversation_id)
         result = self.db.execute(stmt)
 
-        return result.rowcount > 0  # type: ignore[attr-defined]
+        return result.rowcount > 0  # type: ignore[attr-defined]  # ty:ignore[unresolved-attribute]
 
     def delete_by_parent(self, parent_entity_type: ParentEntityType, parent_entity_id: int) -> int:
         """Hard-delete all conversations and their messages for a parent entity.
@@ -557,4 +557,4 @@ class ConversationRepository(BaseRepository[Conversation]):
         conv_stmt = delete(Conversation).where(Conversation.id.in_(conversation_ids))
         result = self.db.execute(conv_stmt)
 
-        return result.rowcount  # type: ignore[attr-defined]
+        return result.rowcount  # type: ignore[attr-defined]  # ty:ignore[unresolved-attribute]

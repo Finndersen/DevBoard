@@ -162,7 +162,7 @@ class ClaudeClient:
             disallowed_tools=disallowed_tools,
             model=model,
             cwd=str(Path(cwd).resolve()) if cwd else None,
-            mcp_servers=mcp_servers,  # type: ignore[arg-type]
+            mcp_servers=mcp_servers,  # type: ignore[arg-type]  # ty:ignore[invalid-argument-type]
             # disallowed_tools deny rules still apply. This enables execution of all enabled MCP server tools
             permission_mode="bypassPermissions",
             setting_sources=["local", "project", "user"] if load_settings else None,
@@ -215,7 +215,7 @@ class ClaudeClient:
                 description=pydantic_tool.description or "",
                 input_schema=pydantic_tool.function_schema.json_schema,
                 annotations=ToolAnnotations(readOnlyHint=True),
-            )(wrapper_func)  # type: ignore[arg-type]
+            )(wrapper_func)  # type: ignore[arg-type]  # ty:ignore[invalid-argument-type]
             sdk_tools.append(sdk_tool)
             custom_tool_names.append(f"mcp__{BUILTIN_TOOLS_MCP_NAME}__{tool_name}")
 
@@ -255,7 +255,7 @@ class ClaudeClient:
                     validated_args = args
 
                 try:
-                    result = await pydantic_tool.function_schema.call(validated_args, ctx=None)  # type: ignore[arg-type]
+                    result = await pydantic_tool.function_schema.call(validated_args, ctx=None)  # type: ignore[arg-type]  # ty:ignore[invalid-argument-type]
                 except Exception as e:
                     error_text = f"An error occurred during tool execution: {e}"
                     logfire.exception(

@@ -57,7 +57,7 @@ def create_view_codebase_details_tool(
             }
         )
 
-    return Tool(function=view_codebase_details, name="view_codebase_details")
+    return Tool(function=view_codebase_details, name="view_codebase_details")  # ty:ignore[invalid-argument-type, invalid-return-type]
 
 
 def create_update_codebase_tool(
@@ -113,4 +113,4 @@ def create_update_codebase_tool(
 
         return json.dumps({"id": codebase.id, "name": codebase.name, **updated_fields})
 
-    return Tool(function=update_codebase, name="update_codebase")
+    return Tool(function=update_codebase, name="update_codebase")  # ty:ignore[invalid-argument-type, invalid-return-type]

@@ -159,10 +159,14 @@ class ConversationExecutionManager:
             raise ConversationBusyError(conversation_id)
 
         interrupt_event = asyncio.Event()
+        current_task = asyncio.current_task()
+        assert current_task is not None, (
+            "register_sub_agent_execution must be called from within a running asyncio task"
+        )
         execution = ConversationExecution(
             conversation_id=conversation_id,
             interrupt_requested=interrupt_event,
-            asyncio_task=asyncio.current_task(),  # type: ignore[arg-type]
+            asyncio_task=current_task,
             status=ExecutionStatus.RUNNING,
             started_at=datetime.datetime.now(datetime.UTC),
             is_sub_agent=True,

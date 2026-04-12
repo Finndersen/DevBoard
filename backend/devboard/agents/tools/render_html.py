@@ -40,4 +40,4 @@ def create_render_html_tool() -> Tool:
         """
         return json.dumps({"title": title, "html": html})
 
-    return Tool(function=render_html, name="render_html")
+    return Tool(function=render_html, name="render_html")  # ty:ignore[invalid-argument-type, invalid-return-type]

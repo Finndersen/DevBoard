@@ -127,9 +127,9 @@ def create_github_pr_tool(
         return f"Successfully created PR #{pr_number}. Task transitioned to PR_OPEN status."
 
     return Tool(
-        function=create_pull_request,
+        function=create_pull_request,  # ty:ignore[invalid-argument-type]
         name="create_pull_request",
-    )
+    )  # ty:ignore[invalid-return-type]
 
 
 def _format_comment(comment: ReviewComment, indent: str = "") -> str:
@@ -244,7 +244,7 @@ def create_get_pr_feedback_tool(task: Task, github_integration: GitHubIntegratio
 
         return "\n".join(sections)
 
-    return Tool(function=get_pr_feedback, name="get_pr_feedback")
+    return Tool(function=get_pr_feedback, name="get_pr_feedback")  # ty:ignore[invalid-argument-type, invalid-return-type]
 
 
 def format_pr_status_from_graphql(status: PullRequest) -> str:
@@ -302,4 +302,4 @@ def create_get_pr_status_tool(task: Task, github_integration: GitHubIntegration)
 
         return format_pr_status_from_graphql(status)
 
-    return Tool(function=get_pr_status, name="get_pr_status")
+    return Tool(function=get_pr_status, name="get_pr_status")  # ty:ignore[invalid-argument-type, invalid-return-type]

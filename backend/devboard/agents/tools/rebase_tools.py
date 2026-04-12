@@ -136,4 +136,4 @@ def create_rebase_task_branch_tool(
         # Should not reach here, but just in case
         return f"Rebase operation completed with outcome: {result.outcome}"
 
-    return Tool(function=rebase_task_branch, name="rebase_task_branch")
+    return Tool(function=rebase_task_branch, name="rebase_task_branch")  # ty:ignore[invalid-argument-type, invalid-return-type]

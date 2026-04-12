@@ -81,7 +81,7 @@ def create_complete_task_with_local_merge_tool(
             result += f" Merge commit: {merge_result.merge_commit}"
         return result
 
-    return Tool(function=complete_task_with_local_merge, name="complete_task_with_local_merge")
+    return Tool(function=complete_task_with_local_merge, name="complete_task_with_local_merge")  # ty:ignore[invalid-argument-type, invalid-return-type]
 
 
 def create_merge_pr_and_complete_task_tool(
@@ -199,4 +199,4 @@ def create_merge_pr_and_complete_task_tool(
         result = f"Task completed successfully. PR merged via {merge_method.value}. Merge commit: {merge_result.sha}"
         return result
 
-    return Tool(function=merge_pr_and_complete_task, name="merge_pr_and_complete_task")
+    return Tool(function=merge_pr_and_complete_task, name="merge_pr_and_complete_task")  # ty:ignore[invalid-argument-type, invalid-return-type]

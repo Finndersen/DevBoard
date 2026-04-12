@@ -119,9 +119,9 @@ def create_list_tasks_tool(project: Project, task_service: TaskService) -> Tool:
 
     # Dynamically set the Literal annotation for codebase_name parameter if codebases exist
     if codebase_names:
-        list_tasks.__annotations__["codebase_name"] = Literal[codebase_names]
+        list_tasks.__annotations__["codebase_name"] = Literal[codebase_names]  # ty:ignore[invalid-type-form]
 
-    return Tool(function=list_tasks, name="list_tasks")
+    return Tool(function=list_tasks, name="list_tasks")  # ty:ignore[invalid-argument-type, invalid-return-type]
 
 
 def create_view_task_details_tool(project: Project, task_service: TaskService) -> Tool:
@@ -210,7 +210,7 @@ def create_view_task_details_tool(project: Project, task_service: TaskService) -
 
         return "\n".join(lines)
 
-    return Tool(function=view_task_details, name="view_task_details")
+    return Tool(function=view_task_details, name="view_task_details")  # ty:ignore[invalid-argument-type, invalid-return-type]
 
 
 def _build_codebase_name_schema(codebase_names: tuple[str, ...]) -> dict[str, Any]:
@@ -345,7 +345,7 @@ def _build_edit_custom_fields_schema(
         elif field_def.type == CustomFieldType.ENUM:
             type_schema = {"type": "string"}
             if field_def.options:
-                type_schema["enum"] = field_def.options
+                type_schema["enum"] = field_def.options  # ty:ignore[invalid-assignment]
         else:
             type_schema = {"type": "string"}
 

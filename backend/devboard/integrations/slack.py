@@ -149,7 +149,7 @@ class SlackIntegration(BaseIntegration):
             response = self.client.search_messages(query=query, count=count)
 
             if response.get("ok"):
-                return response  # type: ignore[return-value]
+                return response  # type: ignore[return-value]  # ty:ignore[invalid-return-type]
             else:
                 logfire.error(f"Slack search error: {response.get('error')}")
                 return {"messages": {"matches": []}}

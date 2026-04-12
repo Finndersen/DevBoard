@@ -57,11 +57,11 @@ def create_document_edit_tool(
         return f"Edits applied successfully to {document.document_type}."
 
     return Tool(
-        function=edit_document_tool,
+        function=edit_document_tool,  # ty:ignore[invalid-argument-type]
         name=f"edit_{document.document_type}",
         requires_approval=requires_approval,
         takes_ctx=False,
-    )
+    )  # ty:ignore[invalid-return-type]
 
 
 def create_set_document_content_tool(
@@ -108,8 +108,8 @@ def create_set_document_content_tool(
         requires_approval = bool(document.content and document.content.strip())
 
     return Tool(
-        function=set_document_content_tool,
+        function=set_document_content_tool,  # ty:ignore[invalid-argument-type]
         name=f"set_{document.document_type}_content",
         requires_approval=requires_approval,
         takes_ctx=False,
-    )
+    )  # ty:ignore[invalid-return-type]

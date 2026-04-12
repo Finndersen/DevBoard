@@ -4,6 +4,7 @@ import asyncio
 import dataclasses
 import datetime
 from enum import StrEnum
+from typing import Any
 
 
 class ExecutionStatus(StrEnum):
@@ -19,7 +20,7 @@ class ConversationExecution:
 
     conversation_id: int
     interrupt_requested: asyncio.Event
-    asyncio_task: asyncio.Task[None]
+    asyncio_task: asyncio.Task[Any]
     status: ExecutionStatus
     started_at: datetime.datetime
     completed_at: datetime.datetime | None = None

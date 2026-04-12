@@ -2,16 +2,13 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 from sqlalchemy import JSON, Boolean, Enum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
-
-if TYPE_CHECKING:
-    from .mcp_server import MCPServerConfig
 
 
 class MCPServerType(StrEnum):

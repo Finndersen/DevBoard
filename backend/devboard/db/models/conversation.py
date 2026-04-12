@@ -29,6 +29,7 @@ class InvalidParentEntityTypeError(ValueError):
 
 
 if TYPE_CHECKING:
+    from .background_agent import BackgroundAgent
     from .codebase import Codebase
     from .messages import ConversationMessage
     from .project import Project
@@ -104,7 +105,7 @@ class Conversation(Base):
         Index("idx_conversation_external_session_id", "external_session_id"),
     )
 
-    def get_parent_entity(self, *, load_task_context: bool = False) -> "Task | Project | Codebase":
+    def get_parent_entity(self, *, load_task_context: bool = False) -> "Task | Project | Codebase | BackgroundAgent":
         """Get the parent entity (Task, Project, or Codebase) for this conversation.
 
         Note: This method performs a database query using the conversation's SQLAlchemy session.
@@ -120,6 +121,7 @@ class Conversation(Base):
             InvalidParentEntityTypeError: If parent_entity_type is not recognized
             RuntimeError: If conversation is not attached to a session
         """
+        from .background_agent import BackgroundAgent
         from .codebase import Codebase
         from .project import Project
         from .task import Task
@@ -129,12 +131,9 @@ class Conversation(Base):
             msg = "Conversation must be attached to a session to get parent entity"
             raise RuntimeError(msg)
 
-        entity: Task | Project | Codebase | None
+        entity: Task | Project | Codebase | BackgroundAgent | None
         if self.parent_entity_type == ParentEntityType.BACKGROUND_AGENT:
-            # Background agents as parent entity; import locally to avoid circular imports
-            from .background_agent import BackgroundAgent
-
-            entity = session.get(BackgroundAgent, self.parent_entity_id)  # type: ignore[assignment]
+            entity = session.get(BackgroundAgent, self.parent_entity_id)
         elif self.parent_entity_type == ParentEntityType.TASK:
             if load_task_context:
                 from .implementation_plan import ImplementationPlan

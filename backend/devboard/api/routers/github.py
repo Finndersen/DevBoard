@@ -49,7 +49,8 @@ async def get_open_prs(
 
     repo_to_codebase: dict[str, int] = {}
     for cb in github_codebases:
-        owner, repo = GitHubIntegration.parse_repo_url(cb.repository_url)  # type: ignore[arg-type]
+        assert cb.repository_url is not None
+        owner, repo = GitHubIntegration.parse_repo_url(cb.repository_url)
         repo_to_codebase[f"{owner}/{repo}".lower()] = cb.id
 
     # Build task lookup for codebases we know about
@@ -58,8 +59,9 @@ async def get_open_prs(
     if codebase_ids:
         tasks_with_prs = task_repo.get_tasks_with_open_prs(codebase_ids)
         task_lookup = {
-            (t.codebase_id, t.github_pr_number): (t.id, t.title)  # type: ignore[index]
+            (t.codebase_id, t.github_pr_number): (t.id, t.title)
             for t in tasks_with_prs
+            if t.codebase_id is not None and t.github_pr_number is not None
         }
 
     # Include all PRs, enriching with codebase/task info when available

@@ -42,7 +42,7 @@ def upgrade() -> None:
             connection.execute(  # type: ignore[union-attr]
                 sa.text("INSERT INTO documents (document_type, content, content_hash) VALUES (?, ?, ?)"),
                 ("task_implementation_plan", "", ""),  # type: ignore[arg-type]
-            )
+            )  # ty:ignore[no-matching-overload]
 
             # Get the last inserted document ID
             doc_id = connection.execute(  # type: ignore[union-attr]

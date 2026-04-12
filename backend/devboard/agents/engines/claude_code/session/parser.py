@@ -193,7 +193,7 @@ def parse_session_message(entry: MessageEntry, line_num: int) -> SessionMessage 
             timestamp=timestamp,
             line_num=line_num,
             is_sidechain=is_sidechain,
-            content=user_content,
+            content=user_content,  # ty:ignore[invalid-argument-type]
         )
 
     else:
@@ -204,7 +204,7 @@ def parse_session_message(entry: MessageEntry, line_num: int) -> SessionMessage 
             timestamp=timestamp,
             line_num=line_num,
             is_sidechain=is_sidechain,
-            content=content_raw,  # type: ignore[arg-type]
+            content=content_raw,  # type: ignore[arg-type]  # ty:ignore[invalid-argument-type]
             model=model,
             usage=usage,
         )

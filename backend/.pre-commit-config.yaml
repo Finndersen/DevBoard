@@ -13,9 +13,9 @@ repos:
         language: system
         types: [python]
         require_serial: true
-      - id: pyright
-        name: pyright
-        entry: uv run --project backend --active --frozen pyright --project backend
+      - id: ty
+        name: ty
+        entry: uv run --project backend --active --frozen ty check backend/devboard
         language: system
         types: [python]
         pass_filenames: false

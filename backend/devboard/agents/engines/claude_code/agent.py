@@ -256,7 +256,7 @@ class ClaudeCodeAgent(BaseAgent):
         while True:
             stream_generator: AsyncGenerator[Message, None] = client.stream(  # type: ignore[assignment]
                 user_query=current_message, interrupt_event=interrupt_event
-            )
+            )  # ty:ignore[invalid-assignment]
             should_retry_api_error = False
             last_assistant_text: str | None = None
             try:
@@ -488,7 +488,7 @@ class ClaudeCodeAgent(BaseAgent):
             raise ValueError(f"No messages in session {self.session_id} - cannot process tool approvals")
 
         # Parse virtual tool call from message text content using centralized parser
-        tool_call = ClaudeResponseParser.parse_message_content(last_message.text_content)  # type: ignore[union-attr]
+        tool_call = ClaudeResponseParser.parse_message_content(last_message.text_content)  # type: ignore[union-attr]  # ty:ignore[unresolved-attribute]
         if not isinstance(tool_call, VirtualToolCall):
             raise ValueError("Last message does not contain a virtual tool call")
 

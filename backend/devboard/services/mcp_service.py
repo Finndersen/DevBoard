@@ -7,6 +7,8 @@ CRUD operations and connectivity verification.
 import os
 from typing import Any
 
+from mcp.types import TextContent
+
 from devboard.api.schemas.mcp import (
     MCPServerDetailResponse,
     MCPToolInfo,
@@ -250,8 +252,8 @@ class MCPService:
             text_parts: list[str] = []
             if result.content:
                 for content in result.content:
-                    if hasattr(content, "text"):
-                        text_parts.append(content.text)  # type: ignore[union-attr]
+                    if isinstance(content, TextContent):
+                        text_parts.append(content.text)
 
             # Check for error response from MCP server
             if result.isError:

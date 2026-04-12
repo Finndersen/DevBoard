@@ -7,7 +7,7 @@ from different async tasks.
 
 import asyncio
 import tempfile
-from typing import IO, Any, cast
+from typing import IO, Any
 
 import httpx
 import logfire
@@ -25,8 +25,7 @@ from devboard.db.models.mcp_server import (
 def _unwrap_exception_group(exc: BaseException) -> Exception:
     """Extract root cause from single-exception ExceptionGroups."""
     while isinstance(exc, BaseExceptionGroup) and len(exc.exceptions) == 1:
-        inner = cast(BaseException, exc.exceptions[0])
-        exc = inner
+        exc = exc.exceptions[0]
     if isinstance(exc, Exception):
         return exc
     return RuntimeError(str(exc))
@@ -123,9 +122,10 @@ class MCPLifecycleManager:
         Raises:
             RuntimeError: If the session is not active.
         """
-        if not self.active:
+        session = self._mcp_session
+        if session is None:
             raise RuntimeError("MCP session not active")
-        return self._mcp_session  # type: ignore[return-value]
+        return session
 
     async def _run_lifecycle(self) -> None:
         """Run the lifecycle - enters client context, initializes session, waits for teardown."""
@@ -155,9 +155,9 @@ class MCPLifecycleManager:
         Raises:
             Exception: If the session fails to initialize.
         """
-        if self.active:
+        if (session := self._mcp_session) is not None:
             logfire.debug("MCP server already active", server_name=self.server_name)
-            return self._mcp_session  # type: ignore[return-value]
+            return session
 
         with logfire.span("MCP server setup", server_name=self.server_name):
             self._teardown_event.clear()
@@ -180,7 +180,8 @@ class MCPLifecycleManager:
                 raise RuntimeError("MCP session failed to initialize")
 
             logfire.info("MCP server setup complete", server_name=self.server_name)
-            return self._mcp_session  # type: ignore[return-value]
+            assert self._mcp_session is not None
+            return self._mcp_session
 
     async def teardown(self) -> None:
         """Exit MCP client and session context."""

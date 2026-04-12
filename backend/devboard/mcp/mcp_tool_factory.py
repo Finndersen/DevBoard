@@ -10,6 +10,7 @@ from typing import Any
 
 import logfire
 from mcp import ClientSession
+from mcp.types import TextContent
 from pydantic_ai import Tool
 
 from devboard.db.models import MCPTool
@@ -134,8 +135,8 @@ class MCPToolFactory:
             text_parts: list[str] = []
             if result.content:
                 for content in result.content:
-                    if hasattr(content, "text"):
-                        text_parts.append(content.text)  # type: ignore[union-attr]
+                    if isinstance(content, TextContent):
+                        text_parts.append(content.text)
 
             if result.isError:
                 error_message = "\n".join(text_parts) if text_parts else "MCP tool execution failed"

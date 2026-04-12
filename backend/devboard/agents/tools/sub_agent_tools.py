@@ -210,12 +210,12 @@ def create_multi_codebase_investigation_tool(
 
     # Dynamically set the Literal annotation for codebase_name parameter
     # This allows displaying the available codebase names as an enum to the LLM
-    investigate_codebase.__annotations__["codebase_name"] = Literal[tuple(codebase_map.keys())]
+    investigate_codebase.__annotations__["codebase_name"] = Literal[tuple(codebase_map.keys())]  # ty:ignore[invalid-type-form]
 
     return Tool(
-        function=investigate_codebase,
+        function=investigate_codebase,  # ty:ignore[invalid-argument-type]
         name="investigate_codebase",
-    )
+    )  # ty:ignore[invalid-return-type]
 
 
 def create_task_codebase_investigation_tool(
@@ -326,7 +326,7 @@ def create_code_review_tool(
         )
         return json.dumps({"result": sub_agent_result.result, "conversation_id": sub_agent_result.conversation_id})
 
-    return Tool(function=review_code_changes, name="review_code_changes")
+    return Tool(function=review_code_changes, name="review_code_changes")  # ty:ignore[invalid-argument-type, invalid-return-type]
 
 
 # Files whose diff content is replaced with a stub — not useful to review line-by-line.

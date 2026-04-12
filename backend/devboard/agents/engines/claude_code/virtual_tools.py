@@ -104,7 +104,7 @@ class VirtualTool:
             ToolCallError: If execution fails
         """
         validated_args = self.validate_args(arguments)
-        result = await self.pydantic_tool.function_schema.call(validated_args, ctx=None)  # type: ignore[arg-type]
+        result = await self.pydantic_tool.function_schema.call(validated_args, ctx=None)  # type: ignore[arg-type]  # ty:ignore[invalid-argument-type]
         return str(result)
 
     def get_schema(self) -> str:
