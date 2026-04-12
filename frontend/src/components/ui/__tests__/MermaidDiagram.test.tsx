@@ -51,7 +51,7 @@ describe('MermaidDiagram', () => {
     })
   })
 
-  it('calls onExpandClick when diagram is clicked', async () => {
+  it('calls onExpandClick with svg when diagram is clicked', async () => {
     const handleExpand = vi.fn()
     renderWithProvider(
       <MermaidDiagram code="graph TD\n  A --> B" onExpandClick={handleExpand} />
@@ -66,6 +66,7 @@ describe('MermaidDiagram', () => {
     await user.click(diagram)
 
     expect(handleExpand).toHaveBeenCalledTimes(1)
+    expect(handleExpand).toHaveBeenCalledWith('<svg data-testid="mock-svg">Rendered Diagram</svg>')
   })
 
   it('is not clickable when onExpandClick is not provided', async () => {

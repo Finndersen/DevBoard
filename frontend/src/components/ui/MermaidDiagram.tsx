@@ -7,7 +7,7 @@ import { statusColors, textColors } from '../../styles/designSystem'
 
 interface MermaidDiagramProps {
   code: string
-  onExpandClick?: () => void
+  onExpandClick?: (svg: string) => void
   className?: string
 }
 
@@ -72,10 +72,10 @@ export default function MermaidDiagram({ code, onExpandClick, className = '' }: 
   return (
     <div
       className={`bg-white dark:bg-gray-900 rounded-lg p-4 overflow-auto ${containerClasses} ${className}`}
-      onClick={onExpandClick}
+      onClick={onExpandClick ? () => onExpandClick(svg) : undefined}
       role={onExpandClick ? 'button' : undefined}
       tabIndex={onExpandClick ? 0 : undefined}
-      onKeyDown={onExpandClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onExpandClick() } : undefined}
+      onKeyDown={onExpandClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onExpandClick(svg) } : undefined}
     >
       <div
         className="flex justify-center items-center h-full [&>svg]:max-w-full"

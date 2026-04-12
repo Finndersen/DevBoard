@@ -1,15 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import MermaidDiagramModal from '../MermaidDiagramModal'
 import { DarkModeProvider } from '../../../contexts/DarkModeContext'
-
-vi.mock('mermaid', () => ({
-  default: {
-    initialize: vi.fn(),
-    render: vi.fn().mockResolvedValue({ svg: '<svg>Mocked Diagram</svg>' }),
-  },
-}))
 
 const renderWithProvider = (children: React.ReactNode) => {
   return render(
@@ -21,6 +14,7 @@ const renderWithProvider = (children: React.ReactNode) => {
 
 describe('MermaidDiagramModal', () => {
   const mockCode = 'graph TD\n  A --> B'
+  const mockSvg = '<svg><text>Mocked Diagram</text></svg>'
   const mockOnClose = vi.fn()
   const mockWriteText = vi.fn()
 
@@ -36,25 +30,22 @@ describe('MermaidDiagramModal', () => {
 
   it('does not render when isOpen is false', () => {
     renderWithProvider(
-      <MermaidDiagramModal isOpen={false} onClose={mockOnClose} code={mockCode} />
+      <MermaidDiagramModal isOpen={false} onClose={mockOnClose} code={mockCode} svg={mockSvg} />
     )
     expect(screen.queryByText('Mermaid Diagram')).not.toBeInTheDocument()
   })
 
-  it('renders modal when isOpen is true', async () => {
+  it('renders modal with svg content when isOpen is true', () => {
     renderWithProvider(
-      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} />
+      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} svg={mockSvg} />
     )
     expect(screen.getByText('Mermaid Diagram')).toBeInTheDocument()
-
-    await waitFor(() => {
-      expect(screen.getByText('Mocked Diagram')).toBeInTheDocument()
-    })
+    expect(screen.getByText('Mocked Diagram')).toBeInTheDocument()
   })
 
   it('displays zoom controls', () => {
     renderWithProvider(
-      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} />
+      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} svg={mockSvg} />
     )
 
     expect(screen.getByLabelText('Zoom in')).toBeInTheDocument()
@@ -65,7 +56,7 @@ describe('MermaidDiagramModal', () => {
 
   it('updates zoom percentage when zooming in', async () => {
     renderWithProvider(
-      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} />
+      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} svg={mockSvg} />
     )
 
     const user = userEvent.setup()
@@ -76,7 +67,7 @@ describe('MermaidDiagramModal', () => {
 
   it('updates zoom percentage when zooming out', async () => {
     renderWithProvider(
-      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} />
+      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} svg={mockSvg} />
     )
 
     const user = userEvent.setup()
@@ -87,7 +78,7 @@ describe('MermaidDiagramModal', () => {
 
   it('resets view when reset button is clicked', async () => {
     renderWithProvider(
-      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} />
+      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} svg={mockSvg} />
     )
 
     const user = userEvent.setup()
@@ -101,7 +92,7 @@ describe('MermaidDiagramModal', () => {
 
   it('hides source code by default', () => {
     renderWithProvider(
-      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} />
+      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} svg={mockSvg} />
     )
 
     expect(screen.getByText('Source Code')).toBeInTheDocument()
@@ -110,20 +101,18 @@ describe('MermaidDiagramModal', () => {
 
   it('shows source code when expanded', async () => {
     renderWithProvider(
-      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} />
+      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} svg={mockSvg} />
     )
 
     const user = userEvent.setup()
     await user.click(screen.getByText('Source Code'))
 
-    await waitFor(() => {
-      expect(screen.getByText(/graph/)).toBeInTheDocument()
-    })
+    expect(screen.getByText(/graph/)).toBeInTheDocument()
   })
 
   it('displays copy button', () => {
     renderWithProvider(
-      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} />
+      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} svg={mockSvg} />
     )
 
     expect(screen.getByText('Copy')).toBeInTheDocument()
@@ -131,7 +120,7 @@ describe('MermaidDiagramModal', () => {
 
   it('calls onClose when close button is clicked', async () => {
     renderWithProvider(
-      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} />
+      <MermaidDiagramModal isOpen={true} onClose={mockOnClose} code={mockCode} svg={mockSvg} />
     )
 
     const user = userEvent.setup()

@@ -20,7 +20,7 @@ export default function Markdown({
   forceWhiteText = false,
   className = ''
 }: MarkdownProps) {
-  const [modalCode, setModalCode] = useState<string | null>(null)
+  const [modalData, setModalData] = useState<{ code: string; svg: string } | null>(null)
 
   // Ref holds a fresh Set that is recreated before each render cycle.
   // The heading renderers (captured in the memoized `components`) read from
@@ -106,7 +106,7 @@ export default function Markdown({
         return (
           <MermaidDiagram
             code={codeString}
-            onExpandClick={() => setModalCode(codeString)}
+            onExpandClick={(svg) => setModalData({ code: codeString, svg })}
           />
         )
       }
@@ -138,9 +138,10 @@ export default function Markdown({
       </div>
 
       <MermaidDiagramModal
-        isOpen={modalCode !== null}
-        onClose={() => setModalCode(null)}
-        code={modalCode || ''}
+        isOpen={modalData !== null}
+        onClose={() => setModalData(null)}
+        code={modalData?.code ?? ''}
+        svg={modalData?.svg ?? ''}
       />
     </>
   )

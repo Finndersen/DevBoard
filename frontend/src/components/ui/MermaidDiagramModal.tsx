@@ -8,7 +8,6 @@ import {
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
 import Modal from './Modal'
-import MermaidDiagram from './MermaidDiagram'
 import CodeBlock from './CodeBlock'
 import { borderColors, textColors, surfaces } from '../../styles/designSystem'
 
@@ -16,13 +15,14 @@ interface MermaidDiagramModalProps {
   isOpen: boolean
   onClose: () => void
   code: string
+  svg: string
 }
 
 const ZOOM_STEP = 0.25
 const MIN_ZOOM = 0.25
 const MAX_ZOOM = 4
 
-export default function MermaidDiagramModal({ isOpen, onClose, code }: MermaidDiagramModalProps) {
+export default function MermaidDiagramModal({ isOpen, onClose, code, svg }: MermaidDiagramModalProps) {
   const [copied, setCopied] = useState(false)
   const [scale, setScale] = useState(1)
   const [translate, setTranslate] = useState({ x: 0, y: 0 })
@@ -138,14 +138,13 @@ export default function MermaidDiagramModal({ isOpen, onClose, code }: MermaidDi
           onMouseLeave={handleMouseUp}
         >
           <div
-            className="w-full h-full flex items-center justify-center [&_svg]:max-w-full [&_svg]:max-h-full [&_svg]:w-full [&_svg]:h-full"
+            className="flex items-center justify-center [&_svg]:max-w-full [&_svg]:max-h-full"
             style={{
               transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
               transformOrigin: 'center center',
             }}
-          >
-            <MermaidDiagram code={code} className="!p-0 !bg-transparent !rounded-none w-full h-full" />
-          </div>
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
         </div>
 
         <div className={`border ${borderColors.default} rounded-b-lg`}>
