@@ -12,6 +12,7 @@ from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.conversation_service import ConversationService
 from devboard.services.integration_service import IntegrationService
 from devboard.services.task_service import TaskService
+from devboard.services.workspace.workspace_service import WorkspaceService
 
 
 class TaskWorkflowAction(ABC):
@@ -32,6 +33,7 @@ class TaskWorkflowAction(ABC):
         agent_config_service: AgentConfigService,
         document_repository: DocumentRepository,
         integration_service: IntegrationService,
+        workspace_service: WorkspaceService,
     ):
         self.task = task
         self.task_service = task_service
@@ -43,6 +45,7 @@ class TaskWorkflowAction(ABC):
             agent_config_service=agent_config_service,
         )
         self.integration_service = integration_service
+        self.workspace_service = workspace_service
 
     @classmethod
     @abstractmethod

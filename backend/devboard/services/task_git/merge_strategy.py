@@ -62,6 +62,10 @@ class SquashMerge(MergeStrategy):
             else:
                 merge_commit = await self._squash_to_local_base(task, repo_git, feature_worktree_path)
 
+            if feature_worktree_path:
+                feature_git = GitRepoIntegration(feature_worktree_path)
+                await feature_git.switch_detach()
+
             await repo_git.delete_branch(task.branch_name, force=True)
             logfire.info(f"Deleted local branch {task.branch_name}")
 
@@ -262,6 +266,10 @@ class RebaseMerge(MergeStrategy):
                     finally:
                         if current_branch != task.branch_name:
                             await repo_git.checkout_branch(current_branch)
+
+            if feature_worktree_path:
+                feature_git = GitRepoIntegration(feature_worktree_path)
+                await feature_git.switch_detach()
 
             await repo_git.delete_branch(task.branch_name, force=True)
             if await repo_git.is_branch_pushed(task.branch_name):

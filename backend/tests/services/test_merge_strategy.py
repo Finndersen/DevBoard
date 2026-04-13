@@ -210,11 +210,17 @@ async def test_merge_proceeds_when_feature_worktree_is_clean(mock_task, mock_git
 
 
 @pytest.mark.asyncio
-async def test_merge_skips_feature_worktree_check_when_branch_checked_out_in_main_repo(mock_task, mock_git):
-    """merge_task_feature_branch skips uncommitted check when feature branch is in the main repo (not a separate worktree)."""
+async def test_merge_checks_uncommitted_changes_when_branch_checked_out_in_main_repo(mock_task, mock_git):
+    """merge_task_feature_branch checks for uncommitted changes even when branch is in the main repo.
+
+    Previously this check was skipped for the main repo path, which could lead to merging a
+    branch with uncommitted changes. Now we always check regardless of location.
+    """
     mock_git.repo_path = "/repo"
     # Feature branch is checked out at the main repo path
     mock_git.get_checked_out_location = AsyncMock(return_value="/repo")
+    # No uncommitted changes
+    mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
 
     with (
         patch("devboard.services.task_git.service.GitRepoIntegration", return_value=mock_git),
@@ -223,8 +229,26 @@ async def test_merge_skips_feature_worktree_check_when_branch_checked_out_in_mai
         result = await TaskGitService.merge_task_feature_branch(mock_task)
 
     assert result.outcome == MergeOutcome.SUCCESS
-    # has_uncommitted_changes should NOT be called for feature worktree check
-    mock_git.has_uncommitted_changes.assert_not_called()
+    # has_uncommitted_changes IS now called even for the main repo path
+    mock_git.has_uncommitted_changes.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_merge_blocks_when_branch_in_main_repo_has_uncommitted_changes(mock_task, mock_git):
+    """merge_task_feature_branch returns ERROR when the feature branch in main repo has uncommitted changes."""
+    mock_git.repo_path = "/repo"
+    mock_git.get_checked_out_location = AsyncMock(return_value="/repo")
+    # Uncommitted changes present
+    mock_git.has_uncommitted_changes = AsyncMock(return_value=True)
+
+    with (
+        patch("devboard.services.task_git.service.GitRepoIntegration", return_value=mock_git),
+        patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", return_value=mock_git),
+    ):
+        result = await TaskGitService.merge_task_feature_branch(mock_task)
+
+    assert result.outcome == MergeOutcome.ERROR
+    assert "uncommitted changes" in result.message.lower()
 
 
 # ── Worktree stash removal tests ──────────────────────────────────────────────
@@ -637,4 +661,86 @@ async def test_rebase_merge_restores_main_repo_head_before_branch_delete_when_no
     # Main repo HEAD should have been restored to base branch so delete_branch can succeed
     mock_git.checkout_branch.assert_any_call(mock_task.base_branch)
     mock_git.delete_branch.assert_called_once_with(mock_task.branch_name, force=True)
+    assert result.outcome == MergeOutcome.SUCCESS
+
+
+# ── Regression tests: worktree-holds-branch bug (Fix: detach before delete) ─
+
+
+@pytest.mark.asyncio
+async def test_squash_merge_detaches_feature_worktree_before_branch_delete(mock_task, mock_git):
+    """SquashMerge detaches the feature worktree before delete_branch when worktree was used.
+
+    Regression test for the bug where checkout_branch inside _squash_feature_branch_commits /
+    _squash_to_local_base re-attached the branch to the feature worktree, causing
+    'git branch -D' to fail with 'cannot delete branch used by worktree'.
+    """
+    mock_feature_git = MagicMock(spec=GitRepoIntegration)
+    mock_feature_git.checkout_branch = AsyncMock()
+    mock_feature_git.soft_reset = AsyncMock()
+    mock_feature_git.commit = AsyncMock()
+    mock_feature_git.rebase_onto = AsyncMock()
+    mock_feature_git.switch_detach = AsyncMock()
+
+    mock_git.get_checked_out_location = AsyncMock(return_value=None)
+
+    parent = MagicMock()
+    parent.attach_mock(mock_feature_git.switch_detach, "switch_detach")
+    parent.attach_mock(mock_git.delete_branch, "delete_branch")
+
+    def git_factory(path):
+        return mock_feature_git if path == "/worktrees/feature" else MagicMock(spec=GitRepoIntegration)
+
+    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", side_effect=git_factory):
+        result = await SquashMerge().execute(mock_task, mock_git, feature_worktree_path="/worktrees/feature")
+
+    mock_feature_git.switch_detach.assert_called_once()
+    mock_git.delete_branch.assert_called_once_with(mock_task.branch_name, force=True)
+
+    # switch_detach must come before delete_branch in the call sequence
+    call_names = [c[0] for c in parent.mock_calls]
+    assert call_names.index("switch_detach") < call_names.index("delete_branch")
+    assert result.outcome == MergeOutcome.SUCCESS
+
+
+@pytest.mark.asyncio
+async def test_rebase_merge_detaches_feature_worktree_before_branch_delete(mock_task, mock_git):
+    """RebaseMerge detaches the feature worktree before delete_branch when worktree was used.
+
+    Regression test for the bug where checkout_branch inside RebaseMerge.execute re-attached
+    the branch to the feature worktree, causing 'git branch -D' to fail with
+    'cannot delete branch used by worktree'.
+    """
+    mock_task.codebase.merge_method = MergeMethod.REBASE
+
+    mock_feature_git = MagicMock(spec=GitRepoIntegration)
+    mock_feature_git.checkout_branch = AsyncMock()
+    mock_feature_git.rebase_onto = AsyncMock()
+    mock_feature_git.switch_detach = AsyncMock()
+
+    mock_base_git = MagicMock(spec=GitRepoIntegration)
+    mock_base_git.fast_forward_merge = AsyncMock(return_value="ff_sha")
+
+    mock_git.get_checked_out_location = AsyncMock(
+        side_effect=lambda branch: "/worktrees/main" if branch == mock_task.base_branch else None
+    )
+
+    parent = MagicMock()
+    parent.attach_mock(mock_feature_git.switch_detach, "switch_detach")
+    parent.attach_mock(mock_git.delete_branch, "delete_branch")
+
+    def git_factory(path):
+        if path == "/worktrees/feature":
+            return mock_feature_git
+        return mock_base_git
+
+    with patch("devboard.services.task_git.merge_strategy.GitRepoIntegration", side_effect=git_factory):
+        result = await RebaseMerge().execute(mock_task, mock_git, feature_worktree_path="/worktrees/feature")
+
+    mock_feature_git.switch_detach.assert_called_once()
+    mock_git.delete_branch.assert_called_once_with(mock_task.branch_name, force=True)
+
+    # switch_detach must come before delete_branch in the call sequence
+    call_names = [c[0] for c in parent.mock_calls]
+    assert call_names.index("switch_detach") < call_names.index("delete_branch")
     assert result.outcome == MergeOutcome.SUCCESS

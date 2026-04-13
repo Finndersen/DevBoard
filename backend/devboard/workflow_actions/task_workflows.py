@@ -139,7 +139,10 @@ Please briefly review these changes and note if any are relevant to the current 
 
     async def _run_direct_rebase(self) -> str | None:
         """Execute direct rebase for PLANNING state (no file changes expected)."""
-        rebase_result = await TaskGitService.rebase_task_branch(self.task)
+        async with self.workspace_service.allocate_workspace(self.task) as allocation:
+            async for _event in self.workspace_service.prepare_workspace(self.task, allocation.slot):
+                pass
+            rebase_result = await TaskGitService.rebase_task_branch(self.task)
 
         if rebase_result.outcome.value == "conflict":
             conflicted = ", ".join(rebase_result.conflicted_files or [])

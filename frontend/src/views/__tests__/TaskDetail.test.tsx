@@ -1,13 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { screen, waitFor, render } from '@testing-library/react'
+import { screen, waitFor, render, act } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { BrowserRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
+import { enableMapSet } from 'immer'
 import { server } from '../../test/setup'
 import { createMockProject, createMockTask, mockDocuments } from '../../test/utils'
 import { PendingMessagesProvider } from '../../contexts/PendingMessagesContext'
 import ConversationEventHandlerProvider from '../../components/chat/ConversationEventHandlerProvider'
 import TaskDetail from '../TaskDetail'
+import { useConversationStreamStore } from '../../stores/conversationStreamStore'
+import type { ConversationEvent } from '../../lib/api'
+
+enableMapSet()
 
 vi.mock('../../contexts/ViewContext', () => ({
   useViewContext: () => ({ viewId: 'test-view', viewType: 'task', entityId: '1' })
@@ -724,6 +729,104 @@ describe('TaskDetail', () => {
       // Verify checkbox is not present
       const checkbox = screen.queryByRole('checkbox', { name: /also delete git branch/i })
       expect(checkbox).not.toBeInTheDocument()
+    })
+  })
+
+  describe('implementation_step_started system event', () => {
+    const implementingTask = createMockTask({
+      id: 1,
+      project_id: 1,
+      title: 'Implementing Task',
+      status: 'Implementing',
+      conversation_id: 3,
+      implementation_plan_id: 1,
+    })
+
+    const mockPlan = {
+      id: 1,
+      task_id: 1,
+      overview: 'Do the work',
+      status: 'pending',
+      steps: [
+        {
+          id: 10,
+          step_number: 1,
+          title: 'Write the code',
+          type: 'code_change',
+          dependencies: [],
+          status: 'pending',
+          details: 'Write it well',
+          outcome: null,
+          conversation_id: null,
+          started_at: null,
+          completed_at: null,
+        },
+      ],
+    }
+
+    beforeEach(() => {
+      // Reset stream store to avoid cross-test pollution
+      useConversationStreamStore.setState({ activeStreams: new Map(), conversationMessages: new Map() })
+
+      server.use(
+        http.get('*/api/tasks/1', () => HttpResponse.json(implementingTask)),
+        http.get('*/api/tasks/1/implementation-plan', () => HttpResponse.json(mockPlan)),
+      )
+    })
+
+    it('shows Cancel and sub-agent buttons immediately when implementation_step_started event arrives', async () => {
+      const user = userEvent.setup()
+
+      let implementationPlanFetchCount = 0
+      server.use(
+        http.get('*/api/tasks/1/implementation-plan', () => {
+          implementationPlanFetchCount++
+          return HttpResponse.json(mockPlan)
+        }),
+      )
+
+      renderTaskDetail()
+
+      // Wait for task to load
+      await waitFor(() => {
+        expect(screen.getByText('Implementing Task')).toBeInTheDocument()
+      }, { timeout: 3000 })
+
+      // Click the Implementation Plan tab
+      const planTab = screen.getByText('Implementation Plan')
+      await user.click(planTab)
+
+      // Wait for step to be rendered
+      await waitFor(() => {
+        expect(screen.getByText('1. Write the code')).toBeInTheDocument()
+      }, { timeout: 3000 })
+
+      // Neither Cancel nor sub-agent button should be visible yet (step is pending)
+      expect(screen.queryByTitle('Cancel step')).not.toBeInTheDocument()
+      expect(screen.queryByTitle('View sub-agent conversation')).not.toBeInTheDocument()
+
+      const fetchCountBeforeEvent = implementationPlanFetchCount
+
+      // Inject IMPLEMENTATION_STEP_STARTED event for conversation_id 3 (task's conversation)
+      const stepStartedEvent: ConversationEvent = {
+        event_type: 'system',
+        sub_type: 'implementation_step_started',
+        data: { task_id: 1, step_number: 1, conversation_id: 42 },
+        timestamp: new Date().toISOString(),
+      } as ConversationEvent
+
+      await act(async () => {
+        useConversationStreamStore.getState().handleWebSocketEvent(3, stepStartedEvent)
+      })
+
+      // Cancel button and sub-agent button should now appear without a plan refetch
+      await waitFor(() => {
+        expect(screen.getByTitle('Cancel step')).toBeInTheDocument()
+        expect(screen.getByTitle('View sub-agent conversation')).toBeInTheDocument()
+      }, { timeout: 3000 })
+
+      // The plan was not refetched — buttons appeared via local state update
+      expect(implementationPlanFetchCount).toBe(fetchCountBeforeEvent)
     })
   })
 })

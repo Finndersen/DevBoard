@@ -156,6 +156,23 @@ class WorktreeSlotRepository(BaseRepository[WorktreeSlot]):
         self.db.flush()
         return slot
 
+    def clear_task_assignment(self, slot: WorktreeSlot) -> WorktreeSlot:
+        """Clear the task assignment from a slot without unlocking it.
+
+        Used to self-heal slots that were incorrectly assigned to a task
+        (e.g. main repo slot stickiness poisoned by a manual git checkout).
+
+        Args:
+            slot: The slot to clear
+
+        Returns:
+            Updated WorktreeSlot instance
+        """
+        slot.last_used_by_task = None
+
+        self.db.flush()
+        return slot
+
     def unlock_slot(self, slot: WorktreeSlot) -> WorktreeSlot:
         """Unlock a slot, making it available for reuse.
 

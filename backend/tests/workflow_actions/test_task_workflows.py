@@ -1,13 +1,18 @@
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from devboard.db.models.codebase import MergeMethod
 from devboard.db.models.implementation_plan import ImplementationPlan, ImplementationStep, ImplementationStepType
+from devboard.db.models.task import TaskStatus
 from devboard.integrations.types import FileDiff, GitLogEntry, StructuredDiff
+from devboard.services.task_git.types import BaseBranchChanges, RebaseOutcome, RebaseResult
+from devboard.services.workspace.types import AllocationResult
 from devboard.workflow_actions.task_workflows import (
     ApproveAndMergeAction,
     BeginImplementationAction,
+    RebaseTaskBranchAction,
     _get_task_changes_prompt_context,
 )
 
@@ -149,15 +154,21 @@ class TestApproveAndMergePrompt:
         assert "complete_task_with_local_merge" in prompt
 
 
-def _make_approve_and_merge_action(task) -> ApproveAndMergeAction:
-    return ApproveAndMergeAction(
+def _make_action(action_class, task, **kwargs):
+    return action_class(
         task=task,
         task_service=Mock(),
         conversation_repo=Mock(),
         agent_config_service=Mock(),
         document_repository=Mock(),
         integration_service=Mock(),
+        workspace_service=Mock(),
+        **kwargs,
     )
+
+
+def _make_approve_and_merge_action(task) -> ApproveAndMergeAction:
+    return _make_action(ApproveAndMergeAction, task)
 
 
 class TestApproveAndMergeActionRun:
@@ -220,14 +231,7 @@ class TestApproveAndMergeActionRun:
 
 
 def _make_begin_implementation_action(task) -> BeginImplementationAction:
-    return BeginImplementationAction(
-        task=task,
-        task_service=Mock(),
-        conversation_repo=Mock(),
-        agent_config_service=Mock(),
-        document_repository=Mock(),
-        integration_service=Mock(),
-    )
+    return _make_action(BeginImplementationAction, task)
 
 
 class TestBeginImplementationActionRun:
@@ -285,3 +289,127 @@ class TestBeginImplementationActionRun:
         assert result is not None
         assert "EXECUTION GRAPH:" not in result
         assert "The implementation plan has been approved" in result
+
+
+class TestRebaseTaskBranchAction:
+    @pytest.fixture
+    def mock_task(self):
+        task = Mock()
+        task.id = 1
+        task.branch_name = "feature/test"
+        task.base_branch = "main"
+        task.status = TaskStatus.PLANNING
+        task.last_used_worktree_slot = None
+        return task
+
+    @pytest.fixture
+    def mock_workspace_service(self):
+        """WorkspaceService stub that yields a mock AllocationResult."""
+        service = Mock()
+        slot = Mock()
+        slot.path = "/worktrees/slot-1"
+        allocation = AllocationResult(slot=slot, reused=False)
+
+        @asynccontextmanager
+        async def _allocate_workspace(task):
+            yield allocation
+
+        async def _prepare_workspace(task, slot):
+            return
+            yield  # make it an async generator
+
+        service.allocate_workspace = _allocate_workspace
+        service.prepare_workspace = _prepare_workspace
+        return service
+
+    def _make_action(self, task, workspace_service) -> RebaseTaskBranchAction:
+        return RebaseTaskBranchAction(
+            task=task,
+            task_service=Mock(),
+            conversation_repo=Mock(),
+            agent_config_service=Mock(),
+            document_repository=Mock(),
+            integration_service=Mock(),
+            workspace_service=workspace_service,
+        )
+
+    @pytest.mark.asyncio
+    async def test_planning_allocates_workspace_before_rebase(self, mock_task, mock_workspace_service):
+        """PLANNING state: workspace is allocated and prepared before calling rebase."""
+        action = self._make_action(mock_task, mock_workspace_service)
+
+        rebase_result = RebaseResult(outcome=RebaseOutcome.SUCCESS, slot_path="/worktrees/slot-1")
+        with patch(
+            "devboard.workflow_actions.task_workflows.TaskGitService.rebase_task_branch",
+            new_callable=AsyncMock,
+            return_value=rebase_result,
+        ):
+            result = await action.run()
+
+        assert result is None  # no base branch changes
+
+    @pytest.mark.asyncio
+    async def test_planning_raises_on_conflict(self, mock_task, mock_workspace_service):
+        """PLANNING state: conflict result raises ValueError."""
+        action = self._make_action(mock_task, mock_workspace_service)
+
+        rebase_result = RebaseResult(
+            outcome=RebaseOutcome.CONFLICT,
+            slot_path="/worktrees/slot-1",
+            conflicted_files=["src/api.py", "src/models.py"],
+        )
+        with (
+            patch(
+                "devboard.workflow_actions.task_workflows.TaskGitService.rebase_task_branch",
+                new_callable=AsyncMock,
+                return_value=rebase_result,
+            ),
+            pytest.raises(ValueError, match="conflicts"),
+        ):
+            await action.run()
+
+    @pytest.mark.asyncio
+    async def test_planning_returns_base_changes_prompt(self, mock_task, mock_workspace_service):
+        """PLANNING state: when base branch changed, returns a prompt summarising the changes."""
+        action = self._make_action(mock_task, mock_workspace_service)
+
+        base_changes = Mock(spec=BaseBranchChanges)
+        base_changes.format_summary.return_value = "3 commits changed 5 files"
+        rebase_result = RebaseResult(
+            outcome=RebaseOutcome.SUCCESS,
+            slot_path="/worktrees/slot-1",
+            base_branch_changes=base_changes,
+        )
+        with patch(
+            "devboard.workflow_actions.task_workflows.TaskGitService.rebase_task_branch",
+            new_callable=AsyncMock,
+            return_value=rebase_result,
+        ):
+            result = await action.run()
+
+        assert result is not None
+        assert "3 commits changed 5 files" in result
+
+    @pytest.mark.asyncio
+    async def test_implementing_returns_prompt_without_workspace_allocation(self, mock_task, mock_workspace_service):
+        """IMPLEMENTING state: returns agent prompt directly, never calls allocate_workspace."""
+        mock_task.status = TaskStatus.IMPLEMENTING
+        action = self._make_action(mock_task, mock_workspace_service)
+
+        # Spy on the context manager — if called, the test should fail
+        original = mock_workspace_service.allocate_workspace
+        called = []
+
+        @asynccontextmanager
+        async def spy(task):
+            called.append(task)
+            async with original(task) as alloc:
+                yield alloc
+
+        mock_workspace_service.allocate_workspace = spy
+
+        result = await action.run()
+
+        assert called == [], "allocate_workspace should not be called in IMPLEMENTING state"
+        assert result is not None
+        assert "rebase_task_branch" in result

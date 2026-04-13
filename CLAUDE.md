@@ -27,9 +27,10 @@ We are working to develop an application as described in @docs/INDEX.md
 
 ## Testing
 - Tests mirror source structure (`devboard/agents/base_agent.py` → `tests/agents/test_base_agent.py`)
-- Use fixtures from `backend/devboard/tests/conftest.py`, `@pytest.mark.asyncio`, TestClient with mocked dependencies
+- Use fixtures from `backend/tests/conftest.py`, `@pytest.mark.asyncio`, TestClient with mocked dependencies
 - Only mock data-layer repositories or external integrations — never Service classes or methods
 - Run: `uv run --frozen --active pytest -q --tb=short 2>&1` (never filter with grep)
+- If failure output is truncated, pipe to a temp file and read from the start: `uv run --frozen --active pytest -q --tb=short > /tmp/pytest.txt 2>&1; head -100 /tmp/pytest.txt`
 
 ## Development Process
 - `make lint` — auto-fix formatting and lint issues with ruff (~1-2s, run frequently during iteration)

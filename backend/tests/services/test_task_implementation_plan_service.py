@@ -7,6 +7,41 @@ from devboard.db.repositories.implementation_plan import TaskImplementationPlanR
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 
 
+class TestAddStepNumbering:
+    """Regression tests for duplicate step number bug.
+
+    When add_step is called multiple times within the same SQLAlchemy session,
+    the in-memory plan.steps relationship may be stale, causing both calls to
+    compute the same new step number. The fix queries max step_number from the
+    DB directly.
+    """
+
+    @pytest.fixture
+    def plan_repo(self, db_session):
+        return TaskImplementationPlanRepository(db_session)
+
+    @pytest.fixture
+    def plan_service(self, plan_repo):
+        return TaskImplementationPlanService(plan_repo)
+
+    @pytest.fixture
+    def plan(self, test_task, plan_repo, db_session):
+        plan = plan_repo.create(task_id=test_task.id, overview=None)
+        plan_repo.create_steps(
+            plan.id,
+            [{"title": "Step 1", "type": "code_change", "dependencies": [], "details": "Initial step"}],
+        )
+        db_session.flush()
+        return plan
+
+    def test_add_step_twice_produces_unique_step_numbers(self, plan_service, plan):
+        step_a = plan_service.add_step(plan, title="Step A", type="code_change", details="A")
+        step_b = plan_service.add_step(plan, title="Step B", type="code_change", details="B")
+
+        assert step_a.step_number != step_b.step_number
+        assert sorted([step_a.step_number, step_b.step_number]) == [2, 3]
+
+
 class TestSetStepStatusTimestamps:
     @pytest.fixture
     def plan_repo(self, db_session):

@@ -120,35 +120,93 @@ async def test_allocate_for_task_branch_already_checked_out_in_worktree(
 
 
 @pytest.mark.asyncio
-async def test_allocate_for_task_branch_in_main_repo_ignores_exclusion(
+async def test_allocate_for_task_branch_in_main_repo_unassigned_releases_and_falls_through(
     service, mock_repos, sample_task, sample_codebase
 ):
-    """Test that branch-location strategy uses main repo even when excluded from pool."""
+    """Branch is in main repo but slot is not assigned to this task → release and use worktree.
+
+    This is the defense-in-depth case: the branch ended up in main via a manual git checkout
+    or an old bug, not via checkout_task_to_main_repo. The allocator should release the branch
+    and use a proper worktree slot instead.
+    """
     worktree_slot_repo, task_repo, _ = mock_repos
 
-    # Setup: max_worktrees > 0 (main repo excluded from automatic allocation)
+    # Setup: max_worktrees > 0 (worktrees configured)
     sample_codebase.max_worktrees = 2
     sample_task.codebase = sample_codebase
 
-    # Setup: Main repo slot with branch already checked out
+    # Main repo slot with branch checked out, but NOT assigned to this task
     main_slot = MagicMock(spec=WorktreeSlot)
     main_slot.id = 1
     main_slot.path = sample_codebase.local_path
     main_slot.is_main_repo = True
     main_slot.locked = False
-    main_slot.last_used_by_task_id = 999  # Different task
+    main_slot.last_used_by_task_id = 999  # Different task — not this task
+    main_slot.last_used_at = datetime.datetime.now(datetime.UTC)
+
+    # A proper worktree slot to fall through to via LRU
+    worktree_slot = MagicMock(spec=WorktreeSlot)
+    worktree_slot.id = 2
+    worktree_slot.path = "/projects/test-repo.worktree-1"
+    worktree_slot.is_main_repo = False
+    worktree_slot.locked = False
+    worktree_slot.last_used_by_task_id = None
+    worktree_slot.last_used_at = datetime.datetime.now(datetime.UTC) - timedelta(hours=1)
+
+    worktree_slot_repo.get_by_codebase.return_value = [main_slot, worktree_slot]
+    worktree_slot_repo.lock_slot.return_value = worktree_slot
+
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
+        mock_git.return_value.get_checked_out_location = AsyncMock(return_value=sample_codebase.local_path)
+        mock_git.return_value.release_branch_from_worktree = AsyncMock()
+
+        with patch.object(service._pool_manager, "slot_has_uncommitted_changes", AsyncMock(return_value=False)):
+            result = await service._pool_manager.allocate_for_task(sample_task)
+
+    # Must release the branch from main (exclude_main_repo=False)
+    mock_git.return_value.release_branch_from_worktree.assert_called_once_with(
+        sample_task.branch_name, exclude_main_repo=False
+    )
+    # Worktree slot must be used, NOT the main repo slot
+    assert result == AllocationResult(slot=worktree_slot, reused=False)
+    worktree_slot_repo.lock_slot.assert_called_once_with(worktree_slot, sample_task)
+
+
+@pytest.mark.asyncio
+async def test_allocate_for_task_branch_in_main_repo_assigned_to_task_uses_main(
+    service, mock_repos, sample_task, sample_codebase
+):
+    """Branch is in main repo AND slot is assigned to this task → use main slot.
+
+    This is the checkout_task_to_main_repo flow: the task was intentionally
+    moved to the main repo. The allocator should honour that.
+    """
+    worktree_slot_repo, task_repo, _ = mock_repos
+
+    # Setup: max_worktrees > 0 (worktrees configured, but task is in main intentionally)
+    sample_codebase.max_worktrees = 2
+    sample_task.codebase = sample_codebase
+
+    main_slot = MagicMock(spec=WorktreeSlot)
+    main_slot.id = 1
+    main_slot.path = sample_codebase.local_path
+    main_slot.is_main_repo = True
+    main_slot.locked = False
+    main_slot.last_used_by_task_id = sample_task.id  # Intentionally assigned
     main_slot.last_used_at = datetime.datetime.now(datetime.UTC)
 
     worktree_slot_repo.get_by_codebase.return_value = [main_slot]
     worktree_slot_repo.lock_slot.return_value = main_slot
 
     with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git:
-        # Branch is checked out in main repo
         mock_git.return_value.get_checked_out_location = AsyncMock(return_value=sample_codebase.local_path)
+        mock_git.return_value.release_branch_from_worktree = AsyncMock()
 
         result = await service._pool_manager.allocate_for_task(sample_task)
 
-    # Verify: Main repo was used despite exclusion (branch is there)
+    # Must NOT release from main
+    mock_git.return_value.release_branch_from_worktree.assert_not_called()
+    # Main slot is returned
     assert result == AllocationResult(slot=main_slot, reused=True)
     worktree_slot_repo.lock_slot.assert_called_once_with(main_slot, sample_task)
 

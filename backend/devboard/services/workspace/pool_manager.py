@@ -142,6 +142,19 @@ class WorktreePoolManager:
             for slot in all_slots_sorted:
                 normalized_slot_path = str(Path(slot.path).resolve())
                 if normalized_slot_path == normalized_branch_location:
+                    if slot.is_main_repo and not include_main_in_pool and slot.last_used_by_task_id != task.id:
+                        # Branch has ended up in the main repo but was NOT intentionally placed
+                        # there by this task (e.g. manual git checkout, or stale state from an
+                        # old bug). Do NOT return this slot — detach HEAD so the allocator can
+                        # use a proper worktree slot instead.
+                        logfire.warn(
+                            f"Branch {task.branch_name} is checked out in main repo "
+                            f"but codebase {task.codebase.id} is not in main-repo-only mode "
+                            f"and slot is not assigned to task {task.id}. Releasing branch."
+                        )
+                        await git.release_branch_from_worktree(task.branch_name, exclude_main_repo=False)
+                        break
+
                     if not slot.locked:
                         logfire.info(
                             f"Using slot {slot.id} for task {task.id} - branch {task.branch_name} already checked out there"
@@ -158,13 +171,14 @@ class WorktreePoolManager:
                             f"Branch '{task.branch_name}' is already in use by task {slot.last_used_by_task_id}"
                         )
 
-            # Branch is checked out in a worktree with no matching DB slot (orphaned worktree).
-            # Release the branch so it can be checked out in a proper slot.
-            logfire.warn(
-                f"Branch {task.branch_name} is checked out in orphaned worktree at "
-                f"{branch_location} (no matching DB slot). Releasing branch."
-            )
-            await git.release_branch_from_worktree(task.branch_name)
+            else:
+                # Branch is checked out in a worktree with no matching DB slot (orphaned worktree).
+                # Release the branch so it can be checked out in a proper slot.
+                logfire.warn(
+                    f"Branch {task.branch_name} is checked out in orphaned worktree at "
+                    f"{branch_location} (no matching DB slot). Releasing branch."
+                )
+                await git.release_branch_from_worktree(task.branch_name)
 
         # PRIORITY 2: Sticky slot and candidate pool in single pass
         sticky_slot: WorktreeSlot | None = None

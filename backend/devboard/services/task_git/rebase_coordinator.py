@@ -24,13 +24,17 @@ class TaskRebaseCoordinator:
         - On success: applies stashed changes (if any), returns SUCCESS outcome
 
         Raises:
-            ValueError: If task has no branch name configured
+            ValueError: If task has no branch name configured or no workspace allocated
         """
         if not task.branch_name:
             raise ValueError(f"Task {task.id} has no branch name configured")
 
-        last_used_slot = task.last_used_worktree_slot
-        repo_path = last_used_slot.path if last_used_slot else task.codebase.local_path
+        slot = task.last_used_worktree_slot
+        if slot is None:
+            raise ValueError(
+                f"Task {task.id} has no workspace allocated. Allocate a workspace before calling rebase_task_branch."
+            )
+        repo_path = slot.path
 
         git = GitRepoIntegration(repo_path)
         stash_message = f"{cls.REBASE_STASH_MESSAGE_PREFIX} {task.id}"

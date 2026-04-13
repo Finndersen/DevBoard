@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
 from devboard.db.models.implementation_plan import (
@@ -65,6 +65,13 @@ class TaskImplementationPlanRepository(BaseRepository[ImplementationPlan]):
             steps.append(step)
         self.db.flush()
         return steps
+
+    def get_max_step_number(self, plan_id: int) -> int | None:
+        """Return the highest step_number in the plan, or None if no steps exist."""
+        stmt = select(func.max(ImplementationStep.step_number)).where(
+            ImplementationStep.implementation_plan_id == plan_id
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
 
     def get_step_by_number(self, plan_id: int, step_number: int) -> ImplementationStep | None:
         stmt = select(ImplementationStep).where(

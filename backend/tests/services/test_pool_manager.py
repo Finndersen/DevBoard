@@ -258,3 +258,107 @@ def test_bootstrap_returns_existing_main_slot(pool_manager, worktree_slot_repo, 
 
     assert result is existing
     worktree_slot_repo.create.assert_not_called()
+
+
+# =============================================================================
+# Allocator hardening: branch checked out in main repo
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_allocate_does_not_return_main_repo_slot_when_worktrees_configured(
+    pool_manager, worktree_slot_repo, sample_task
+):
+    """Branch is in main repo but max_worktrees > 0 → release from main, fall through to LRU."""
+    main_path = "/projects/test-repo"
+    sample_task.codebase.max_worktrees = 2  # not main-repo-only mode
+
+    main_slot = _make_slot(slot_id=1, path=main_path, locked=False, last_used_by_task_id=None)
+    main_slot.is_main_repo = True
+    worktree_slot = _make_slot(
+        slot_id=2,
+        path="/projects/test-repo.worktree-1",
+        locked=False,
+        last_used_by_task_id=None,
+    )
+    worktree_slot_repo.get_by_codebase.return_value = [main_slot, worktree_slot]
+    worktree_slot_repo.get_all_locked.return_value = []
+    worktree_slot_repo.lock_slot.return_value = worktree_slot
+
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git_cls:
+        mock_git = mock_git_cls.return_value
+        mock_git.get_checked_out_location = AsyncMock(return_value=main_path)
+        mock_git.release_branch_from_worktree = AsyncMock()
+        with patch.object(pool_manager, "slot_has_uncommitted_changes", AsyncMock(return_value=False)):
+            result = await pool_manager.allocate_for_task(sample_task)
+
+    # Must have released the branch from the main repo (exclude_main_repo=False)
+    mock_git.release_branch_from_worktree.assert_called_once_with(sample_task.branch_name, exclude_main_repo=False)
+    # Must NOT lock the main repo slot
+    assert result.slot is worktree_slot
+    worktree_slot_repo.lock_slot.assert_called_once_with(worktree_slot, sample_task)
+
+
+@pytest.mark.asyncio
+async def test_allocate_returns_main_repo_slot_in_main_only_mode(pool_manager, worktree_slot_repo, sample_task):
+    """Branch is in main repo and max_worktrees == 0 → main slot is valid, return it."""
+    main_path = "/projects/test-repo"
+    sample_task.codebase.max_worktrees = 0  # main-repo-only mode
+
+    main_slot = _make_slot(slot_id=1, path=main_path, locked=False, last_used_by_task_id=None)
+    main_slot.is_main_repo = True
+    worktree_slot_repo.get_by_codebase.return_value = [main_slot]
+    worktree_slot_repo.get_all_locked.return_value = []
+    worktree_slot_repo.lock_slot.return_value = main_slot
+
+    # bootstrap_main_repo_slot is called for include_main_in_pool=True
+    worktree_slot_repo.get_main_slot_for_codebase.return_value = main_slot
+
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git_cls:
+        mock_git = mock_git_cls.return_value
+        mock_git.get_checked_out_location = AsyncMock(return_value=main_path)
+        mock_git.release_branch_from_worktree = AsyncMock()
+
+        result = await pool_manager.allocate_for_task(sample_task)
+
+    # Main slot should be returned without releasing
+    mock_git.release_branch_from_worktree.assert_not_called()
+    assert result.slot is main_slot
+
+
+@pytest.mark.asyncio
+async def test_main_repo_branch_unassigned_released_and_falls_through_to_lru(
+    pool_manager, worktree_slot_repo, sample_task
+):
+    """Branch in main repo, slot NOT assigned to current task → release, use LRU worktree slot."""
+    main_path = "/projects/test-repo"
+    sample_task.codebase.max_worktrees = 2  # not main-repo-only mode
+
+    main_slot = _make_slot(
+        slot_id=1,
+        path=main_path,
+        locked=False,
+        last_used_by_task_id=999,  # different task
+    )
+    main_slot.is_main_repo = True
+    worktree_slot = _make_slot(
+        slot_id=2,
+        path="/projects/test-repo.worktree-1",
+        locked=False,
+        last_used_by_task_id=None,
+    )
+    worktree_slot_repo.get_by_codebase.return_value = [main_slot, worktree_slot]
+    worktree_slot_repo.get_all_locked.return_value = []
+    worktree_slot_repo.lock_slot.return_value = worktree_slot
+
+    with patch("devboard.services.workspace.pool_manager.GitRepoIntegration") as mock_git_cls:
+        mock_git = mock_git_cls.return_value
+        mock_git.get_checked_out_location = AsyncMock(return_value=main_path)
+        mock_git.release_branch_from_worktree = AsyncMock()
+        with patch.object(pool_manager, "slot_has_uncommitted_changes", AsyncMock(return_value=False)):
+            result = await pool_manager.allocate_for_task(sample_task)
+
+    # Branch released from main (exclude_main_repo=False), LRU worktree used
+    mock_git.release_branch_from_worktree.assert_called_once_with(sample_task.branch_name, exclude_main_repo=False)
+    assert result.slot is worktree_slot
+    worktree_slot_repo.lock_slot.assert_called_once_with(worktree_slot, sample_task)

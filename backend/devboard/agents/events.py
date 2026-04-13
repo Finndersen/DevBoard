@@ -55,6 +55,7 @@ class SystemEventType(StrEnum):
     API_ERROR_RETRY = "api_error_retry"
     COMPACTING_CONVERSATION = "compacting_conversation"
     RATE_LIMIT = "rate_limit"
+    IMPLEMENTATION_STEP_STARTED = "implementation_step_started"
 
 
 class TextMessage(BaseModel):
@@ -150,6 +151,15 @@ class SystemEvent(BaseModel):
             "conversation_id": 100,
             "updated_fields": {"external_session_id": "abc123"}
         }
+
+    Example (IMPLEMENTATION_STEP_STARTED):
+        {
+            "task_id": 123,
+            "step_number": 2,
+            "conversation_id": 456
+        }
+        Broadcast on the parent conversation once the step has been assigned a sub-agent
+        conversation and is ready to execute.
     """
 
     event_type: Literal["system"] = "system"

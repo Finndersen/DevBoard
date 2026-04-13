@@ -370,14 +370,16 @@ function TaskDetail({ id }: TaskDetailProps) {
     activeTab,
   })
 
-  const markStepRunning = useCallback((stepNumber: number) => {
+  const markStepRunning = useCallback((stepNumber: number, conversationId: number) => {
     setImplementationPlan(prev => {
       if (!prev) return prev
       return {
         ...prev,
         status: 'executing',
         steps: prev.steps.map(s =>
-          s.step_number === stepNumber ? { ...s, status: 'running' as const, started_at: new Date().toISOString() } : s
+          s.step_number === stepNumber
+            ? { ...s, status: 'running' as const, started_at: new Date().toISOString(), conversation_id: conversationId }
+            : s
         ),
       }
     })

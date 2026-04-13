@@ -12,7 +12,6 @@ from devboard.agents.tools.implementation_plan_tools import (
     create_edit_implementation_step_details_tool,
     create_edit_implementation_step_tool,
     create_read_implementation_step_details_tool,
-    create_remove_implementation_step_tool,
     create_set_implementation_plan_steps_tool,
 )
 from devboard.agents.tools.task_tools import create_edit_own_task_tool
@@ -67,7 +66,7 @@ Each step should be self-contained with enough detail for a sub-agent to execute
   - `validation` — run the full test suite and fix any failures. Lint/format/typecheck should already be clean from per-step inline checks, so also run them as a safety net to catch any cross-step issues, but the primary focus is test failures and integration issues. Not for writing new tests.
   - `code_review` — optional: review the git diff for correctness, quality, and alignment with the spec; produces findings for the coordination agent to act on (does not make changes directly). Include for non-trivial changes.
 - **dependencies**: List of step numbers (1-indexed) that must complete first
-- **details**: Concise markdown instructions covering what to build, key constraints, and any important "how" decisions. Trust the implementation agent to figure out routine implementation — only include approach details where a capable developer would otherwise make the wrong call or where a specific approach was agreed with the user.
+- **details**: What to build, key constraints, and non-obvious "how" decisions. Scale length to complexity — details should never exceed the tokens of the actual code changes they describe. Include only what resolves genuine ambiguity; omit anything a capable developer would infer from reading the referenced files. Always use full relative paths (e.g. `backend/devboard/services/foo.py`) for every referenced file, class, or function — never just a filename or symbol name alone.
 
 **Designing Effective Steps:**
 - Each step should represent a logical, independently deployable unit of work
@@ -82,16 +81,15 @@ Each step should be self-contained with enough detail for a sub-agent to execute
 3. (Optional) One `code_review` step depending on testing — for non-trivial changes; reviews the overall diff and fixes any issues
 
 **Step Details Should Include:**
-- Specific files/components to modify or create
-- Implementation approach where it's non-obvious or was explicitly agreed with the user during planning
+- Files to modify or create (full relative paths) and line numbers for key reference points
+- Implementation approach only where non-obvious or explicitly agreed with the user
 - Design decisions and constraints not already in the Task Specification
 - Testing scenarios to cover (what cases matter) — not test class or method names
 
 **Step Details Should Exclude:**
 - Content already in the Task Specification — reference it rather than restating
 - Full code snippets, function signatures, or parameter lists
-- Exhaustive step-by-step walkthroughs of routine implementation a capable developer would derive from context
-- Test class/method names or test structure — describe what to test, not how to organise it
+- Anything a capable developer would infer from reading the referenced files
 
 **Reviewing Existing Steps:**
 When modifying an existing plan, use `read_implementation_step_details` to review the full details of existing steps before making changes. This ensures edits are informed by the current step content.
@@ -180,7 +178,6 @@ class TaskPlanningAgentRole(TaskAgentRoleBase):
                 create_add_implementation_step_tool(self.task, self.plan_service),
                 create_edit_implementation_step_tool(self.task, self.plan_service),
                 create_edit_implementation_step_details_tool(self.task, self.plan_service),
-                create_remove_implementation_step_tool(self.task, self.plan_service),
                 create_edit_implementation_plan_overview_tool(self.task, self.plan_service),
                 create_read_implementation_step_details_tool(self.task, self.plan_service),
             ]

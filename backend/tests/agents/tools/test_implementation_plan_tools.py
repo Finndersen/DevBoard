@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from pydantic_ai import ModelRetry
 
+from devboard.agents.events import SystemEventType
 from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.tools.implementation_plan_tools import (
     create_execute_implementation_step_tool,
@@ -289,3 +290,165 @@ class TestExecuteImplementationStepConversationFlow:
         mock_plan_service.set_step_status.assert_any_call(
             step, status=ImplementationStepStatus.INTERRUPTED, outcome="Step interrupted by user."
         )
+
+
+class TestExecuteImplementationStepBroadcastEvent:
+    """Tests that IMPLEMENTATION_STEP_STARTED is emitted via execution_manager.broadcast_event."""
+
+    PARENT_CONV_ID = 10
+
+    @pytest.fixture
+    def mock_execution_manager(self) -> Mock:
+        mgr = Mock()
+        mgr.broadcast_event = AsyncMock()
+        return mgr
+
+    @pytest.fixture
+    def execute_step_tool_with_parent(
+        self,
+        mock_task: Mock,
+        mock_plan_service: Mock,
+        mock_execution_manager: Mock,
+    ) -> Mock:
+        mock_task.id = 5
+        mock_task.implementation_plan_structured = Mock(spec=ImplementationPlan)
+        return create_execute_implementation_step_tool(
+            task=mock_task,
+            plan_service=mock_plan_service,
+            agent_config_service=Mock(),
+            conversation_repo=Mock(),
+            parent_conversation_id=self.PARENT_CONV_ID,
+            working_dir="/test/working_dir",
+            execution_manager=mock_execution_manager,
+            task_git_service=Mock(),
+        )
+
+    def _make_step(self, conversation_id: int | None = None) -> Mock:
+        step = Mock(spec=ImplementationStep)
+        step.status = ImplementationStepStatus.PENDING
+        step.step_number = 1
+        step.type = ImplementationStepType.CODE_CHANGE
+        step.title = "Test step"
+        step.details = "Do the thing"
+        step.conversation_id = conversation_id
+        step.dependencies = []
+        return step
+
+    @pytest.mark.asyncio
+    async def test_new_step_emits_implementation_step_started(
+        self,
+        execute_step_tool_with_parent: Mock,
+        mock_plan_service: Mock,
+        mock_execution_manager: Mock,
+        mock_task: Mock,
+    ):
+        """IMPLEMENTATION_STEP_STARTED is broadcast on parent_conversation_id for a new step."""
+        step = self._make_step()
+        mock_plan_service.get_step_by_number.return_value = step
+
+        mock_conversation = Mock()
+        mock_conversation.id = 42
+        mock_sub_agent_result = Mock()
+        mock_sub_agent_result.result = "Done"
+        mock_sub_agent_result.conversation_id = 42
+        mock_execution_manager.run_sub_agent_execution = AsyncMock(return_value=mock_sub_agent_result)
+
+        with patch(
+            "devboard.agents.tools.implementation_plan_tools.create_sub_agent_conversation",
+            return_value=mock_conversation,
+        ):
+            await execute_step_tool_with_parent.function(step_number=1)
+
+        mock_execution_manager.broadcast_event.assert_awaited_once()
+        broadcast_conv_id, broadcast_event = mock_execution_manager.broadcast_event.call_args.args
+        assert broadcast_conv_id == self.PARENT_CONV_ID
+        assert broadcast_event.sub_type == SystemEventType.IMPLEMENTATION_STEP_STARTED
+        assert broadcast_event.data == {"task_id": mock_task.id, "step_number": 1, "conversation_id": 42}
+
+    @pytest.mark.asyncio
+    async def test_resuming_step_emits_implementation_step_started(
+        self,
+        execute_step_tool_with_parent: Mock,
+        mock_plan_service: Mock,
+        mock_execution_manager: Mock,
+        mock_task: Mock,
+    ):
+        """IMPLEMENTATION_STEP_STARTED is broadcast on parent_conversation_id when resuming an existing step."""
+        existing_conv = Mock()
+        existing_conv.id = 99
+        step = self._make_step(conversation_id=99)
+        step.status = ImplementationStepStatus.FAILED
+        mock_plan_service.get_step_by_number.return_value = step
+
+        # Wire conversation_repo to return the existing conversation
+        # We need to reach the conversation_repo inside the tool's closure
+        # The tool was created with Mock() for conversation_repo; set up get_by_id on mock_plan_service's repo
+        # Actually the conversation_repo is a separate Mock passed to create_execute_implementation_step_tool
+        # We need to inject it — easiest is to re-create the tool with a proper mock_conversation_repo
+        mock_conversation_repo = Mock()
+        mock_conversation_repo.get_by_id.return_value = existing_conv
+
+        tool_with_repo = create_execute_implementation_step_tool(
+            task=mock_task,
+            plan_service=mock_plan_service,
+            agent_config_service=Mock(),
+            conversation_repo=mock_conversation_repo,
+            parent_conversation_id=self.PARENT_CONV_ID,
+            working_dir="/test/working_dir",
+            execution_manager=mock_execution_manager,
+            task_git_service=Mock(),
+        )
+
+        mock_sub_agent_result = Mock()
+        mock_sub_agent_result.result = "Resumed"
+        mock_sub_agent_result.conversation_id = 99
+        mock_execution_manager.run_sub_agent_execution = AsyncMock(return_value=mock_sub_agent_result)
+
+        await tool_with_repo.function(step_number=1)
+
+        mock_execution_manager.broadcast_event.assert_awaited_once()
+        broadcast_conv_id, broadcast_event = mock_execution_manager.broadcast_event.call_args.args
+        assert broadcast_conv_id == self.PARENT_CONV_ID
+        assert broadcast_event.sub_type == SystemEventType.IMPLEMENTATION_STEP_STARTED
+        assert broadcast_event.data == {"task_id": mock_task.id, "step_number": 1, "conversation_id": 99}
+
+    @pytest.mark.asyncio
+    async def test_no_event_when_no_parent_conversation(
+        self,
+        mock_task: Mock,
+        mock_plan_service: Mock,
+    ):
+        """No broadcast_event call when parent_conversation_id is None."""
+        mock_task.id = 5
+        mock_task.implementation_plan_structured = Mock(spec=ImplementationPlan)
+        mock_execution_manager = Mock()
+        mock_execution_manager.broadcast_event = AsyncMock()
+
+        tool = create_execute_implementation_step_tool(
+            task=mock_task,
+            plan_service=mock_plan_service,
+            agent_config_service=Mock(),
+            conversation_repo=Mock(),
+            parent_conversation_id=None,
+            working_dir="/test/working_dir",
+            execution_manager=mock_execution_manager,
+            task_git_service=Mock(),
+        )
+
+        step = self._make_step()
+        mock_plan_service.get_step_by_number.return_value = step
+
+        mock_conversation = Mock()
+        mock_conversation.id = 7
+        mock_sub_agent_result = Mock()
+        mock_sub_agent_result.result = "Done"
+        mock_sub_agent_result.conversation_id = 7
+        mock_execution_manager.run_sub_agent_execution = AsyncMock(return_value=mock_sub_agent_result)
+
+        with patch(
+            "devboard.agents.tools.implementation_plan_tools.create_sub_agent_conversation",
+            return_value=mock_conversation,
+        ):
+            await tool.function(step_number=1)
+
+        mock_execution_manager.broadcast_event.assert_not_awaited()

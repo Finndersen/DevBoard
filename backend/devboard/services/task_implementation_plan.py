@@ -59,7 +59,10 @@ class TaskImplementationPlanService:
             if dep not in existing_numbers:
                 raise ValueError(f"Dependency step {dep} does not exist")
 
-        new_number = max(existing_numbers, default=0) + 1
+        # Query the DB directly rather than relying on the in-memory relationship,
+        # which may be stale if add_step is called multiple times in the same session.
+        max_number = self.plan_repo.get_max_step_number(plan.id)
+        new_number = (max_number or 0) + 1
 
         step = ImplementationStep(
             implementation_plan_id=plan.id,

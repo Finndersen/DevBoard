@@ -166,10 +166,6 @@ const StepCard = memo(function StepCard({ step, taskId, onStepUpdated }: StepCar
             </button>
           )}
           <StepDuration step={step} />
-          <StatusBadge variant={typeConfig.variant} size="sm">
-            <typeConfig.icon className="w-3 h-3 mr-1" />
-            {typeConfig.label}
-          </StatusBadge>
           {step.conversation_id && (
             <button
               type="button"
@@ -180,6 +176,10 @@ const StepCard = memo(function StepCard({ step, taskId, onStepUpdated }: StepCar
               <ChatBubbleLeftRightIcon className="w-4 h-4" />
             </button>
           )}
+          <StatusBadge variant={typeConfig.variant} size="sm">
+            <typeConfig.icon className="w-3 h-3 mr-1" />
+            {typeConfig.label}
+          </StatusBadge>
         </div>
       </div>
 

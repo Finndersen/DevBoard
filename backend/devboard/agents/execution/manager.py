@@ -209,6 +209,14 @@ class ConversationExecutionManager:
             else:
                 self._executions.pop(conversation_id, None)
 
+    async def broadcast_event(
+        self,
+        conversation_id: int,
+        event: ConversationEvent,
+    ) -> None:
+        """Broadcast a ConversationEvent on the given conversation's WebSocket stream."""
+        await self.broadcast_queue.put((conversation_id, event))
+
     def request_interrupt(self, conversation_id: int) -> bool:
         """Request interrupt for the active execution.
 

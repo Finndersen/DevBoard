@@ -93,8 +93,8 @@ class TestTaskPlanningRoleWithSpec:
 
         # Should have list_tasks, view_task_details, create_task, investigate_codebase (common),
         # plus view_codebase_details, update_codebase (codebase tools),
-        # plus edit_task (own task), edit for spec, and 7 structured plan tools
-        assert len(tools) == 15
+        # plus edit_task (own task), edit for spec, and 6 structured plan tools
+        assert len(tools) == 14
         tool_names = [tool.name for tool in tools]
 
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
@@ -109,7 +109,6 @@ class TestTaskPlanningRoleWithSpec:
         assert "add_implementation_step" in tool_names
         assert "edit_implementation_step" in tool_names
         assert "edit_implementation_step_details" in tool_names
-        assert "remove_implementation_step" in tool_names
         assert "edit_implementation_plan_overview" in tool_names
         assert "read_implementation_step_details" in tool_names
 
@@ -190,8 +189,8 @@ class TestTaskPlanningRoleWithPlan:
 
         # Should have: list_tasks, view_task_details, create_task, investigate_codebase (common),
         # plus view_codebase_details, update_codebase (codebase tools),
-        # plus edit_task (own task), edit for spec, and 7 structured plan tools
-        assert len(tools) == 15
+        # plus edit_task (own task), edit for spec, and 6 structured plan tools
+        assert len(tools) == 14
 
         tool_names = [tool.name for tool in tools]
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
@@ -199,7 +198,6 @@ class TestTaskPlanningRoleWithPlan:
         assert "add_implementation_step" in tool_names
         assert "edit_implementation_step" in tool_names
         assert "edit_implementation_step_details" in tool_names
-        assert "remove_implementation_step" in tool_names
         assert "edit_implementation_plan_overview" in tool_names
         assert "read_implementation_step_details" in tool_names
         assert "investigate_codebase" in tool_names

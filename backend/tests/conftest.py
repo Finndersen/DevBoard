@@ -45,7 +45,6 @@ def db_engine() -> Generator[Engine, None, None]:
     """
     yield create_engine(
         "sqlite:///:memory:",
-        echo=True,
         connect_args={
             "check_same_thread": False,
         },

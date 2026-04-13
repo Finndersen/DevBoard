@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 from typing import TYPE_CHECKING, Literal
 
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 from pydantic_ai import ModelRetry, Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
+from devboard.agents.events import SystemEvent, SystemEventType
 from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.roles import AgentRoleType
 from devboard.agents.roles.code_review import CodeReviewAgentRole
@@ -52,6 +54,10 @@ def create_set_implementation_plan_steps_tool(
         Each step is a self-contained unit of work that can be executed by a sub-agent.
         Steps are automatically numbered from their position in the list (1-indexed).
         Dependencies reference step numbers (positions) of steps that must complete first.
+
+        Use this tool both for initial plan creation AND for restructuring an existing plan
+        (e.g. reordering steps, removing a step, inserting a step in the middle). It replaces
+        the entire plan atomically, so pass the full desired set of steps each time.
 
         Args:
             steps: Ordered list of implementation steps. Each step has:
@@ -156,37 +162,6 @@ def create_edit_implementation_step_tool(
     return Tool(
         function=edit_implementation_step,
         name="edit_implementation_step",
-        requires_approval=False,
-        takes_ctx=False,
-    )
-
-
-def create_remove_implementation_step_tool(
-    task: Task,
-    plan_service: TaskImplementationPlanService,
-) -> Tool:
-    def remove_implementation_step(step_number: int) -> str:
-        """Remove a step from the implementation plan by step number.
-
-        Fails if other steps depend on this step.
-
-        Args:
-            step_number: The step number to remove
-        """
-        plan = task.implementation_plan_structured
-        if not plan:
-            raise ModelRetry("No implementation plan exists yet. Use `set_implementation_plan_steps` first.")
-
-        try:
-            plan_service.remove_step(plan, step_number)
-        except ValueError as e:
-            raise ModelRetry(str(e)) from e
-        plan_service.commit()
-        return f"Step {step_number} removed."
-
-    return Tool(
-        function=remove_implementation_step,
-        name="remove_implementation_step",
         requires_approval=False,
         takes_ctx=False,
     )
@@ -400,6 +375,21 @@ def create_execute_implementation_step_tool(
                     parent_conversation_id=parent_conversation_id,
                 )
                 plan_service.set_step_conversation(step, conversation.id)
+
+            # Notify the frontend immediately so Cancel and sub-agent buttons appear
+            if parent_conversation_id is not None:
+                await execution_manager.broadcast_event(
+                    parent_conversation_id,
+                    SystemEvent(
+                        sub_type=SystemEventType.IMPLEMENTATION_STEP_STARTED,
+                        data={
+                            "task_id": task.id,
+                            "step_number": step_number,
+                            "conversation_id": conversation.id,
+                        },
+                        timestamp=datetime.datetime.now(datetime.UTC),
+                    ),
+                )
 
             # --- Agent role ---
             if step.type == ImplementationStepType.CODE_REVIEW:

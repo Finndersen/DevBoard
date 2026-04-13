@@ -297,8 +297,12 @@ class TaskGitService:
     @classmethod
     async def abort_rebase(cls, task: Task) -> None:
         """Abort an in-progress rebase for a task."""
-        last_used_slot = task.last_used_worktree_slot
-        repo_path = last_used_slot.path if last_used_slot else task.codebase.local_path
+        slot = task.last_used_worktree_slot
+        if slot is None:
+            raise ValueError(
+                f"Task {task.id} has no workspace allocated. Allocate a workspace before calling abort_rebase."
+            )
+        repo_path = slot.path
 
         git = GitRepoIntegration(repo_path)
 
@@ -349,7 +353,7 @@ class TaskGitService:
                     raise BaseWorkdirOverlapError(checkout_path, list(overlapping))
 
         feature_worktree_path = await repo_git.get_checked_out_location(task.branch_name)
-        if feature_worktree_path and feature_worktree_path != str(repo_git.repo_path):
+        if feature_worktree_path:
             feature_worktree_git = GitRepoIntegration(feature_worktree_path)
             if await feature_worktree_git.has_uncommitted_changes():
                 return MergeResult(
@@ -358,7 +362,9 @@ class TaskGitService:
                     message=f"Cannot merge: task branch has uncommitted changes in '{feature_worktree_path}'. Commit or discard all changes before merging.",
                 )
 
-        release_result = await repo_git.release_branch_from_worktree(task.branch_name)
+        # Release the feature branch from ALL worktrees including the main repo, so that
+        # the branch can be deleted after merging (git refuses to delete a checked-out branch).
+        release_result = await repo_git.release_branch_from_worktree(task.branch_name, exclude_main_repo=False)
         if release_result.worktree_path:
             logfire.info(f"Released branch {task.branch_name} from worktree {release_result.worktree_path}")
 

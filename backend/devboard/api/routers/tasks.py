@@ -279,6 +279,7 @@ async def execute_workflow_action(
     task_service: TaskService = Depends(get_task_service),
     agent_config_service: AgentConfigService = Depends(get_agent_config_service),
     integration_service: IntegrationService = Depends(get_integration_service),
+    workspace_service: WorkspaceService = Depends(get_workspace_service),
 ) -> dict[str, Any]:
     """Execute a task workflow action.
 
@@ -308,6 +309,7 @@ async def execute_workflow_action(
         agent_config_service=agent_config_service,
         document_repository=document_repo,
         integration_service=integration_service,
+        workspace_service=workspace_service,
     )
 
     try:

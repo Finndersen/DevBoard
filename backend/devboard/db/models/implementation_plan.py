@@ -4,7 +4,7 @@ import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Enum, ForeignKey, String, Text
+from sqlalchemy import JSON, Enum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -69,6 +69,7 @@ class ImplementationStep(Base):
     """A discrete step within an implementation plan."""
 
     __tablename__ = "implementation_steps"
+    __table_args__ = (UniqueConstraint("implementation_plan_id", "step_number", name="uq_implementation_step_number"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     implementation_plan_id: Mapped[int] = mapped_column(ForeignKey("implementation_plans.id", ondelete="CASCADE"))

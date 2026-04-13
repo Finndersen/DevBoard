@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { TaskStatus } from '../../lib/api'
-import type { Task, ToolCall, ToolResult, SystemEvent } from '../../lib/api'
-import { useToolCallHandler, useToolResultHandler, useSystemEventHandler, useStreamCompleteHandler } from '../../hooks/useConversationEventHandlers'
+import type { Task, ToolResult, SystemEvent } from '../../lib/api'
+import { useToolResultHandler, useSystemEventHandler, useStreamCompleteHandler } from '../../hooks/useConversationEventHandlers'
 
 interface UseTaskEventHandlersParams {
   task: Task | null
@@ -13,7 +13,7 @@ interface UseTaskEventHandlersParams {
   handleDiffRefresh: (view: string) => Promise<void>
   setActiveTab: (tab: 'specification' | 'plan' | 'changes' | 'summary') => void
   diffRefreshTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
-  markStepRunning: (stepNumber: number) => void
+  markStepRunning: (stepNumber: number, conversationId: number) => void
 }
 
 export function useTaskEventHandlers({
@@ -102,17 +102,6 @@ export function useTaskEventHandlers({
 
   useToolResultHandler(structuredPlanHandler)
 
-  const stepStartHandler = useCallback((_toolName: string, toolCall: ToolCall) => {
-    if (toolCall.tool_name.includes('execute_implementation_step')) {
-      const stepNumber = toolCall.tool_args?.step_number
-      if (typeof stepNumber === 'number') {
-        markStepRunning(stepNumber)
-      }
-    }
-  }, [markStepRunning])
-
-  useToolCallHandler(stepStartHandler)
-
   const fileModificationHandler = useCallback((toolName: string, _result: unknown) => {
     const isFileModification = toolName === 'Edit' || toolName === 'Write'
     const isImplementing = task?.status === TaskStatus.IMPLEMENTING && task?.codebase_id
@@ -162,8 +151,18 @@ export function useTaskEventHandlers({
   useToolResultHandler(rebaseHandler)
 
   const systemEventHandler = useCallback(async (event: SystemEvent) => {
-    const isRelevantEventType = event.sub_type === 'task_updated' || event.sub_type === 'branch_rebased' || event.sub_type === 'workspace_allocate'
     const isForThisTask = event.data?.task_id === task?.id
+
+    if (event.sub_type === 'implementation_step_started' && isForThisTask) {
+      const stepNumber = event.data?.step_number
+      const conversationId = event.data?.conversation_id
+      if (typeof stepNumber === 'number' && typeof conversationId === 'number') {
+        markStepRunning(stepNumber, conversationId)
+      }
+      return
+    }
+
+    const isRelevantEventType = event.sub_type === 'task_updated' || event.sub_type === 'branch_rebased' || event.sub_type === 'workspace_allocate'
 
     if (isRelevantEventType && isForThisTask) {
       try {
@@ -182,7 +181,7 @@ export function useTaskEventHandlers({
         console.error('Failed to handle system event:', error)
       }
     }
-  }, [task?.id, refetch, refreshGitStatus])
+  }, [task?.id, markStepRunning, refetch, refreshGitStatus])
 
   useSystemEventHandler(systemEventHandler)
 
