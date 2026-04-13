@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, NumberedListIcon, CodeBracketIcon, ChatBubbleLeftIcon, CheckCircleIcon, ArrowPathIcon, XCircleIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, DocumentTextIcon, NumberedListIcon, CodeBracketIcon, CheckCircleIcon, ArrowPathIcon, XCircleIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline'
 import { TaskStatus } from '../lib/api'
-import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse, PRFeedbackResponse, CustomFieldDefinition } from '../lib/api'
+import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse, PRFeedbackResponse, PRDetailResponse, CustomFieldDefinition } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument, useImplementationPlan } from '../hooks'
 import { useViewTitle } from '../hooks/useViewTitle'
 import { useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
@@ -25,7 +25,9 @@ import { TaskDetailHeader } from '../components/task/TaskDetailHeader'
 import { SpecificationTab } from '../components/task/SpecificationTab'
 import { PlanTab } from '../components/task/PlanTab'
 import { ChangesTab } from '../components/task/ChangesTab'
-import { CommentsTab } from '../components/task/CommentsTab'
+import { PullRequestTab } from '../components/task/PullRequestTab'
+import { StatusIndicator, ReviewBadge } from '../components/github/PRStatusComponents'
+import { GitHubIcon } from '../components/icons/GitHubIcon'
 import { SummaryTab } from '../components/task/SummaryTab'
 import { CustomFieldsPopover } from '../components/common/CustomFieldsPanel'
 
@@ -37,20 +39,6 @@ const WORKFLOW_ACTION_LABELS: Record<string, string> = {
   'task.approve_and_create_pr': 'Approve & Create PR',
   'task.merge_and_finalise': 'Merge PR & Complete',
   'task.finalise': 'Complete Task',
-}
-
-function countPRComments(fb: PRFeedbackResponse): number {
-  let count = 0
-  for (const r of fb.reviews) {
-    if (r.body.trim()) count++
-    for (const t of r.comment_threads) {
-      count += 1 + t.replies.length
-    }
-  }
-  for (const t of fb.standalone_threads) {
-    count += 1 + t.replies.length
-  }
-  return count
 }
 
 function getActionLabel(
@@ -103,28 +91,32 @@ function TaskDetail({ id }: TaskDetailProps) {
       .catch(err => console.error('Failed to load task custom field definitions:', err))
   }, [])
 
+  const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes' | 'pullrequest' | 'summary'>('specification')
+
   // PR status for tasks with a PR (pr_open or complete)
   const [prStatus, setPrStatus] = useState<GitHubPRStatusResponse | null>(null)
   const [prStatusLoading, setPrStatusLoading] = useState(false)
-  // PR feedback (reviews and comments) for tasks in PR_OPEN state
+  // PR feedback (reviews and comments) for tasks in PR_OPEN or COMPLETE state
   const [prFeedback, setPrFeedback] = useState<PRFeedbackResponse | null>(null)
+  // PR detail (CI checks) — fetched lazily when PR tab is first opened
+  const [prDetail, setPrDetail] = useState<PRDetailResponse | null>(null)
+  const [prDetailLoading, setPrDetailLoading] = useState(false)
+  const prDetailFetchedRef = useRef(false)
 
-  // Fetch PR status when task has a PR (pr_open or complete)
-  // Fetch PR feedback only for pr_open (active review)
+  // Fetch PR status and feedback when task has a PR (pr_open or complete)
   useEffect(() => {
+    setPrDetail(null)
+    prDetailFetchedRef.current = false
+
     if (task?.id && task.github_pr_number && (task.status === TaskStatus.PR_OPEN || task.status === TaskStatus.COMPLETE)) {
       setPrStatusLoading(true)
       apiClient.getTaskPRStatus(task.id)
         .then(setPrStatus)
         .catch(() => setPrStatus(null))
         .finally(() => setPrStatusLoading(false))
-      if (task.status === TaskStatus.PR_OPEN) {
-        apiClient.getTaskPRFeedback(task.id)
-          .then(setPrFeedback)
-          .catch(() => setPrFeedback(null))
-      } else {
-        setPrFeedback(null)
-      }
+      apiClient.getTaskPRFeedback(task.id)
+        .then(setPrFeedback)
+        .catch(() => setPrFeedback(null))
     } else {
       setPrStatus(null)
       setPrFeedback(null)
@@ -138,7 +130,27 @@ function TaskDetail({ id }: TaskDetailProps) {
       .then(setPrStatus)
       .catch(() => setPrStatus(null))
       .finally(() => setPrStatusLoading(false))
-  }, [task?.id])
+    if (task.codebase_id && task.github_pr_number) {
+      setPrDetailLoading(true)
+      prDetailFetchedRef.current = true
+      apiClient.getPRDetail(task.codebase_id, task.github_pr_number)
+        .then(setPrDetail)
+        .catch(() => setPrDetail(null))
+        .finally(() => setPrDetailLoading(false))
+    }
+  }, [task?.id, task?.codebase_id, task?.github_pr_number])
+
+  // Lazy-fetch PR detail (CI checks) when PR tab is first opened
+  useEffect(() => {
+    if (activeTab !== 'pullrequest' || prDetailFetchedRef.current) return
+    if (!task?.codebase_id || !task?.github_pr_number) return
+    prDetailFetchedRef.current = true
+    setPrDetailLoading(true)
+    apiClient.getPRDetail(task.codebase_id, task.github_pr_number)
+      .then(setPrDetail)
+      .catch(() => setPrDetail(null))
+      .finally(() => setPrDetailLoading(false))
+  }, [activeTab, task?.codebase_id, task?.github_pr_number])
 
   // Handle initial message from navigation state (passed when creating task with description)
   const [pendingInitialMessage, setPendingInitialMessage] = useState<string | null>(null)
@@ -230,7 +242,6 @@ function TaskDetail({ id }: TaskDetailProps) {
   // Update tab title when task data is loaded
   useViewTitle('task', id)
 
-  const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes' | 'comments' | 'summary'>('specification')
   const [streamingMessage, setStreamingMessage] = useState<string>('')
 
   // Use ref to store refetch function to avoid dependency issues
@@ -646,17 +657,12 @@ function TaskDetail({ id }: TaskDetailProps) {
         selectedCodebase={selectedCodebase}
         gitStatus={gitStatus}
         branchStatusLoading={branchStatusLoading}
-        prStatus={prStatus}
-        prStatusLoading={prStatusLoading}
-        onRefreshPrStatus={handleRefreshPrStatus}
         workflowActionButtons={getWorkflowActionButtons()}
         onCodebaseSelect={handleCodebaseSelect}
         onOpenBranchStatusModal={handleOpenBranchStatusModal}
         onDeleteTask={handleDeleteTask}
         deleteLoading={deleteLoading}
         deleteError={deleteError}
-        onResolveConflicts={handleResolveConflicts}
-        isConversationStreaming={isConversationStreaming}
       />
 
       {/* Main Content Layout */}
@@ -714,7 +720,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                         { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon, badge: null as number | null },
                         ...(task.implementation_plan_id || task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon, badge: null as number | null }] : []),
                         ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon, badge: (diffData?.files?.length ?? null) as number | null }] : []),
-                        ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) && prFeedback && (prFeedback.reviews.length > 0 || prFeedback.standalone_threads.length > 0) ? [{ id: 'comments' as const, name: 'PR Comments', icon: ChatBubbleLeftIcon, badge: countPRComments(prFeedback) as number | null }] : []),
+                        ...(task.github_pr_number && [TaskStatus.PR_OPEN, TaskStatus.COMPLETE].includes(task.status) ? [{ id: 'pullrequest' as const, name: 'Pull Request', icon: GitHubIcon, badge: null as number | null }] : []),
                         ...(task.change_summary_document_id ? [{ id: 'summary' as const, name: 'Change Summary', icon: DocumentTextIcon, badge: null as number | null }] : []),
                       ].map((tab) => (
                         <button
@@ -743,6 +749,15 @@ function TaskDetail({ id }: TaskDetailProps) {
                           )}
                           {tab.id === 'plan' && implementationPlan?.status === 'failed' && (
                             <XCircleIcon className="w-3.5 h-3.5 text-red-500" />
+                          )}
+                          {tab.id === 'pullrequest' && prStatus && !prStatus.merged && (
+                            <StatusIndicator mergeableState={prStatus.mergeable_state} ciStatus={prStatus.ci_status} />
+                          )}
+                          {tab.id === 'pullrequest' && prStatus?.merged && (
+                            <CheckCircleIcon className="w-3.5 h-3.5 text-purple-500" />
+                          )}
+                          {tab.id === 'pullrequest' && prStatus?.review_decision && (
+                            <ReviewBadge decision={prStatus.review_decision} />
                           )}
                         </button>
                       ))}
@@ -794,10 +809,18 @@ function TaskDetail({ id }: TaskDetailProps) {
                   />
                 )}
 
-                {activeTab === 'comments' && prFeedback && (
-                  <CommentsTab
+                {activeTab === 'pullrequest' && (
+                  <PullRequestTab
+                    prStatus={prStatus}
+                    prStatusLoading={prStatusLoading}
                     prFeedback={prFeedback}
+                    prDetail={prDetail}
+                    prDetailLoading={prDetailLoading}
+                    taskStatus={task.status}
+                    onRefreshPrStatus={handleRefreshPrStatus}
+                    onResolveConflicts={handleResolveConflicts}
                     onSubmitComments={handleSubmitReviewComments}
+                    isConversationStreaming={isConversationStreaming}
                   />
                 )}
 
@@ -852,7 +875,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                       { id: 'specification' as const, name: 'Specification', icon: DocumentTextIcon, badge: null as number | null },
                       ...(task.implementation_plan_id || task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Plan', icon: NumberedListIcon, badge: null as number | null }] : []),
                       ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon, badge: (diffData?.files?.length ?? null) as number | null }] : []),
-                      ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) && prFeedback && (prFeedback.reviews.length > 0 || prFeedback.standalone_threads.length > 0) ? [{ id: 'comments' as const, name: 'PR Comments', icon: ChatBubbleLeftIcon, badge: countPRComments(prFeedback) as number | null }] : []),
+                      ...(task.github_pr_number && [TaskStatus.PR_OPEN, TaskStatus.COMPLETE].includes(task.status) ? [{ id: 'pullrequest' as const, name: 'Pull Request', icon: GitHubIcon, badge: null as number | null }] : []),
                       ...(task.change_summary_document_id ? [{ id: 'summary' as const, name: 'Change Summary', icon: DocumentTextIcon, badge: null as number | null }] : []),
                     ].map((tab) => (
                       <button
@@ -881,6 +904,15 @@ function TaskDetail({ id }: TaskDetailProps) {
                         )}
                         {tab.id === 'plan' && implementationPlan?.status === 'failed' && (
                           <XCircleIcon className="w-3.5 h-3.5 text-red-500" />
+                        )}
+                        {tab.id === 'pullrequest' && prStatus && !prStatus.merged && (
+                          <StatusIndicator mergeableState={prStatus.mergeable_state} ciStatus={prStatus.ci_status} />
+                        )}
+                        {tab.id === 'pullrequest' && prStatus?.merged && (
+                          <CheckCircleIcon className="w-3.5 h-3.5 text-purple-500" />
+                        )}
+                        {tab.id === 'pullrequest' && prStatus?.review_decision && (
+                          <ReviewBadge decision={prStatus.review_decision} />
                         )}
                       </button>
                     ))}
@@ -932,10 +964,18 @@ function TaskDetail({ id }: TaskDetailProps) {
                 />
               )}
 
-              {activeTab === 'comments' && prFeedback && (
-                <CommentsTab
+              {activeTab === 'pullrequest' && (
+                <PullRequestTab
+                  prStatus={prStatus}
+                  prStatusLoading={prStatusLoading}
                   prFeedback={prFeedback}
+                  prDetail={prDetail}
+                  prDetailLoading={prDetailLoading}
+                  taskStatus={task.status}
+                  onRefreshPrStatus={handleRefreshPrStatus}
+                  onResolveConflicts={handleResolveConflicts}
                   onSubmitComments={handleSubmitReviewComments}
+                  isConversationStreaming={isConversationStreaming}
                 />
               )}
 

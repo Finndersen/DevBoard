@@ -8,14 +8,9 @@ import {
   CodeBracketIcon,
   TrashIcon,
   FolderIcon,
-  ChatBubbleLeftIcon,
-  ArrowPathIcon,
-  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
-import { CheckCircleIcon } from '@heroicons/react/24/solid'
-import { StatusIndicator, ReviewBadge } from '../github/PRStatusComponents'
 import { TaskStatus } from '../../lib/api'
-import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse } from '../../lib/api'
+import type { Task, Codebase, TaskGitStatus } from '../../lib/api'
 import { useEditableField } from '../../hooks/useEditableField'
 import { Button, Input, StatusBadge, ConfirmDialog } from '../ui'
 import { textColors, borderColors, surfaces } from '../../styles/designSystem'
@@ -31,13 +26,6 @@ const GitBranchIcon = ({ className }: { className?: string }) => (
   </svg>
 )
 
-// GitHub mark icon
-const GitHubIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 16 16" fill="currentColor">
-    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-  </svg>
-)
-
 interface TaskDetailHeaderProps {
   task: Task
   project: { id: number; name: string } | null | undefined
@@ -46,17 +34,12 @@ interface TaskDetailHeaderProps {
   selectedCodebase: Codebase | null | undefined
   gitStatus: TaskGitStatus | null
   branchStatusLoading: boolean
-  prStatus: GitHubPRStatusResponse | null
-  prStatusLoading: boolean
-  onRefreshPrStatus: () => void
   workflowActionButtons: React.ReactElement | null
   onCodebaseSelect: (codebaseId: number | null) => void
   onOpenBranchStatusModal: () => void
   onDeleteTask: (deleteBranch: boolean) => void
   deleteLoading: boolean
   deleteError: unknown
-  onResolveConflicts: () => void
-  isConversationStreaming: boolean
 }
 
 const getStatusVariant = (status: TaskStatus): 'default' | 'success' | 'warning' | 'error' | 'info' => {
@@ -81,16 +64,11 @@ export function TaskDetailHeader({
   selectedCodebase,
   gitStatus,
   branchStatusLoading,
-  prStatus,
-  prStatusLoading,
-  onRefreshPrStatus,
   workflowActionButtons,
   onCodebaseSelect,
   onOpenBranchStatusModal,
   onDeleteTask,
   deleteLoading,
-  onResolveConflicts,
-  isConversationStreaming,
 }: TaskDetailHeaderProps) {
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -299,55 +277,6 @@ export function TaskDetailHeader({
               </svg>
             )}
           </button>
-        )}
-
-        {/* PR Status - shown when task has a PR (pr_open or complete) */}
-        {(task.status === TaskStatus.PR_OPEN || task.status === TaskStatus.COMPLETE) && (prStatus || prStatusLoading) && (
-          <div className="flex-shrink-0 flex items-center rounded border border-gray-300 dark:border-gray-600 overflow-hidden">
-            {prStatus && (
-              <button
-                onClick={() => window.open(prStatus.pr_url, '_blank')}
-                className={`flex items-center space-x-1.5 px-2 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ${textColors.secondary}`}
-                title={prStatus.merged ? "PR Merged" : "Open PR on GitHub"}
-              >
-                <GitHubIcon className="w-4 h-4" />
-                {prStatus.merged ? (
-                  <CheckCircleIcon className="w-3.5 h-3.5 text-purple-500" />
-                ) : (
-                  <StatusIndicator mergeableState={prStatus.mergeable_state} ciStatus={prStatus.ci_status} />
-                )}
-                <span className="font-medium">#{prStatus.pr_number}</span>
-                <ReviewBadge decision={prStatus.review_decision} />
-                {prStatus.comment_count > 0 && (
-                  <span className="flex items-center space-x-0.5">
-                    <ChatBubbleLeftIcon className="w-3.5 h-3.5" />
-                    <span>{prStatus.comment_count}</span>
-                  </span>
-                )}
-              </button>
-            )}
-            {prStatus?.mergeable_state?.toUpperCase() === 'DIRTY' && (
-              <button
-                onClick={onResolveConflicts}
-                disabled={isConversationStreaming}
-                className="flex items-center px-1.5 py-1 text-sm border-l border-gray-300 dark:border-gray-600 text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:text-amber-300 dark:hover:bg-amber-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Rebase and resolve conflicts"
-                aria-label="Rebase and resolve conflicts"
-              >
-                <WrenchScrewdriverIcon className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {task.status === TaskStatus.PR_OPEN && (
-              <button
-                onClick={onRefreshPrStatus}
-                disabled={prStatusLoading}
-                className={`flex items-center px-1.5 py-1 text-sm border-l border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${textColors.secondary}`}
-                title="Refresh PR status"
-              >
-                <ArrowPathIcon className={`w-3.5 h-3.5 ${prStatusLoading ? 'animate-spin' : ''}`} />
-              </button>
-            )}
-          </div>
         )}
 
         <div className="flex-shrink-0">
