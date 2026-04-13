@@ -1,9 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { render } from '../../../test/utils'
 import SubAgentConversationModal from '../SubAgentConversationModal'
 import type { ConversationEvent } from '../../../lib/api'
+
+vi.mock('../../../lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../lib/api')>()
+  return {
+    ...actual,
+    apiClient: {
+      ...actual.apiClient,
+      getConversation: vi.fn().mockResolvedValue(null),
+      hasActiveExecution: vi.fn().mockResolvedValue(false),
+    },
+  }
+})
 
 vi.mock('../../chat/ConversationMessageList', () => ({
   default: ({ messages, showEmptyState, emptyStateMessage }: { messages: ConversationEvent[]; showEmptyState: boolean; emptyStateMessage: string }) => (
@@ -201,5 +213,182 @@ describe('SubAgentConversationModal', () => {
     )
 
     expect(screen.getByText('ac2a274')).toBeInTheDocument()
+  })
+
+  describe('Live indicator and polling', () => {
+    beforeEach(() => {
+      // Only fake setInterval/clearInterval so waitFor (which uses setTimeout) still works
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('shows Live badge when conversation has an active execution', async () => {
+      const { apiClient } = await import('../../../lib/api')
+      vi.mocked(apiClient.hasActiveExecution).mockResolvedValue(true)
+
+      const fetchMessages = vi.fn().mockResolvedValue({ messages: mockMessages, context_usage: null })
+
+      render(
+        <SubAgentConversationModal
+          isOpen={true}
+          onClose={() => {}}
+          fetchMessages={fetchMessages}
+          title="Live test"
+          conversationId={42}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Live')).toBeInTheDocument()
+      })
+    })
+
+    it('does not show Live badge when no active execution', async () => {
+      const { apiClient } = await import('../../../lib/api')
+      vi.mocked(apiClient.hasActiveExecution).mockResolvedValue(false)
+
+      const fetchMessages = vi.fn().mockResolvedValue({ messages: mockMessages, context_usage: null })
+
+      render(
+        <SubAgentConversationModal
+          isOpen={true}
+          onClose={() => {}}
+          fetchMessages={fetchMessages}
+          title="Not live test"
+          conversationId={42}
+        />
+      )
+
+      await waitFor(() => {
+        expect(fetchMessages).toHaveBeenCalled()
+      })
+
+      expect(screen.queryByText('Live')).not.toBeInTheDocument()
+    })
+
+    it('does not show Live badge when no conversationId is provided', async () => {
+      const fetchMessages = vi.fn().mockResolvedValue({ messages: mockMessages, context_usage: null })
+
+      render(
+        <SubAgentConversationModal
+          isOpen={true}
+          onClose={() => {}}
+          fetchMessages={fetchMessages}
+          title="No id test"
+        />
+      )
+
+      await waitFor(() => {
+        expect(fetchMessages).toHaveBeenCalled()
+      })
+
+      expect(screen.queryByText('Live')).not.toBeInTheDocument()
+    })
+
+    it('polls for messages every 3 seconds when live', async () => {
+      const { apiClient } = await import('../../../lib/api')
+      vi.mocked(apiClient.hasActiveExecution).mockResolvedValue(true)
+
+      const fetchMessages = vi.fn().mockResolvedValue({ messages: mockMessages, context_usage: null })
+
+      render(
+        <SubAgentConversationModal
+          isOpen={true}
+          onClose={() => {}}
+          fetchMessages={fetchMessages}
+          title="Polling test"
+          conversationId={42}
+        />
+      )
+
+      // Wait for initial load and isLive to be set
+      await waitFor(() => {
+        expect(screen.getByText('Live')).toBeInTheDocument()
+      })
+
+      expect(fetchMessages).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(3000)
+
+      await waitFor(() => {
+        expect(fetchMessages).toHaveBeenCalledTimes(2)
+      })
+
+      await vi.advanceTimersByTimeAsync(3000)
+
+      await waitFor(() => {
+        expect(fetchMessages).toHaveBeenCalledTimes(3)
+      })
+    })
+
+    it('stops polling and removes Live badge when execution ends', async () => {
+      const { apiClient } = await import('../../../lib/api')
+      vi.mocked(apiClient.hasActiveExecution)
+        .mockResolvedValueOnce(true)  // initial check → live
+        .mockResolvedValueOnce(true)  // first poll check → still live
+        .mockResolvedValueOnce(false) // second poll check → no longer active
+
+      const fetchMessages = vi.fn().mockResolvedValue({ messages: mockMessages, context_usage: null })
+
+      render(
+        <SubAgentConversationModal
+          isOpen={true}
+          onClose={() => {}}
+          fetchMessages={fetchMessages}
+          title="Stop polling test"
+          conversationId={42}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Live')).toBeInTheDocument()
+      })
+
+      // First poll — still live
+      await vi.advanceTimersByTimeAsync(3000)
+      await waitFor(() => {
+        expect(screen.getByText('Live')).toBeInTheDocument()
+      })
+
+      // Second poll — execution ended
+      await vi.advanceTimersByTimeAsync(3000)
+      await waitFor(() => {
+        expect(screen.queryByText('Live')).not.toBeInTheDocument()
+      })
+
+      const callCountAfterStop = fetchMessages.mock.calls.length
+
+      // Advance time further — no more polling
+      await vi.advanceTimersByTimeAsync(9000)
+
+      expect(fetchMessages).toHaveBeenCalledTimes(callCountAfterStop)
+    })
+
+    it('does not poll when no conversationId is provided', async () => {
+      const { apiClient } = await import('../../../lib/api')
+
+      const fetchMessages = vi.fn().mockResolvedValue({ messages: mockMessages, context_usage: null })
+
+      render(
+        <SubAgentConversationModal
+          isOpen={true}
+          onClose={() => {}}
+          fetchMessages={fetchMessages}
+          title="No poll test"
+        />
+      )
+
+      await waitFor(() => {
+        expect(fetchMessages).toHaveBeenCalledTimes(1)
+      })
+
+      await vi.advanceTimersByTimeAsync(9000)
+
+      expect(fetchMessages).toHaveBeenCalledTimes(1)
+      expect(apiClient.hasActiveExecution).not.toHaveBeenCalled()
+    })
   })
 })

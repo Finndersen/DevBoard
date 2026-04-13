@@ -38,31 +38,54 @@ export default function SubAgentConversationModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [conversationMeta, setConversationMeta] = useState<ConversationResponse | null>(null)
+  const [isLive, setIsLive] = useState(false)
+
+  const refreshMessages = useCallback(async () => {
+    const data = await fetchMessages()
+    setMessages(data.messages)
+    setContextUsage(data.context_usage ?? null)
+  }, [fetchMessages])
 
   const loadMessages = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const data = await fetchMessages()
-      setMessages(data.messages)
-      setContextUsage(data.context_usage ?? null)
+      await refreshMessages()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load sub-agent conversation')
     } finally {
       setLoading(false)
     }
-  }, [fetchMessages])
+  }, [refreshMessages])
 
   useEffect(() => {
     if (isOpen) {
       loadMessages()
       if (conversationId !== undefined) {
         apiClient.getConversation(conversationId).then(setConversationMeta).catch(() => {})
+        apiClient.hasActiveExecution(conversationId).then(setIsLive).catch(() => {})
       } else {
         setConversationMeta(null)
+        setIsLive(false)
       }
+    } else {
+      setIsLive(false)
     }
   }, [isOpen, loadMessages, conversationId])
+
+  useEffect(() => {
+    if (!isLive || !isOpen || conversationId === undefined) return
+
+    const interval = setInterval(async () => {
+      await refreshMessages()
+      const stillActive = await apiClient.hasActiveExecution(conversationId)
+      if (!stillActive) {
+        setIsLive(false)
+      }
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [isLive, isOpen, conversationId, refreshMessages])
 
   const modalTitle = (
     <span className="flex items-center gap-2 min-w-0 w-full">
@@ -70,6 +93,12 @@ export default function SubAgentConversationModal({
       {subagentType && (
         <span className="flex-shrink-0 px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
           {subagentType}
+        </span>
+      )}
+      {isLive && (
+        <span className="flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+          <span className="animate-pulse h-1.5 w-1.5 rounded-full bg-green-500 dark:bg-green-400" />
+          Live
         </span>
       )}
       <span className="ml-auto flex-shrink-0 flex items-center gap-3">
