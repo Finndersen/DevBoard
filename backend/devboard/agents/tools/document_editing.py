@@ -38,7 +38,7 @@ def create_document_edit_tool(
         if not document.content:
             raise ModelRetry(
                 f"{document.document_type.replace('_', ' ').title()} has no content yet. "
-                f"Use `set_{document.document_type}_content` first."
+                f"Set the initial content first before applying edits."
             )
 
         # Create document editor service

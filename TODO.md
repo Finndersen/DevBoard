@@ -60,6 +60,7 @@
 - For rebase, perform action immediately and provide output to agent? (it does this already for planning since there will be no conflicts - but could probably do during implemetnation and just report the conflicts?)
 - add codebase-level docs config (whether enabled, path, and custom guidance). this is then used when deciding whether to have documentation update step in plan, and enhance the documetnation update agent with more context and guidance
 - Show Claude usage
+- Include bas branch changes (commit details) in automatic event task agent context so it can decide whetehr rebase would be useful. 
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

@@ -118,7 +118,7 @@ def create_rebase_task_branch_tool(
                 f"**Conflicted files:**\n{conflict_list}"
                 f"{commit_details_section}\n\n"
                 f"Please resolve the conflicts in these files (remove conflict markers, keep correct code), "
-                f"then call this tool again to continue the rebase.{stash_note}"
+                f"then call rebase_task_branch again to continue the rebase.{stash_note}"
             )
 
         elif result.outcome == RebaseOutcome.STASH_CONFLICT:
@@ -129,8 +129,7 @@ def create_rebase_task_branch_tool(
                 f"Rebase completed successfully (new HEAD: {result.new_head}), but restoring your "
                 f"uncommitted changes resulted in merge conflicts.\n\n"
                 f"**Conflicted files:**\n{conflict_list}\n\n"
-                f"Please resolve the conflicts in these files. Once resolved, "
-                f"the rebase operation is complete."
+                f"Please resolve the conflicts in these files. Once resolved, the rebase operation is complete."
             )
 
         # Should not reach here, but just in case

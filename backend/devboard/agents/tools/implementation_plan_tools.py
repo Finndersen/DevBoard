@@ -167,8 +167,6 @@ def create_edit_implementation_step_tool(
     )  # ty:ignore[invalid-return-type]
 
 
-
-
 def create_edit_implementation_plan_overview_tool(
     task: Task,
     plan_service: TaskImplementationPlanService,

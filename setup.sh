@@ -75,6 +75,7 @@ if ! command -v pnpm &> /dev/null; then
 fi
 
 check_command uv
+brew install tree
 
 info "All prerequisites satisfied"
 

@@ -547,7 +547,7 @@ def create_edit_own_task_tool(
     return Tool.from_schema(
         function=edit_task,
         name="edit_task",
-        description="Edit metadata fields (title, custom fields) and/or specification content of the current task.",
+        description="Edit metadata fields (title, custom fields) and/or specification content of the current task. Use specification_content to set or replace the full task specification — works whether or not the specification has been set before.",
         json_schema=json_schema,
     )
 

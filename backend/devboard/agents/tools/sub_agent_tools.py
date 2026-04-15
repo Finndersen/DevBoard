@@ -420,7 +420,9 @@ def build_code_review_prompt(diff: StructuredDiff, additional_context: str | Non
 
     full_diff_content = "\n\n".join(all_sections)
 
-    prompt = f"""Please review the following task changes. Calibrate the depth and thoroughness of your review to the complexity of the changes — small, trivial changes warrant a quick lightweight review, while large or complex changes warrant a thorough deep review.
+    prompt = f"""**Read-only review:** produce written findings only. Do NOT edit files, run git, or otherwise modify the codebase — even to fix issues you identify. Report them instead.
+
+Please review the following task changes. Calibrate the depth and thoroughness of your review to the complexity of the changes — small, trivial changes warrant a quick lightweight review, while large or complex changes warrant a thorough deep review.
 
 ## Diff Summary
 
