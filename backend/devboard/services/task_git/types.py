@@ -9,6 +9,27 @@ from devboard.db.models.codebase import MergeMethod
 from devboard.integrations.types import CommitDiff, FileDiff, GitLogEntry, StructuredDiff
 
 
+class MergeFailureError(Exception):
+    """Raised when a merge operation fails with a non-successful outcome."""
+
+    def __init__(self, outcome: "MergeOutcome", message: str):
+        super().__init__(f"Merge failed ({outcome.value}): {message}")
+        self.outcome = outcome
+        self.message = message
+
+
+class TaskConfigurationError(Exception):
+    """Raised when a task is missing required configuration (e.g. branch name)."""
+
+
+class NoRebaseInProgressError(Exception):
+    """Raised when attempting to abort/continue a rebase when none is in progress."""
+
+
+class GitHubConnectionError(Exception):
+    """Raised when a GitHub connection test fails."""
+
+
 class TaskDiffView(StrEnum):
     """View types for task diff endpoint."""
 

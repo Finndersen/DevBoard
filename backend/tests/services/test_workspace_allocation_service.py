@@ -9,6 +9,7 @@ import pytest
 from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.agents.events import SystemEvent, SystemEventType
 from devboard.db.models import Codebase, Task, WorktreeSlot
+from devboard.services.task_git.types import TaskConfigurationError
 from devboard.services.task_git_service import TaskGitService
 from devboard.services.workspace import (
     AllSlotsLockedException,
@@ -1029,10 +1030,10 @@ async def test_rebase_task_branch_stash_apply_conflict(mock_repos, sample_task, 
 
 @pytest.mark.asyncio
 async def test_rebase_task_branch_no_branch_name_raises_error(mock_repos, sample_task):
-    """Test rebase_task_branch raises ValueError when task has no branch name."""
+    """Test rebase_task_branch raises TaskConfigurationError when task has no branch name."""
     sample_task.branch_name = None
 
-    with pytest.raises(ValueError, match="has no branch name configured"):
+    with pytest.raises(TaskConfigurationError, match="has no branch name configured"):
         await TaskGitService.rebase_task_branch(sample_task)
 
 

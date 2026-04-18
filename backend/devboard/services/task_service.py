@@ -24,6 +24,7 @@ from devboard.db.repositories.task import TaskRepository
 from devboard.integrations.git import GitRepoIntegration
 from devboard.services.conversation_service import ConversationService
 from devboard.services.system_event_emitter import SystemEventEmitter
+from devboard.services.task_git.types import MergeFailureError, TaskConfigurationError
 from devboard.services.task_git_service import MergeOutcome, MergeResult, TaskGitService
 
 RECENT_COMPLETED_TASKS_LIMIT = 5
@@ -283,13 +284,13 @@ class TaskService:
             InvalidStatusTransitionError: If task cannot transition to COMPLETE
         """
         if not task.branch_name:
-            raise ValueError(f"Task {task.id} has no branch configured")
+            raise TaskConfigurationError(f"Task {task.id} has no branch configured")
 
         merge_result = await TaskGitService.merge_task_feature_branch(task)
 
         # SUCCESS, SKIPPED (already merged), and STASH_CONFLICT (merge succeeded, WIP restore had conflicts) are all acceptable
         if merge_result.outcome not in (MergeOutcome.SUCCESS, MergeOutcome.SKIPPED, MergeOutcome.STASH_CONFLICT):
-            raise ValueError(f"Merge failed ({merge_result.outcome.value}): {merge_result.message}")
+            raise MergeFailureError(merge_result.outcome, merge_result.message)
 
         # Only create/update change_summary document after successful merge
         if not task.change_summary:

@@ -13,7 +13,8 @@ from devboard.db.models import Task
 from devboard.db.models.codebase import MergeMethod
 from devboard.integrations.github import GitHubIntegration, GitHubPR, GitHubRepository, PRStatus, PullRequestMergeResult
 from devboard.services.task_git import BaseWorkdirOverlapError
-from devboard.services.task_git_service import MergeOutcome, MergeResult
+from devboard.services.task_git.types import MergeFailureError, MergeOutcome, TaskConfigurationError
+from devboard.services.task_git_service import MergeResult
 from devboard.services.task_service import TaskService
 
 
@@ -131,10 +132,10 @@ class TestCreateCompleteTaskWithLocalMergeTool:
             assert "inform the user" in result.lower()
 
     @pytest.mark.asyncio
-    async def test_merge_failure_raises_model_retry(self, mock_task, mock_task_service):
-        """Raises ModelRetry when merge fails."""
-        mock_task_service.complete_task_with_local_merge.side_effect = ValueError(
-            "Merge failed (conflict): Conflicts detected in src/main.py"
+    async def test_merge_conflict_raises_model_retry_with_rebase_instructions(self, mock_task, mock_task_service):
+        """Raises ModelRetry with rebase instructions when merge fails with CONFLICT outcome."""
+        mock_task_service.complete_task_with_local_merge.side_effect = MergeFailureError(
+            MergeOutcome.CONFLICT, "Conflicts detected in src/main.py"
         )
 
         with patch("devboard.agents.tools.task_completion_tools.GitRepoIntegration") as mock_git_class:
@@ -147,8 +148,52 @@ class TestCreateCompleteTaskWithLocalMergeTool:
             with pytest.raises(ModelRetry) as exc_info:
                 await tool.function(change_summary="Test summary")
 
-            assert "Merge failed" in str(exc_info.value)
-            assert "conflict" in str(exc_info.value)
+            error_msg = str(exc_info.value)
+            assert "Merge failed" in error_msg
+            assert "conflict" in error_msg.lower()
+            assert "rebase_task_branch" in error_msg
+
+    @pytest.mark.asyncio
+    async def test_merge_error_outcome_raises_model_retry_without_rebase_instructions(
+        self, mock_task, mock_task_service
+    ):
+        """Raises ModelRetry without rebase instructions for non-conflict merge failures."""
+        mock_task_service.complete_task_with_local_merge.side_effect = MergeFailureError(
+            MergeOutcome.ERROR, "An internal error occurred"
+        )
+
+        with patch("devboard.agents.tools.task_completion_tools.GitRepoIntegration") as mock_git_class:
+            mock_git = Mock()
+            mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
+            mock_git_class.return_value = mock_git
+
+            tool = create_complete_task_with_local_merge_tool(mock_task, mock_task_service)
+
+            with pytest.raises(ModelRetry) as exc_info:
+                await tool.function(change_summary="Test summary")
+
+            error_msg = str(exc_info.value)
+            assert "Merge failed" in error_msg
+            assert "rebase_task_branch" not in error_msg
+
+    @pytest.mark.asyncio
+    async def test_task_configuration_error_raises_model_retry(self, mock_task, mock_task_service):
+        """Raises ModelRetry when task has configuration error (e.g. missing branch)."""
+        mock_task_service.complete_task_with_local_merge.side_effect = TaskConfigurationError(
+            "Task 1 has no branch configured"
+        )
+
+        with patch("devboard.agents.tools.task_completion_tools.GitRepoIntegration") as mock_git_class:
+            mock_git = Mock()
+            mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
+            mock_git_class.return_value = mock_git
+
+            tool = create_complete_task_with_local_merge_tool(mock_task, mock_task_service)
+
+            with pytest.raises(ModelRetry) as exc_info:
+                await tool.function(change_summary="Test summary")
+
+            assert "no branch configured" in str(exc_info.value)
 
 
 @pytest.fixture

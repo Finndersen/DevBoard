@@ -5,9 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from devboard.db.models import Task
+from devboard.db.models.task import NoWorktreeAllocatedException
 from devboard.db.models.worktree_slot import WorktreeSlot
 from devboard.services.task_git.rebase_coordinator import TaskRebaseCoordinator
-from devboard.services.task_git.types import RebaseOutcome
+from devboard.services.task_git.types import RebaseOutcome, TaskConfigurationError
 
 
 @pytest.fixture
@@ -30,20 +31,20 @@ def mock_slot():
 
 class TestRebaseTaskBranch:
     @pytest.mark.asyncio
-    async def test_raises_value_error_when_no_slot(self, mock_task):
-        """Task with no workspace allocated → raises ValueError (never falls back to main repo)."""
+    async def test_raises_no_worktree_exception_when_no_slot(self, mock_task):
+        """Task with no workspace allocated → raises NoWorktreeAllocatedException."""
         mock_task.last_used_worktree_slot = None
 
-        with pytest.raises(ValueError, match="no workspace allocated"):
+        with pytest.raises(NoWorktreeAllocatedException, match="no workspace allocated"):
             await TaskRebaseCoordinator.rebase_task_branch(mock_task)
 
     @pytest.mark.asyncio
-    async def test_raises_value_error_when_no_branch_name(self, mock_task, mock_slot):
-        """Task with no branch name → raises ValueError."""
+    async def test_raises_task_configuration_error_when_no_branch_name(self, mock_task, mock_slot):
+        """Task with no branch name → raises TaskConfigurationError."""
         mock_task.branch_name = None
         mock_task.last_used_worktree_slot = mock_slot
 
-        with pytest.raises(ValueError, match="no branch name"):
+        with pytest.raises(TaskConfigurationError, match="no branch name"):
             await TaskRebaseCoordinator.rebase_task_branch(mock_task)
 
     @pytest.mark.asyncio

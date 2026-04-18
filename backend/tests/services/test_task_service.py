@@ -8,6 +8,7 @@ import pytest
 from devboard.db.models.codebase import MergeMethod
 from devboard.db.models.task import InvalidStatusTransitionError, Task, TaskStatus
 from devboard.services.system_event_emitter import SystemEventEmitter
+from devboard.services.task_git.types import MergeFailureError, TaskConfigurationError
 from devboard.services.task_git_service import MergeOutcome, MergeResult
 from devboard.services.task_service import TaskService
 
@@ -426,7 +427,7 @@ class TestCompleteTaskWithLocalMerge:
 
     @pytest.mark.asyncio
     async def test_fails_with_merge_conflict(self, task_service, task_with_branch, mock_document_repo):
-        """Test complete raises ValueError when merge returns CONFLICT outcome."""
+        """Test complete raises MergeFailureError with CONFLICT outcome."""
         mock_merge_result = MergeResult(
             outcome=MergeOutcome.CONFLICT,
             merge_method=MergeMethod.SQUASH,
@@ -438,14 +439,16 @@ class TestCompleteTaskWithLocalMerge:
             new_callable=AsyncMock,
             return_value=mock_merge_result,
         ):
-            with pytest.raises(ValueError, match="Merge failed"):
+            with pytest.raises(MergeFailureError) as exc_info:
                 await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
 
+        assert exc_info.value.outcome == MergeOutcome.CONFLICT
+        assert "Conflicts detected between feature and main" in exc_info.value.message
         mock_document_repo.create.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_fails_with_merge_error(self, task_service, task_with_branch, mock_document_repo):
-        """Test complete raises ValueError when merge returns ERROR outcome."""
+        """Test complete raises MergeFailureError with ERROR outcome."""
         mock_merge_result = MergeResult(
             outcome=MergeOutcome.ERROR,
             merge_method=MergeMethod.SQUASH,
@@ -457,17 +460,18 @@ class TestCompleteTaskWithLocalMerge:
             new_callable=AsyncMock,
             return_value=mock_merge_result,
         ):
-            with pytest.raises(ValueError, match="Merge failed"):
+            with pytest.raises(MergeFailureError) as exc_info:
                 await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
 
+        assert exc_info.value.outcome == MergeOutcome.ERROR
         mock_document_repo.create.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_fails_without_branch_configured(self, task_service, task_with_branch):
-        """Test complete raises ValueError when task has no branch."""
+        """Test complete raises TaskConfigurationError when task has no branch."""
         task_with_branch.branch_name = None
 
-        with pytest.raises(ValueError, match="has no branch configured"):
+        with pytest.raises(TaskConfigurationError, match="has no branch configured"):
             await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
 
 

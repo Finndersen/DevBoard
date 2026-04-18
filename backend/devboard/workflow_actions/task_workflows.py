@@ -1,9 +1,12 @@
 from devboard.agents.roles.context_helpers import build_execution_graph_context
+from devboard.agents.tools.rebase_tools import execute_rebase_with_result
 from devboard.db.models import ParentEntityType, Task
 from devboard.db.models.codebase import BranchHandling, MergeMethod
 from devboard.db.models.conversation import AgentRoleType
 from devboard.db.models.task import TaskStatus
+from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.github import GitHubIntegration
+from devboard.services.task_git.types import GitHubConnectionError
 from devboard.services.task_git_service import TaskGitService
 from devboard.workflow_actions.base import TaskWorkflowAction
 
@@ -101,60 +104,28 @@ class BeginImplementationAction(TaskWorkflowAction):
 class RebaseTaskBranchAction(TaskWorkflowAction):
     """Rebases a task's feature branch onto its base branch.
 
-    Behavior varies by task status:
-    - PLANNING: Direct service call (no agent involvement, no file changes expected)
-    - IMPLEMENTING: Delegates to agent with rebase_task_branch tool for conflict resolution
+    Always runs the rebase directly (allocating a workspace), regardless of task status.
+    On conflict, returns the conflict prompt for the agent to resolve files and continue.
     """
 
     KEY = "task.rebase_branch"
-
-    IMPLEMENTING_PROMPT = """Use the `rebase_task_branch` tool to rebase this task's feature branch onto the base branch.
-
-The tool handles stashing any uncommitted changes automatically — no need to check git status or stash manually beforehand.
-
-The tool is idempotent - if a rebase is already in progress, it will continue it.
-If you encounter merge conflicts:
-1. The tool will tell you which files have conflicts
-2. Edit those files to resolve the conflicts (remove conflict markers, keep correct code)
-3. Stage the resolved files with `git add`
-4. Call the `rebase_task_branch` tool again to continue
-
-Keep using the tool until the rebase completes successfully."""
-
-    BASE_BRANCH_CHANGES_PROMPT_TEMPLATE = """The task branch has been rebased onto the latest base branch.
-
-{changes_summary}
-
-Please briefly review these changes and note if any are relevant to the current task."""
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
         return task.status in (TaskStatus.PLANNING, TaskStatus.IMPLEMENTING)
 
     async def run(self) -> str | None:
-        if self.task.status == TaskStatus.PLANNING:
-            return await self._run_direct_rebase()
-        else:
-            return self.IMPLEMENTING_PROMPT
-
-    async def _run_direct_rebase(self) -> str | None:
-        """Execute direct rebase for PLANNING state (no file changes expected)."""
         async with self.workspace_service.allocate_workspace(self.task) as allocation:
-            async for _event in self.workspace_service.prepare_workspace(self.task, allocation.slot):
+            async for _ in self.workspace_service.prepare_workspace(self.task, allocation.slot):
                 pass
-            rebase_result = await TaskGitService.rebase_task_branch(self.task)
+            result = await execute_rebase_with_result(self.task)
 
-        if rebase_result.outcome.value == "conflict":
-            conflicted = ", ".join(rebase_result.conflicted_files or [])
-            raise ValueError(f"Rebase encountered conflicts. Conflicted files: {conflicted}")
+        if not result.success:
+            # Return conflict prompt for agent to resolve and continue
+            return result.message
 
-        # If base branch had changes, return prompt for agent to review them
-        if rebase_result.base_branch_changes:
-            return self.BASE_BRANCH_CHANGES_PROMPT_TEMPLATE.format(
-                changes_summary=rebase_result.base_branch_changes.format_summary(self.task.base_branch),
-            )
-
-        return None
+        # Success: only prompt agent if there were base branch changes to review
+        return result.message if result.has_base_changes else None
 
 
 _FINALISATION_PREAMBLE = """## Git Status
@@ -212,8 +183,38 @@ Once all changes are committed, use the `complete_task_with_local_merge` tool to
                 f"Cannot proceed: the main repo has uncommitted changes that conflict with task branch files:\n{file_list}\n"
                 "Please commit or stash these changes before merging."
             )
+
+        main_git = GitRepoIntegration(self.task.codebase.local_path)
+        comparison = await main_git.get_branch_comparison(self.task.branch_name, self.task.base_branch)
+        rebase_note = ""
+        if comparison.has_conflicts or comparison.behind > 0:
+            async with self.workspace_service.allocate_workspace(self.task) as allocation:
+                async for _ in self.workspace_service.prepare_workspace(self.task, allocation.slot):
+                    pass
+                rebase_result = await execute_rebase_with_result(self.task)
+
+            if not rebase_result.success:
+                if rebase_result.rebase_complete:
+                    # STASH_CONFLICT: rebase committed but stash restore conflicted — no further rebase needed
+                    merge_instructions = self._build_prompt(
+                        self.task.codebase.merge_method,
+                        "(git status available once stash conflicts are resolved)",
+                    )
+                    return rebase_result.message + "\n\nOnce stash conflicts are resolved:\n\n" + merge_instructions
+                else:
+                    # CONFLICT: rebase still in progress
+                    merge_instructions = self._build_prompt(
+                        self.task.codebase.merge_method, "(git status will be available once rebase is complete)"
+                    )
+                    return rebase_result.message + "\n\nOnce the rebase is complete:\n\n" + merge_instructions
+
+            rebase_note = f"The task branch was rebased onto `{self.task.base_branch}` before merging.\n\n"
+
+        # Note: last_used_worktree_slot is accessed after workspace release but before reallocation;
+        # reads are safe within the same request as reallocation requires another task to claim the slot.
         changes_context = await _get_task_changes_prompt_context(self.task)
-        return self._build_prompt(self.task.codebase.merge_method, changes_context)
+        prompt = self._build_prompt(self.task.codebase.merge_method, changes_context)
+        return rebase_note + prompt if rebase_note else prompt
 
 
 class ApproveAndCreatePRAction(TaskWorkflowAction):
@@ -271,10 +272,39 @@ IMPORTANT: The git status above already contains the current branch state includ
         github = self.integration_service.get_integration_instance(GitHubIntegration)
         connection_result = await github.test_connection()
         if not connection_result.success:
-            raise ValueError(f"GitHub connection failed: {connection_result.message}")
+            raise GitHubConnectionError(f"GitHub connection failed: {connection_result.message}")
 
+        main_git = GitRepoIntegration(self.task.codebase.local_path)
+        comparison = await main_git.get_branch_comparison(self.task.branch_name, self.task.base_branch)
+        rebase_note = ""
+        if comparison.has_conflicts or comparison.behind > 0:
+            async with self.workspace_service.allocate_workspace(self.task) as allocation:
+                async for _ in self.workspace_service.prepare_workspace(self.task, allocation.slot):
+                    pass
+                rebase_result = await execute_rebase_with_result(self.task)
+
+            if not rebase_result.success:
+                if rebase_result.rebase_complete:
+                    # STASH_CONFLICT: rebase committed but stash restore conflicted — no further rebase needed
+                    pr_instructions = self._build_prompt(
+                        self.task.codebase.merge_method,
+                        "(git status available once stash conflicts are resolved)",
+                    )
+                    return rebase_result.message + "\n\nOnce stash conflicts are resolved:\n\n" + pr_instructions
+                else:
+                    # CONFLICT: rebase still in progress
+                    pr_instructions = self._build_prompt(
+                        self.task.codebase.merge_method, "(git status will be available once rebase is complete)"
+                    )
+                    return rebase_result.message + "\n\nOnce the rebase is complete:\n\n" + pr_instructions
+
+            rebase_note = f"The task branch was rebased onto `{self.task.base_branch}` before creating the PR.\n\n"
+
+        # Note: last_used_worktree_slot is accessed after workspace release but before reallocation;
+        # reads are safe within the same request as reallocation requires another task to claim the slot.
         changes_context = await _get_task_changes_prompt_context(self.task)
-        return self._build_prompt(self.task.codebase.merge_method, changes_context)
+        prompt = self._build_prompt(self.task.codebase.merge_method, changes_context)
+        return rebase_note + prompt if rebase_note else prompt
 
 
 class MergeAndFinaliseAction(TaskWorkflowAction):
@@ -303,7 +333,7 @@ Once all changes are committed and pushed, use the `merge_pr_and_complete_task` 
         github = self.integration_service.get_integration_instance(GitHubIntegration)
         connection_result = await github.test_connection()
         if not connection_result.success:
-            raise ValueError(f"GitHub connection failed: {connection_result.message}")
+            raise GitHubConnectionError(f"GitHub connection failed: {connection_result.message}")
 
         changes_context = await _get_task_changes_prompt_context(self.task)
         return self.PROMPT_TEMPLATE.format(changes_context=changes_context)

@@ -3,13 +3,20 @@
 import logfire
 
 from devboard.db.models.codebase import MergeMethod
-from devboard.db.models.task import Task
+from devboard.db.models.task import NoWorktreeAllocatedException, Task
 from devboard.integrations.git import GitRepoIntegration, parse_remote_branch
 from devboard.integrations.shell import ShellCommandError
 from devboard.integrations.types import CommitDiff, GitLogEntry, StructuredDiff
 from devboard.services.task_git.merge_strategy import get_merge_strategy
 from devboard.services.task_git.rebase_coordinator import TaskRebaseCoordinator
-from devboard.services.task_git.types import MergeOutcome, MergeResult, RebaseResult, TaskDiffView, TaskGitStatus
+from devboard.services.task_git.types import (
+    MergeOutcome,
+    MergeResult,
+    NoRebaseInProgressError,
+    RebaseResult,
+    TaskDiffView,
+    TaskGitStatus,
+)
 
 
 class TaskBranchNotFoundException(Exception):
@@ -299,7 +306,7 @@ class TaskGitService:
         """Abort an in-progress rebase for a task."""
         slot = task.last_used_worktree_slot
         if slot is None:
-            raise ValueError(
+            raise NoWorktreeAllocatedException(
                 f"Task {task.id} has no workspace allocated. Allocate a workspace before calling abort_rebase."
             )
         repo_path = slot.path
@@ -307,7 +314,7 @@ class TaskGitService:
         git = GitRepoIntegration(repo_path)
 
         if not git.is_rebase_in_progress():
-            raise ValueError("No rebase is currently in progress")
+            raise NoRebaseInProgressError("No rebase is currently in progress")
 
         await git.rebase_abort()
         logfire.info(f"Aborted rebase for task {task.id}")

@@ -1,11 +1,27 @@
 """Tools for rebase operations."""
 
+from dataclasses import dataclass
+
 from pydantic_ai import ModelRetry, Tool
 
 from devboard.db.models import Task
+from devboard.db.models.task import NoWorktreeAllocatedException
 from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.types import GitLogEntry
-from devboard.services.task_git_service import BaseBranchChanges, RebaseOutcome, TaskGitService
+from devboard.services.task_git.types import RebaseOutcome, TaskConfigurationError
+from devboard.services.task_git_service import BaseBranchChanges, TaskGitService
+
+
+@dataclass
+class RebaseActionResult:
+    """Result of executing a rebase action."""
+
+    success: bool
+    message: str
+    has_base_changes: bool = False
+    # False only when a CONFLICT occurs mid-rebase (rebase is still in progress).
+    # True for SUCCESS and STASH_CONFLICT (rebase committed, stash restore conflicted).
+    rebase_complete: bool = True
 
 
 def _format_commit_details(commits: list[GitLogEntry]) -> str:
@@ -37,6 +53,78 @@ async def _get_commits_for_conflicted_files(
         file_paths=conflicted_files,
     )
     return commits
+
+
+async def execute_rebase_with_result(task: Task) -> RebaseActionResult:
+    """Execute a rebase for the given task and return a structured result.
+
+    Calls TaskGitService.rebase_task_branch() and formats the outcome into
+    a RebaseActionResult for consumption by tools and workflow actions.
+
+    Args:
+        task: The task whose branch should be rebased
+
+    Raises:
+        TaskConfigurationError: If the task has no branch configured
+        NoWorktreeAllocatedException: If the task has no workspace allocated
+    """
+    result = await TaskGitService.rebase_task_branch(task)
+
+    if result.outcome == RebaseOutcome.SUCCESS:
+        message = f"Rebase completed successfully. New HEAD: {result.new_head}"
+
+        if result.base_branch_changes:
+            message += f"\n\n{result.base_branch_changes.format_summary(task.base_branch)}"
+            message += "\n\nPlease review these changes and note if any are relevant to the current task."
+
+        return RebaseActionResult(
+            success=True, message=message, has_base_changes=result.base_branch_changes is not None
+        )
+
+    elif result.outcome == RebaseOutcome.CONFLICT:
+        conflict_list = (
+            "\n".join(f"  - {f}" for f in result.conflicted_files) if result.conflicted_files else "  (unknown)"
+        )
+
+        stash_note = ""
+        if result.has_pending_stash:
+            stash_note = (
+                "\n\n**Note:** Uncommitted changes were stashed before rebase. "
+                "They will be restored after the rebase completes successfully."
+            )
+
+        commit_details_section = ""
+        if result.base_branch_changes and result.conflicted_files:
+            relevant_commits = await _get_commits_for_conflicted_files(
+                result.base_branch_changes,
+                result.conflicted_files,
+                result.slot_path,
+            )
+            if relevant_commits:
+                formatted_commits = _format_commit_details(relevant_commits)
+                commit_details_section = f"\n\n**Base branch commits that touched these files:**\n{formatted_commits}"
+
+        message = (
+            f"Rebase has conflicts that need to be resolved.\n\n"
+            f"**Conflicted files:**\n{conflict_list}"
+            f"{commit_details_section}\n\n"
+            f"Please resolve the conflicts in these files (remove conflict markers, keep correct code), "
+            f"then call this tool again to continue the rebase.{stash_note}"
+        )
+        return RebaseActionResult(success=False, message=message, rebase_complete=False)
+
+    else:  # STASH_CONFLICT
+        conflict_list = (
+            "\n".join(f"  - {f}" for f in result.conflicted_files) if result.conflicted_files else "  (unknown)"
+        )
+        message = (
+            f"Rebase completed successfully (new HEAD: {result.new_head}), but restoring your "
+            f"uncommitted changes resulted in merge conflicts.\n\n"
+            f"**Conflicted files:**\n{conflict_list}\n\n"
+            f"Please resolve the conflicts in these files. Once resolved, "
+            f"the rebase operation is complete."
+        )
+        return RebaseActionResult(success=False, message=message)
 
 
 def create_rebase_task_branch_tool(
@@ -73,66 +161,13 @@ def create_rebase_task_branch_tool(
             ModelRetry: If rebase encounters conflicts or validation fails
         """
         try:
-            result = await TaskGitService.rebase_task_branch(task)
-        except ValueError as e:
+            result = await execute_rebase_with_result(task)
+        except (TaskConfigurationError, NoWorktreeAllocatedException) as e:
             raise ModelRetry(str(e)) from e
 
-        if result.outcome == RebaseOutcome.SUCCESS:
-            message = f"Rebase completed successfully. New HEAD: {result.new_head}"
+        if result.success:
+            return result.message
 
-            # Include base branch changes summary if available
-            if result.base_branch_changes:
-                message += f"\n\n{result.base_branch_changes.format_summary(task.base_branch)}"
-                message += "\n\nPlease review these changes and note if any are relevant to the current task."
-
-            return message
-
-        elif result.outcome == RebaseOutcome.CONFLICT:
-            conflict_list = (
-                "\n".join(f"  - {f}" for f in result.conflicted_files) if result.conflicted_files else "  (unknown)"
-            )
-
-            stash_note = ""
-            if result.has_pending_stash:
-                stash_note = (
-                    "\n\n**Note:** Uncommitted changes were stashed before rebase. "
-                    "They will be restored after the rebase completes successfully."
-                )
-
-            # Include relevant base branch commit details if available
-            commit_details_section = ""
-            if result.base_branch_changes and result.conflicted_files:
-                relevant_commits = await _get_commits_for_conflicted_files(
-                    result.base_branch_changes,
-                    result.conflicted_files,
-                    result.slot_path,
-                )
-                if relevant_commits:
-                    formatted_commits = _format_commit_details(relevant_commits)
-                    commit_details_section = (
-                        f"\n\n**Base branch commits that touched these files:**\n{formatted_commits}"
-                    )
-
-            raise ModelRetry(
-                f"Rebase has conflicts that need to be resolved.\n\n"
-                f"**Conflicted files:**\n{conflict_list}"
-                f"{commit_details_section}\n\n"
-                f"Please resolve the conflicts in these files (remove conflict markers, keep correct code), "
-                f"then call rebase_task_branch again to continue the rebase.{stash_note}"
-            )
-
-        elif result.outcome == RebaseOutcome.STASH_CONFLICT:
-            conflict_list = (
-                "\n".join(f"  - {f}" for f in result.conflicted_files) if result.conflicted_files else "  (unknown)"
-            )
-            raise ModelRetry(
-                f"Rebase completed successfully (new HEAD: {result.new_head}), but restoring your "
-                f"uncommitted changes resulted in merge conflicts.\n\n"
-                f"**Conflicted files:**\n{conflict_list}\n\n"
-                f"Please resolve the conflicts in these files. Once resolved, the rebase operation is complete."
-            )
-
-        # Should not reach here, but just in case
-        return f"Rebase operation completed with outcome: {result.outcome}"
+        raise ModelRetry(result.message)
 
     return Tool(function=rebase_task_branch, name="rebase_task_branch")  # ty:ignore[invalid-argument-type, invalid-return-type]

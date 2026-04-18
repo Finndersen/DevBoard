@@ -2,10 +2,10 @@
 
 import logfire
 
-from devboard.db.models.task import Task
+from devboard.db.models.task import NoWorktreeAllocatedException, Task
 from devboard.integrations.git import GitRepoIntegration, parse_remote_branch
 from devboard.integrations.shell import RebaseConflictError, ShellCommandExecutionError
-from devboard.services.task_git.types import BaseBranchChanges, RebaseOutcome, RebaseResult
+from devboard.services.task_git.types import BaseBranchChanges, RebaseOutcome, RebaseResult, TaskConfigurationError
 
 
 class TaskRebaseCoordinator:
@@ -27,11 +27,11 @@ class TaskRebaseCoordinator:
             ValueError: If task has no branch name configured or no workspace allocated
         """
         if not task.branch_name:
-            raise ValueError(f"Task {task.id} has no branch name configured")
+            raise TaskConfigurationError(f"Task {task.id} has no branch name configured")
 
         slot = task.last_used_worktree_slot
         if slot is None:
-            raise ValueError(
+            raise NoWorktreeAllocatedException(
                 f"Task {task.id} has no workspace allocated. Allocate a workspace before calling rebase_task_branch."
             )
         repo_path = slot.path

@@ -7,6 +7,7 @@ from devboard.db.models.codebase import MergeMethod
 from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.github import GitHubIntegration
 from devboard.services.task_git import BaseWorkdirOverlapError
+from devboard.services.task_git.types import MergeFailureError, MergeOutcome, TaskConfigurationError
 from devboard.services.task_service import TaskService
 
 
@@ -63,10 +64,10 @@ def create_complete_task_with_local_merge_tool(
         try:
             merge_result = await task_service.complete_task_with_local_merge(task, change_summary)
         except BaseWorkdirOverlapError as e:
-            return f"{e}\n\nSTOP. Inform the user that they need to commit or stash their uncommitted changes in the base branch diretcory before this task can be merged."
-        except ValueError as e:
+            return f"{e}\n\nSTOP. Inform the user that they need to commit or stash their uncommitted changes before this task can be merged."
+        except MergeFailureError as e:
             error_msg = str(e)
-            if "conflict" in error_msg.lower():
+            if e.outcome == MergeOutcome.CONFLICT:
                 error_msg += (
                     "\n\nThe feature branch has NOT been modified - it is still in a clean state. "
                     "To resolve this:\n"
@@ -75,6 +76,8 @@ def create_complete_task_with_local_merge_tool(
                     "3. Then call complete_task_with_local_merge() again"
                 )
             raise ModelRetry(error_msg) from e
+        except TaskConfigurationError as e:
+            raise ModelRetry(str(e)) from e
 
         result = f"Task completed successfully. {merge_result.message}"
         if merge_result.merge_commit:
