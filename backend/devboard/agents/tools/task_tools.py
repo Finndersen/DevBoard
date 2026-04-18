@@ -17,6 +17,7 @@ from devboard.db.models import (
     Task,
     TaskStatus,
 )
+from devboard.db.repositories.codebase import CodebaseRepository
 from devboard.db.repositories.conversation import ConversationRepository
 from devboard.db.repositories.document import DocumentRepository
 from devboard.services.task_service import TaskService
@@ -52,29 +53,42 @@ def _format_tasks_as_toon(tasks: list[Task], limit: int, running_map: dict[int, 
     return toon_output
 
 
-def create_list_tasks_tool(project: Project, task_service: TaskService) -> Tool:
-    """Create a tool for listing tasks belonging to the project.
+def create_list_tasks_tool(
+    project: Project | None,
+    task_service: TaskService,
+    codebase_repo: CodebaseRepository | None = None,
+) -> Tool:
+    """Create a tool for listing tasks with optional filtering.
 
     Args:
-        project: The project to list tasks for
-        task_service: Service for task operations
+        project: The project to scope tasks to, or None for global (all projects) access.
+        task_service: Service for task operations.
+        codebase_repo: Required when project is None, used to fetch all codebase names.
     """
-    # Build codebase name mapping for Literal type hint
-    codebase_names = tuple(cb.name for cb in project.codebases) if project.codebases else ()
+    if project is not None:
+        codebase_names = tuple(cb.name for cb in project.codebases) if project.codebases else ()
+        default_project_id: int | None = project.id
+    else:
+        all_codebases = codebase_repo.get_all() if codebase_repo is not None else []
+        codebase_names = tuple(cb.name for cb in all_codebases)
+        default_project_id = None
 
     async def list_tasks(
+        project_id: int | None = default_project_id,
         status_filter: list[str] | None = None,
         created_after_date: str | None = None,
         created_before_date: str | None = None,
         codebase_name: str | None = None,
         max_results: int = MAX_TASKS_LIMIT,
     ) -> str:
-        """List tasks belonging to this project with optional filtering.
+        """List tasks with optional filtering.
 
-        Use this tool to get an overview of tasks in the project, filtered by various criteria.
+        Use this tool to get an overview of tasks, filtered by various criteria.
         Results are ordered by most recently updated first.
 
         Args:
+            project_id: Filter by project ID. Defaults to the current project when scoped to one.
+                Pass None to see tasks across all projects.
             status_filter: Filter by one or more status values.
                 Valid values: 'planning', 'implementing', 'pr_open', 'complete'
             created_after_date: Filter tasks created on or after this date (format: 'YYYY-MM-DD')
@@ -106,14 +120,13 @@ def create_list_tasks_tool(project: Project, task_service: TaskService) -> Tool:
             raise ModelRetry(f"Invalid date format: {e}. Use format 'YYYY-MM-DD' (e.g., '2024-01-15')") from e
 
         tasks = task_service.get_tasks_filtered(
-            project_id=project.id,
+            project_id=project_id,
             status_filter=parsed_statuses,
             created_after=parsed_created_after,
             created_before=parsed_created_before,
             codebase_name=codebase_name,
             limit=max_results,
         )
-
         running_map = task_service.is_agents_running_for_tasks([t.id for t in tasks])
         return _format_tasks_as_toon(tasks, max_results, running_map)
 
@@ -124,12 +137,12 @@ def create_list_tasks_tool(project: Project, task_service: TaskService) -> Tool:
     return Tool(function=list_tasks, name="list_tasks")  # ty:ignore[invalid-argument-type, invalid-return-type]
 
 
-def create_view_task_details_tool(project: Project, task_service: TaskService) -> Tool:
+def create_view_task_details_tool(project: Project | None, task_service: TaskService) -> Tool:
     """Create a tool for viewing detailed information about a specific task.
 
     Args:
-        project: The project context (for security validation)
-        task_service: Service for task operations
+        project: The project context for security validation, or None for global (unrestricted) access.
+        task_service: Service for task operations.
     """
 
     async def view_task_details(
@@ -161,8 +174,8 @@ def create_view_task_details_tool(project: Project, task_service: TaskService) -
         if not task:
             raise ModelRetry(f"Task with ID {task_id} not found.")
 
-        # Security check: task must belong to this project
-        if task.project_id != project.id:
+        # Security check: task must belong to the scoped project (skipped for global access)
+        if project is not None and task.project_id != project.id:
             raise ModelRetry(f"Task with ID {task_id} does not belong to this project.")
 
         agent_running = task_service.is_task_agent_running(task.id)

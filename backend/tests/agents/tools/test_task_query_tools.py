@@ -19,6 +19,7 @@ from devboard.agents.tools.task_tools import (
     create_view_task_details_tool,
 )
 from devboard.db.models import Codebase, CustomFieldDefinition, CustomFieldType, Document, Project, Task, TaskStatus
+from devboard.db.repositories.codebase import CodebaseRepository
 from devboard.db.repositories.document import DocumentRepository
 from devboard.services.task_service import TaskService
 
@@ -103,6 +104,14 @@ def mock_task_service():
 def mock_document_repo():
     """Create a mock DocumentRepository."""
     repo = Mock(spec=DocumentRepository)
+    return repo
+
+
+@pytest.fixture
+def mock_codebase_repo(mock_codebase):
+    """Create a mock CodebaseRepository returning a single codebase."""
+    repo = Mock(spec=CodebaseRepository)
+    repo.get_all.return_value = [mock_codebase]
     return repo
 
 
@@ -489,6 +498,109 @@ class TestCreateViewTaskDetailsTool:
         assert "invalid_doc" in str(exc_info.value)
         assert "Valid types:" in str(exc_info.value)
         mock_task_service.get_task_by_id.assert_not_called()
+
+
+class TestCreateListTasksToolGlobal:
+    """Tests for create_list_tasks_tool with project=None (global access)."""
+
+    def test_tool_creation_without_project(self, mock_task_service, mock_codebase_repo):
+        """Tool is created with correct name when no project is given."""
+        tool = create_list_tasks_tool(None, mock_task_service, codebase_repo=mock_codebase_repo)
+
+        assert isinstance(tool, Tool)
+        assert tool.name == "list_tasks"
+        assert tool.function is not None
+
+    def test_tool_uses_codebase_repo_for_names(self, mock_task_service, mock_codebase_repo):
+        """Codebase names come from codebase_repo.get_all() when project is None."""
+        create_list_tasks_tool(None, mock_task_service, codebase_repo=mock_codebase_repo)
+
+        mock_codebase_repo.get_all.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_list_tasks_no_project_id_filter(self, mock_task_service, mock_codebase_repo, mock_task):
+        """Lists tasks across all projects when no project_id filter provided."""
+        mock_task_service.get_tasks_filtered.return_value = [mock_task]
+
+        tool = create_list_tasks_tool(None, mock_task_service, codebase_repo=mock_codebase_repo)
+        result = await tool.function()
+
+        mock_task_service.get_tasks_filtered.assert_called_once_with(
+            project_id=None,
+            status_filter=None,
+            created_after=None,
+            created_before=None,
+            codebase_name=None,
+            limit=MAX_TASKS_LIMIT,
+        )
+        parsed = toons.loads(result)
+        assert len(parsed) == 1
+        assert parsed[0]["id"] == 1
+
+    @pytest.mark.asyncio
+    async def test_list_tasks_explicit_project_id_filter(self, mock_task_service, mock_codebase_repo, mock_task):
+        """Passes explicit project_id filter through to the service."""
+        mock_task_service.get_tasks_filtered.return_value = [mock_task]
+
+        tool = create_list_tasks_tool(None, mock_task_service, codebase_repo=mock_codebase_repo)
+        result = await tool.function(project_id=5)
+
+        mock_task_service.get_tasks_filtered.assert_called_once_with(
+            project_id=5,
+            status_filter=None,
+            created_after=None,
+            created_before=None,
+            codebase_name=None,
+            limit=MAX_TASKS_LIMIT,
+        )
+        parsed = toons.loads(result)
+        assert len(parsed) == 1
+
+    @pytest.mark.asyncio
+    async def test_list_tasks_no_matches_global(self, mock_task_service, mock_codebase_repo):
+        """Returns no tasks message when no matches across all projects."""
+        mock_task_service.get_tasks_filtered.return_value = []
+
+        tool = create_list_tasks_tool(None, mock_task_service, codebase_repo=mock_codebase_repo)
+        result = await tool.function()
+
+        assert "No tasks found matching the filters" in result
+
+
+class TestCreateViewTaskDetailsToolGlobal:
+    """Tests for create_view_task_details_tool with project=None (global access)."""
+
+    def test_tool_creation_without_project(self, mock_task_service):
+        """Tool is created with correct name when no project is given."""
+        tool = create_view_task_details_tool(None, mock_task_service)
+
+        assert isinstance(tool, Tool)
+        assert tool.name == "view_task_details"
+
+    @pytest.mark.asyncio
+    async def test_view_task_details_any_project(self, mock_task_service, mock_task):
+        """Allows viewing tasks from any project when project is None."""
+        mock_task.project_id = 999  # A different project from any context
+        mock_task_service.get_task_by_id.return_value = mock_task
+
+        tool = create_view_task_details_tool(None, mock_task_service)
+        result = await tool.function(task_id=1)
+
+        # No project ownership error raised
+        assert "# Task #1: Implement feature X" in result
+        assert "**Status:** planning" in result
+
+    @pytest.mark.asyncio
+    async def test_view_task_details_not_found_global(self, mock_task_service):
+        """Raises ModelRetry when task not found, even in global mode."""
+        mock_task_service.get_task_by_id.return_value = None
+
+        tool = create_view_task_details_tool(None, mock_task_service)
+
+        with pytest.raises(ModelRetry) as exc_info:
+            await tool.function(task_id=999)
+
+        assert "Task with ID 999 not found" in str(exc_info.value)
 
 
 class TestCreateCreateTaskTool:

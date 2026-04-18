@@ -354,12 +354,22 @@ class ConversationRepository(BaseRepository[Conversation]):
         conversation.external_session_id = session_id
         self.db.flush()
 
-    def get_all_top_level(self) -> list[ConversationListRow]:
+    def get_all_top_level(
+        self,
+        parent_entity_type: ParentEntityType | None = None,
+        parent_entity_id: int | None = None,
+        agent_role: AgentRoleType | None = None,
+    ) -> list[ConversationListRow]:
         """Get all top-level, non-archived conversations ordered by last activity.
 
         Excludes sub-conversations, archived conversations, and conversations
         belonging to completed tasks. Includes enriched parent entity names
         via left outer joins to avoid N+1 queries.
+
+        Args:
+            parent_entity_type: Optional filter by parent entity type.
+            parent_entity_id: Optional filter by parent entity ID.
+            agent_role: Optional filter by agent role.
         """
         from devboard.db.models.codebase import Codebase
         from devboard.db.models.project import Project
@@ -411,6 +421,13 @@ class ConversationRepository(BaseRepository[Conversation]):
             )
             .order_by(Conversation.last_activity_at.desc().nullslast())
         )
+
+        if parent_entity_type is not None:
+            stmt = stmt.where(Conversation.parent_entity_type == parent_entity_type)
+        if parent_entity_id is not None:
+            stmt = stmt.where(Conversation.parent_entity_id == parent_entity_id)
+        if agent_role is not None:
+            stmt = stmt.where(Conversation.agent_role == agent_role)
 
         rows = self.db.execute(stmt).all()
         result: list[ConversationListRow] = []

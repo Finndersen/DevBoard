@@ -12,15 +12,11 @@ from devboard.agents.exceptions import ConversationBusyError
 from devboard.agents.execution.registry import get_execution_manager
 from devboard.api.dependencies.conversations import get_conversation_history_service
 from devboard.api.dependencies.entities import get_verified_conversation
-from devboard.api.dependencies.factories import create_agent_role_for_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository
 from devboard.api.dependencies.services import (
-    ExecutionServices,
     get_agent_config_service,
     get_conversation_service,
-    get_execution_services,
 )
-from devboard.api.schemas.agent_config import AgentConfigResponse, ToolInfo
 from devboard.api.schemas.agent_conversation import (
     ChatRequest,
     ToolApprovals,
@@ -29,11 +25,9 @@ from devboard.api.schemas.claude_code_todo import TodoItem
 from devboard.api.schemas.common import DeleteResponse, ResetConversationResponse
 from devboard.api.schemas.conversation import ConversationMessagesResponse, ConversationResponse, ConversationUpdate
 from devboard.api.schemas.integration import UpdateConversationModelRequest
-from devboard.db.models import Conversation, Project, Task, TaskStatus
-from devboard.db.models.codebase import Codebase
+from devboard.db.models import Conversation, Task, TaskStatus
 from devboard.db.repositories import ConversationRepository
 from devboard.services.conversation_service import ConversationService
-from devboard.services.project_directory import ensure_project_directory
 
 router = APIRouter()
 
@@ -280,66 +274,3 @@ async def update_conversation_model(
         "engine": updated.engine.value,
         "model_id": updated.model_id,
     }
-
-
-@router.get("/{conversation_id}/agent-config", response_model=AgentConfigResponse)
-async def get_agent_config(
-    conversation: Conversation = Depends(get_verified_conversation),
-    exec_services: ExecutionServices = Depends(get_execution_services),
-) -> AgentConfigResponse:
-    """Get the full assembled agent configuration for a conversation."""
-    parent = conversation.get_parent_entity()
-    # Working dir should not matter or be used since the role is not actually used for execution here
-    if isinstance(parent, Task):
-        working_dir = parent.codebase.local_path
-    elif isinstance(parent, Project):
-        working_dir = str(ensure_project_directory(parent))
-    elif isinstance(parent, Codebase):
-        working_dir = parent.local_path
-    else:
-        working_dir = "."
-
-    role = await create_agent_role_for_conversation(
-        conversation=conversation,
-        document_repo=exec_services.document_repo,
-        agent_config_service=exec_services.agent_config_service,
-        integration_service=exec_services.integration_service,
-        task_service=exec_services.task_service,
-        conversation_repo=exec_services.conversation_repo,
-        working_dir=working_dir,
-    )
-
-    agent_config = exec_services.agent_config_service.get_agent_configuration(conversation.agent_role)
-
-    role_tools = [
-        ToolInfo(
-            name=tool.name,
-            description=tool.description,
-            input_schema=tool.function_schema.json_schema,
-            source="role",
-        )
-        for tool in role.get_tools()
-    ]
-
-    mcp_tools = [
-        ToolInfo(
-            name=mcp_tool.name,
-            description=mcp_tool.description,
-            input_schema=mcp_tool.input_schema,
-            source="mcp",
-            server_name=mcp_tool.server.name,
-        )
-        for mcp_tool in exec_services.agent_config_service.get_enabled_mcp_tools(conversation.agent_role)
-    ]
-
-    builtin_tools = [ToolInfo(name=name, source="builtin") for name in role.allowed_builtin_tools]
-
-    return AgentConfigResponse(
-        agent_role=conversation.agent_role.value,
-        behaviour_guidelines=role.get_system_prompt(),
-        context_content=await role.get_context_content(),
-        custom_instructions=agent_config.custom_instructions,
-        role_tools=role_tools,
-        mcp_tools=mcp_tools,
-        builtin_tools=builtin_tools,
-    )

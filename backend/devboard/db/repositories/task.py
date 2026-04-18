@@ -173,14 +173,16 @@ class TaskRepository(BaseRepository[Task]):
 
     def get_tasks_filtered(
         self,
-        project_id: int,
+        project_id: int | None = None,
         status_filter: list[TaskStatus] | None = None,
         created_after: datetime | None = None,
         created_before: datetime | None = None,
         codebase_name: str | None = None,
         limit: int | None = None,
     ) -> list[Task]:
-        stmt = select(Task).where(Task.project_id == project_id)
+        stmt = select(Task)
+        if project_id is not None:
+            stmt = stmt.where(Task.project_id == project_id)
 
         if status_filter:
             stmt = stmt.where(Task.status.in_(status_filter))

@@ -1,4 +1,4 @@
-"""Tests for GET /api/conversations/{id}/agent-config endpoint."""
+"""Tests for GET /api/agents/conversations/{id}/config endpoint."""
 
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, Mock, patch
@@ -48,7 +48,7 @@ def mock_execution_context(mock_role, agent_config, mcp_tools=None):
 
     try:
         with patch(
-            "devboard.api.routers.conversations.create_agent_role_for_conversation",
+            "devboard.api.dependencies.factories.create_agent_role_for_conversation",
             new=AsyncMock(return_value=mock_role),
         ):
             yield
@@ -57,7 +57,7 @@ def mock_execution_context(mock_role, agent_config, mcp_tools=None):
 
 
 class TestGetAgentConfigEndpoint:
-    """Tests for GET /api/conversations/{id}/agent-config endpoint."""
+    """Tests for GET /api/agents/conversations/{id}/config endpoint."""
 
     def _get_task_conversation_id(self, db_session, test_task) -> int:
         conv_repo = ConversationRepository(db_session)
@@ -70,7 +70,7 @@ class TestGetAgentConfigEndpoint:
 
     def test_returns_404_for_nonexistent_conversation(self, client):
         """Should return 404 for a conversation that does not exist."""
-        response = client.get("/api/conversations/99999/agent-config")
+        response = client.get("/api/agents/conversations/99999/config")
         assert response.status_code == 404
 
     def test_happy_path_returns_full_config(self, client, db_session, test_task):
@@ -100,7 +100,7 @@ class TestGetAgentConfigEndpoint:
         )
 
         with mock_execution_context(mock_role, mock_agent_config, mcp_tools=[mock_mcp_tool]):
-            response = client.get(f"/api/conversations/{conversation_id}/agent-config")
+            response = client.get(f"/api/agents/conversations/{conversation_id}/config")
 
         assert response.status_code == 200
         data = response.json()
@@ -153,7 +153,7 @@ class TestGetAgentConfigEndpoint:
         mock_agent_config.custom_instructions = None
 
         with mock_execution_context(mock_role, mock_agent_config):
-            response = client.get(f"/api/conversations/{conversation_id}/agent-config")
+            response = client.get(f"/api/agents/conversations/{conversation_id}/config")
 
         assert response.status_code == 200
         assert response.json()["custom_instructions"] is None
@@ -172,7 +172,7 @@ class TestGetAgentConfigEndpoint:
         mock_agent_config.custom_instructions = None
 
         with mock_execution_context(mock_role, mock_agent_config, mcp_tools=[]):
-            response = client.get(f"/api/conversations/{conversation_id}/agent-config")
+            response = client.get(f"/api/agents/conversations/{conversation_id}/config")
 
         assert response.status_code == 200
         data = response.json()

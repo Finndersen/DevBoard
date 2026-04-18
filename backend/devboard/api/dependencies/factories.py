@@ -12,11 +12,13 @@ from devboard.agents.engines.claude_code import ClaudeCodeAgentExecutionService
 from devboard.agents.engines.internal import PydanticAIAgentExecutionService
 from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.agents.roles import AgentRole, AgentRoleType
+from devboard.agents.roles.background_agent import BackgroundAgentRole
 from devboard.agents.roles.project_qa import ProjectQAAgentRole
 from devboard.agents.roles.task_implementation import TaskImplementationAgentRole
 from devboard.agents.roles.task_planning import TaskPlanningAgentRole
 from devboard.agents.roles.task_pr_review import TaskPRReviewAgentRole
 from devboard.db.models import Conversation, Project, Task
+from devboard.db.models.background_agent import BackgroundAgent
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
 from devboard.integrations.github import GitHubIntegration
@@ -104,6 +106,23 @@ async def create_agent_role_for_conversation(
             raise HTTPException(
                 status_code=400,
                 detail=f"Unsupported agent role for project: {conversation.agent_role}",
+            )
+    elif isinstance(parent_entity, BackgroundAgent):
+        if conversation.agent_role == AgentRoleType.BACKGROUND_AGENT:
+            agent_config = agent_config_service.get_agent_configuration(conversation.agent_role)
+            system_prompt = agent_config.custom_instructions or parent_entity.prompt
+            return BackgroundAgentRole(
+                system_prompt=system_prompt,
+                task_service=task_service,
+                conversation_repo=conversation_repo,
+                document_repo=document_repo,
+                agent_config_service=agent_config_service,
+                integration_service=integration_service,
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported agent role for background agent: {conversation.agent_role}",
             )
     else:
         raise HTTPException(

@@ -394,7 +394,7 @@ class TaskService:
 
     def get_tasks_filtered(
         self,
-        project_id: int,
+        project_id: int | None = None,
         status_filter: list[TaskStatus] | None = None,
         created_after: datetime | None = None,
         created_before: datetime | None = None,

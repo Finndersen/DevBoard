@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from devboard.agents.agent_config_assembly import assemble_agent_config
 from devboard.agents.agent_config_service import (
     AgentConfigService,
     AgentConfiguration,
@@ -10,14 +11,17 @@ from devboard.agents.agent_config_service import (
 from devboard.agents.config_types import AgentEngineModelInput
 from devboard.agents.engines import AgentEngine
 from devboard.agents.roles import AgentRoleType
+from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_mcp_server_repository
-from devboard.api.dependencies.services import get_agent_config_service
+from devboard.api.dependencies.services import ExecutionServices, get_agent_config_service, get_execution_services
 from devboard.api.schemas import (
     AddMCPToolRequest,
     AgentRoleToolsResponse,
     MCPToolSummary,
     UpdateAgentConfigurationRequestFull,
 )
+from devboard.api.schemas.agent_config import AgentConfigResponse
+from devboard.db.models import Conversation
 from devboard.db.repositories import MCPServerRepository
 
 router = APIRouter()
@@ -164,3 +168,19 @@ async def get_available_mcp_tools(
         )
         for tool in tools
     ]
+
+
+@router.get("/conversations/{conversation_id}/config", response_model=AgentConfigResponse)
+async def get_conversation_agent_config(
+    conversation: Conversation = Depends(get_verified_conversation),
+    exec_services: ExecutionServices = Depends(get_execution_services),
+) -> AgentConfigResponse:
+    """Get the full assembled agent configuration for a conversation."""
+    return await assemble_agent_config(
+        conversation=conversation,
+        document_repo=exec_services.document_repo,
+        agent_config_service=exec_services.agent_config_service,
+        integration_service=exec_services.integration_service,
+        task_service=exec_services.task_service,
+        conversation_repo=exec_services.conversation_repo,
+    )

@@ -1212,7 +1212,7 @@ export class ApiClient {
   }
 
   async getConversationAgentConfig(conversationId: number | string): Promise<AgentConfigResponse> {
-    return this.request<AgentConfigResponse>(`/api/conversations/${conversationId}/agent-config`)
+    return this.request<AgentConfigResponse>(`/api/agents/conversations/${conversationId}/config`)
   }
 
   async executeWorkflowAction(

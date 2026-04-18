@@ -5,6 +5,12 @@ from .codebase_tools import (
     create_file_search_tool,
     create_text_search_tool,
 )
+from .conversation_tools import (
+    create_list_conversations_tool,
+    create_view_agent_config_tool,
+    create_view_conversation_content_tool,
+    create_view_conversation_details_tool,
+)
 from .document_editing import create_document_edit_tool, create_set_document_content_tool
 from .github_tools import create_get_pr_feedback_tool, create_get_pr_status_tool, create_github_pr_tool
 from .rebase_tools import create_rebase_task_branch_tool
@@ -32,6 +38,7 @@ __all__ = [
     "create_edit_task_tool",
     "create_get_pr_feedback_tool",
     "create_get_pr_status_tool",
+    "create_list_conversations_tool",
     "create_list_tasks_tool",
     "create_merge_pr_and_complete_task_tool",
     "create_github_pr_tool",
@@ -44,5 +51,8 @@ __all__ = [
     "create_set_document_content_tool",
     "create_text_search_tool",
     "create_file_read_tool",
+    "create_view_agent_config_tool",
+    "create_view_conversation_content_tool",
+    "create_view_conversation_details_tool",
     "create_view_task_details_tool",
 ]
