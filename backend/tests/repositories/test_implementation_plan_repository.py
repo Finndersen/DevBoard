@@ -1,6 +1,7 @@
 import pytest
 from sqlalchemy.orm import Session
 
+from devboard.agents.language_models import ModelType
 from devboard.db.models import Codebase, Project
 from devboard.db.models.document import DocumentType
 from devboard.db.models.implementation_plan import (
@@ -125,6 +126,23 @@ class TestTaskImplementationPlanRepository:
         assert steps[1].dependencies == [1]
         assert steps[2].step_number == 3
         assert steps[2].type == ImplementationStepType.DOCUMENTATION
+
+    def test_create_steps_with_model_type(self, repo: TaskImplementationPlanRepository, task, db_session: Session):
+        plan = repo.create(task_id=task.id)
+        db_session.flush()
+
+        steps_data = [
+            {"title": "Fast step", "type": "validation", "details": "Run tests", "model_type": "fast"},
+            {"title": "Standard step", "type": "code_change", "details": "Write code", "model_type": "standard"},
+            {"title": "No model step", "type": "documentation", "details": "Write docs"},
+        ]
+
+        steps = repo.create_steps(plan.id, steps_data)
+        db_session.flush()
+
+        assert steps[0].model_type == ModelType.FAST
+        assert steps[1].model_type == ModelType.STANDARD
+        assert steps[2].model_type is None
 
     def test_get_step_by_number(self, repo: TaskImplementationPlanRepository, task, db_session: Session):
         plan = repo.create(task_id=task.id)

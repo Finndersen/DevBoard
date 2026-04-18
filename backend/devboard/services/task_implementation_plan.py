@@ -4,6 +4,7 @@ import datetime
 from collections import defaultdict
 from typing import Any
 
+from devboard.agents.language_models import ModelType
 from devboard.api.schemas.document import DocumentEdit
 from devboard.db.models.implementation_plan import (
     ImplementationPlan,
@@ -51,6 +52,7 @@ class TaskImplementationPlanService:
         type: str,
         details: str,
         dependencies: list[int] | None = None,
+        model_type: str | None = None,
     ) -> ImplementationStep:
         """Add a single step to an existing plan."""
         deps = dependencies or []
@@ -72,6 +74,7 @@ class TaskImplementationPlanService:
             dependencies=deps,
             status=ImplementationStepStatus.PENDING,
             details=details,
+            model_type=ModelType(model_type) if model_type else None,
         )
         self.plan_repo.db.add(step)
         self.plan_repo.db.flush()
@@ -85,6 +88,7 @@ class TaskImplementationPlanService:
         type: str | None = None,
         dependencies: list[int] | None = None,
         details: str | None = None,
+        model_type: str | None = None,
     ) -> ImplementationStep:
         """Update a step's fields. Validates dependency changes including cycle detection."""
         step = self.plan_repo.get_step_by_number(plan.id, step_number)
@@ -105,6 +109,8 @@ class TaskImplementationPlanService:
             step.dependencies = dependencies
         if details is not None:
             step.details = details
+        if model_type is not None:
+            step.model_type = ModelType(model_type)
 
         self.plan_repo.update_step(step)
         return step

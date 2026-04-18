@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 from sqlalchemy import JSON, Enum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from devboard.agents.language_models import ModelType
+
 from .base import Base
 
 if TYPE_CHECKING:
@@ -82,6 +84,7 @@ class ImplementationStep(Base):
     )
     details: Mapped[str] = mapped_column(Text)
     outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model_type: Mapped[ModelType | None] = mapped_column(Enum(ModelType), nullable=True, default=None)
     conversation_id: Mapped[int | None] = mapped_column(nullable=True, default=None)
     started_at: Mapped[datetime.datetime | None] = mapped_column(nullable=True, default=None)
     completed_at: Mapped[datetime.datetime | None] = mapped_column(nullable=True, default=None)

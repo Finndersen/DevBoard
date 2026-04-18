@@ -10,6 +10,7 @@ from pydantic_ai import ModelRetry, Tool
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.exceptions import ConversationBusyError
 from devboard.agents.execution.types import SubAgentResult
+from devboard.agents.language_models import ModelType
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.agents.roles.code_review import CodeReviewAgentRole
 from devboard.agents.roles.codebase_investigation import CodebaseInvestigationAgentRole
@@ -41,22 +42,30 @@ def create_sub_agent_conversation(
     conversation_repo: ConversationRepository,
     parent_entity: ParentEntity,
     parent_conversation_id: int | None = None,
+    model_type: ModelType | None = None,
 ) -> Conversation:
     """Create a new sub-agent conversation record and commit it eagerly.
 
     Returns the Conversation object so the caller has the conversation_id immediately,
     before execution begins.
 
+    When model_type is provided, resolves the model for that type and the effective engine
+    instead of using the role's default model.
+
     ## NOTE: This is very similar to ConversationService.create_initial_conversation_for_parent_entity() which is annoying, but
     agent_config_service and conversation_repo are also needed elsewhere where this is called, so couldnt just be replaced by ConversationService
     """
     config = agent_config_service.get_effective_config(role_type)
+    if model_type is not None:
+        model_id = agent_config_service.get_model_id_for_type(model_type, config.engine)
+    else:
+        model_id = config.model_id
     conversation = conversation_repo.create(
         parent_entity_type=parent_entity.entity_type,
         parent_entity_id=parent_entity.id,
         agent_role=role_type,
         engine=config.engine,
-        model_id=config.model_id,
+        model_id=model_id,
         is_active=False,
         parent_conversation_id=parent_conversation_id,
     )

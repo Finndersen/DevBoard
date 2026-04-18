@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.exceptions import ConversationBusyError
 from devboard.agents.execution.registry import get_execution_manager
+from devboard.agents.roles import AgentRoleType
 from devboard.api.dependencies.entities import get_verified_task
 from devboard.api.dependencies.repositories import (
     get_conversation_repository,
@@ -47,6 +48,7 @@ from devboard.api.schemas import (
     WorkflowActionInfo,
 )
 from devboard.db.models import ParentEntityType
+from devboard.db.models.implementation_plan import ImplementationStep, ImplementationStepType
 from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories import (
     ConversationRepository,
@@ -685,11 +687,24 @@ async def get_task_pr_feedback(
 # Implementation Plan endpoints
 
 
+def _step_role_type(step_type: ImplementationStepType) -> AgentRoleType:
+    if step_type == ImplementationStepType.CODE_REVIEW:
+        return AgentRoleType.CODE_REVIEW
+    return AgentRoleType.STEP_EXECUTION
+
+
+def _resolve_model_display_name(step: ImplementationStep, agent_config_service: AgentConfigService) -> str | None:
+    if step.model_type is None:
+        return None
+    return agent_config_service.get_model_display_name(step.model_type, _step_role_type(step.type))
+
+
 @router.get("/{task_id}/implementation-plan", response_model=ImplementationPlanResponse)
 async def get_implementation_plan(
     task_id: int,
     task: Task = Depends(get_verified_task),
     plan_service: TaskImplementationPlanService = Depends(get_task_implementation_plan_service),
+    agent_config_service: AgentConfigService = Depends(get_agent_config_service),
 ) -> ImplementationPlanResponse:
     """Get the structured implementation plan for a task."""
     plan = plan_service.get_plan_by_task_id(task_id)
@@ -711,6 +726,8 @@ async def get_implementation_plan(
                 status=step.status,
                 details=step.details,
                 outcome=step.outcome,
+                model_type=step.model_type,
+                model_display_name=_resolve_model_display_name(step, agent_config_service),
                 conversation_id=step.conversation_id,
                 started_at=step.started_at,
                 completed_at=step.completed_at,
@@ -730,6 +747,7 @@ async def update_implementation_step(
     step_update: ImplementationStepUpdate,
     task: Task = Depends(get_verified_task),
     plan_service: TaskImplementationPlanService = Depends(get_task_implementation_plan_service),
+    agent_config_service: AgentConfigService = Depends(get_agent_config_service),
 ) -> ImplementationStepResponse:
     """Update a specific implementation step by step number."""
     plan = plan_service.get_plan_by_task_id(task_id)
@@ -754,6 +772,8 @@ async def update_implementation_step(
         status=step.status,
         details=step.details,
         outcome=step.outcome,
+        model_type=step.model_type,
+        model_display_name=_resolve_model_display_name(step, agent_config_service),
         conversation_id=step.conversation_id,
         started_at=step.started_at,
         completed_at=step.completed_at,
@@ -770,6 +790,7 @@ async def create_implementation_step(
     step_create: ImplementationStepCreate,
     task: Task = Depends(get_verified_task),
     plan_service: TaskImplementationPlanService = Depends(get_task_implementation_plan_service),
+    agent_config_service: AgentConfigService = Depends(get_agent_config_service),
 ) -> ImplementationStepResponse:
     """Add a new step to a task's implementation plan."""
     plan = plan_service.get_plan_by_task_id(task_id)
@@ -783,6 +804,7 @@ async def create_implementation_step(
             type=step_create.type,
             details=step_create.details,
             dependencies=step_create.dependencies,
+            model_type=step_create.model_type,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -797,6 +819,8 @@ async def create_implementation_step(
         status=step.status,
         details=step.details,
         outcome=step.outcome,
+        model_type=step.model_type,
+        model_display_name=_resolve_model_display_name(step, agent_config_service),
         conversation_id=step.conversation_id,
         started_at=step.started_at,
         completed_at=step.completed_at,

@@ -1,5 +1,6 @@
 """Service for managing agent engine and model configuration."""
 
+import logfire
 from pydantic import BaseModel
 
 from devboard.agents.config_types import AgentEngineInfo, AgentEngineModelConfig, AgentEngineModelInput, ModelInfo
@@ -10,6 +11,7 @@ from devboard.agents.engines.agent_engines import (
 from devboard.agents.language_models import (
     RECOMMENDED_AGENT_MODEL_TYPES,
     LLMProvider,
+    ModelType,
 )
 from devboard.agents.roles import AgentRoleType
 from devboard.api.schemas.agents import MCPToolSummary
@@ -370,6 +372,51 @@ class AgentConfigService:
 
     def get_model_by_id(self, model_id: str) -> LanguageModelDB | None:
         return self._language_model_repo.get_by_model_id(model_id)
+
+    def get_model_id_for_type(self, model_type: ModelType, engine: AgentEngine) -> str | None:
+        """Resolve the model ID for a given model type and engine.
+
+        Finds the first available model of the requested type for the engine.
+
+        Returns:
+            Model ID in "provider:model" format, or None if no models are available for the engine
+        """
+        engine_def = self._engine_registry.get(engine)
+        if engine_def is None:
+            raise ValueError(f"Invalid engine: {engine}")
+
+        available = self._get_available_models_for_engine(engine)
+        if not available:
+            if engine_def.requires_model_selection:
+                raise ValueError(
+                    f"No models available for engine '{engine.value}'. Ensure at least one provider is configured."
+                )
+            return None
+
+        for model in available:
+            if model.model_type == model_type:
+                return model.model_id
+
+        # Fallback to first available model if no match for requested type
+        logfire.warn(
+            "No model found for requested type, falling back to first available",
+            requested_type=model_type,
+            engine=engine.value,
+            fallback_model=available[0].model_id,
+        )
+        return available[0].model_id
+
+    def get_model_display_name(self, model_type: ModelType, role_type: AgentRoleType) -> str | None:
+        """Resolve the display name for a model type as it would be used for a given role.
+
+        Gets the effective engine for the role, resolves the model_id for the requested type,
+        and extracts the model name from the "provider:model_name" format.
+        """
+        config = self.get_effective_config(role_type)
+        model_id = self.get_model_id_for_type(model_type, config.engine)
+        if model_id is None:
+            return None
+        return model_id.split(":", 1)[1] if ":" in model_id else model_id
 
     def _get_default_model_for_agent_role_and_engine(
         self, agent_role: AgentRoleType, engine: AgentEngine

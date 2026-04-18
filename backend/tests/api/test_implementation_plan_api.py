@@ -154,3 +154,87 @@ class TestImplementationPlanAPI:
             json={"title": "Code review", "type": "code_review", "details": "Review.", "dependencies": [99]},
         )
         assert response.status_code == 400
+
+    def test_get_implementation_plan_includes_model_fields(self, client: TestClient, task_with_plan):
+        response = client.get(f"/api/tasks/{task_with_plan.id}/implementation-plan")
+        assert response.status_code == 200
+
+        data = response.json()
+        step = data["steps"][0]
+        assert "model_type" in step
+        assert "model_display_name" in step
+        assert step["model_type"] is None
+        assert step["model_display_name"] is None
+
+    def test_create_implementation_step_with_model_type(self, client: TestClient, task_with_plan):
+        response = client.post(
+            f"/api/tasks/{task_with_plan.id}/implementation-plan/steps",
+            json={
+                "title": "Code review",
+                "type": "code_review",
+                "details": "Review the git diff.",
+                "model_type": "standard",
+            },
+        )
+        assert response.status_code == 201
+
+        data = response.json()
+        assert data["model_type"] == "standard"
+        # CODE_REVIEW role → INTERNAL engine → OpenAI models (only configured provider in tests)
+        assert data["model_display_name"] == "gpt-5"
+
+    def test_create_implementation_step_fast_model_type(self, client: TestClient, task_with_plan):
+        response = client.post(
+            f"/api/tasks/{task_with_plan.id}/implementation-plan/steps",
+            json={
+                "title": "Run tests",
+                "type": "validation",
+                "details": "Run the test suite.",
+                "model_type": "fast",
+            },
+        )
+        assert response.status_code == 201
+
+        data = response.json()
+        assert data["model_type"] == "fast"
+        # STEP_EXECUTION role → CLAUDE_CODE engine → Anthropic models
+        assert data["model_display_name"] == "claude-haiku-4-5"
+
+    def test_update_implementation_step_model_type(self, client: TestClient, task_with_plan):
+        response = client.patch(
+            f"/api/tasks/{task_with_plan.id}/implementation-plan/steps/1",
+            json={"model_type": "advanced"},
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["model_type"] == "advanced"
+        # STEP_EXECUTION role → CLAUDE_CODE engine → Anthropic models
+        assert data["model_display_name"].startswith("claude-opus")
+
+    def test_plan_step_model_type_persisted_after_create(self, client: TestClient, task_with_plan):
+        client.post(
+            f"/api/tasks/{task_with_plan.id}/implementation-plan/steps",
+            json={"title": "New step", "type": "validation", "details": "Validate.", "model_type": "fast"},
+        )
+        response = client.get(f"/api/tasks/{task_with_plan.id}/implementation-plan")
+        assert response.status_code == 200
+
+        steps = response.json()["steps"]
+        new_step = next(s for s in steps if s["title"] == "New step")
+        assert new_step["model_type"] == "fast"
+        assert new_step["model_display_name"] == "claude-haiku-4-5"
+
+    def test_create_implementation_step_invalid_model_type(self, client: TestClient, task_with_plan):
+        response = client.post(
+            f"/api/tasks/{task_with_plan.id}/implementation-plan/steps",
+            json={"title": "Some step", "type": "validation", "details": "Do it.", "model_type": "invalid"},
+        )
+        assert response.status_code == 400
+
+    def test_update_implementation_step_invalid_model_type(self, client: TestClient, task_with_plan):
+        response = client.patch(
+            f"/api/tasks/{task_with_plan.id}/implementation-plan/steps/1",
+            json={"model_type": "invalid"},
+        )
+        assert response.status_code == 400

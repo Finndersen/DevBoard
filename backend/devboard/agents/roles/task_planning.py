@@ -65,6 +65,10 @@ Each step should be self-contained with enough detail for a sub-agent to execute
   - `documentation` — update or add documentation only
   - `validation` — run the full test suite and fix any failures. Lint/format/typecheck should already be clean from per-step inline checks, so also run them as a safety net to catch any cross-step issues, but the primary focus is test failures and integration issues. Not for writing new tests.
   - `code_review` — optional: review the git diff for correctness, quality, and alignment with the spec; produces findings for the coordination agent to act on (does not make changes directly). Include for non-trivial changes.
+- **model_type**: Controls which model tier executes this step. Choose based on task complexity:
+  - `fast` (Haiku) — default for `code_change`, `documentation`, and `validation` steps
+  - `standard` (Sonnet) — for especially complex `code_change` steps requiring deeper reasoning
+  - `code_review` steps should always use `standard` (Sonnet) or `advanced` (Opus)
 - **dependencies**: List of step numbers (1-indexed) that must complete first
 - **details**: What to build, key constraints, and non-obvious "how" decisions. See guidance below.
 

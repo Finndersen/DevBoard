@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 class StepInput(BaseModel):
     title: str
     type: Literal["code_change", "documentation", "validation", "code_review"]
+    model_type: Literal["fast", "standard", "advanced"] | None = None
     dependencies: list[int] = []
     details: str
 
@@ -63,6 +64,8 @@ def create_set_implementation_plan_steps_tool(
             steps: Ordered list of implementation steps. Each step has:
                 - title: Short summary of the step
                 - type: One of 'code_change', 'documentation', 'validation', 'code_review'
+                - model_type: Model tier to use — 'fast' (Haiku), 'standard' (Sonnet), or 'advanced' (Opus).
+                  Default for code_change/documentation/validation is 'fast'; code_review should use 'standard' or 'advanced'.
                 - dependencies: List of step numbers (1-indexed positions) this step depends on
                 - details: Detailed markdown instructions for execution
             overview: Optional brief summary of the implementation approach
@@ -367,12 +370,14 @@ def create_execute_implementation_step_tool(
                     raise ValueError(f"Conversation {step.conversation_id} for step {step_number} not found.")
             else:
                 resuming = False
+                step_model_type = step.model_type
                 conversation = create_sub_agent_conversation(
                     role_type=role_type,
                     agent_config_service=agent_config_service,
                     conversation_repo=conversation_repo,
                     parent_entity=task,
                     parent_conversation_id=parent_conversation_id,
+                    model_type=step_model_type,
                 )
                 plan_service.set_step_conversation(step, conversation.id)
 

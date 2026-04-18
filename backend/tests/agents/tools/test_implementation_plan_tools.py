@@ -7,7 +7,9 @@ from pydantic_ai import ModelRetry
 
 from devboard.agents.events import SystemEventType
 from devboard.agents.exceptions import AgentInterruptedError
+from devboard.agents.language_models import ModelType
 from devboard.agents.tools.implementation_plan_tools import (
+    StepInput,
     create_execute_implementation_step_tool,
     create_read_implementation_step_details_tool,
 )
@@ -164,6 +166,7 @@ class TestExecuteImplementationStepConversationFlow:
         self,
         step_type: ImplementationStepType = ImplementationStepType.CODE_CHANGE,
         conversation_id: int | None = None,
+        model_type: ModelType | None = None,
     ) -> Mock:
         step = Mock(spec=ImplementationStep)
         step.status = ImplementationStepStatus.PENDING
@@ -172,6 +175,7 @@ class TestExecuteImplementationStepConversationFlow:
         step.title = "Test step"
         step.details = "Do the thing"
         step.conversation_id = conversation_id
+        step.model_type = model_type
         return step
 
     @pytest.mark.asyncio
@@ -331,6 +335,7 @@ class TestExecuteImplementationStepBroadcastEvent:
         step.title = "Test step"
         step.details = "Do the thing"
         step.conversation_id = conversation_id
+        step.model_type = None
         step.dependencies = []
         return step
 
@@ -452,3 +457,130 @@ class TestExecuteImplementationStepBroadcastEvent:
             await tool.function(step_number=1)
 
         mock_execution_manager.broadcast_event.assert_not_awaited()
+
+
+class TestStepInputModelType:
+    """Tests for model_type field on StepInput."""
+
+    def test_step_input_accepts_fast_model_type(self):
+        step = StepInput(title="Test", type="code_change", details="Do it", model_type="fast")
+        assert step.model_type == "fast"
+
+    def test_step_input_accepts_standard_model_type(self):
+        step = StepInput(title="Test", type="code_review", details="Review it", model_type="standard")
+        assert step.model_type == "standard"
+
+    def test_step_input_accepts_advanced_model_type(self):
+        step = StepInput(title="Test", type="code_review", details="Review it", model_type="advanced")
+        assert step.model_type == "advanced"
+
+    def test_step_input_model_type_defaults_to_none(self):
+        step = StepInput(title="Test", type="validation", details="Run tests")
+        assert step.model_type is None
+
+    def test_step_input_model_dump_includes_model_type(self):
+        step = StepInput(title="Test", type="code_change", details="Do it", model_type="fast")
+        data = step.model_dump()
+        assert data == {
+            "title": "Test",
+            "type": "code_change",
+            "model_type": "fast",
+            "dependencies": [],
+            "details": "Do it",
+        }
+
+
+class TestExecuteImplementationStepModelType:
+    """Tests that execute_implementation_step passes model_type to create_sub_agent_conversation."""
+
+    @pytest.fixture
+    def mock_plan_service(self) -> Mock:
+        return Mock(spec=TaskImplementationPlanService)
+
+    @pytest.fixture
+    def mock_task(self) -> Mock:
+        task = Mock(spec=Task)
+        task.implementation_plan_structured = Mock(spec=ImplementationPlan)
+        return task
+
+    def _make_step(self, model_type: ModelType | None = None) -> Mock:
+        step = Mock(spec=ImplementationStep)
+        step.status = ImplementationStepStatus.PENDING
+        step.step_number = 1
+        step.type = ImplementationStepType.CODE_CHANGE
+        step.title = "Test step"
+        step.details = "Do the thing"
+        step.conversation_id = None
+        step.model_type = model_type
+        step.dependencies = []
+        return step
+
+    @pytest.mark.asyncio
+    async def test_passes_model_type_to_create_sub_agent_conversation(self, mock_task: Mock, mock_plan_service: Mock):
+        """When step has a model_type, it is passed to create_sub_agent_conversation."""
+        mock_execution_manager = Mock()
+        mock_sub_agent_result = Mock()
+        mock_sub_agent_result.result = "Done"
+        mock_sub_agent_result.conversation_id = 42
+        mock_execution_manager.run_sub_agent_execution = AsyncMock(return_value=mock_sub_agent_result)
+
+        tool = create_execute_implementation_step_tool(
+            task=mock_task,
+            plan_service=mock_plan_service,
+            agent_config_service=Mock(),
+            conversation_repo=Mock(),
+            parent_conversation_id=None,
+            working_dir="/test/working_dir",
+            execution_manager=mock_execution_manager,
+            task_git_service=Mock(),
+        )
+
+        step = self._make_step(model_type=ModelType.FAST)
+        mock_plan_service.get_step_by_number.return_value = step
+
+        mock_conversation = Mock()
+        mock_conversation.id = 42
+
+        with patch(
+            "devboard.agents.tools.implementation_plan_tools.create_sub_agent_conversation",
+            return_value=mock_conversation,
+        ) as mock_create:
+            await tool.function(step_number=1)
+
+        call_kwargs = mock_create.call_args.kwargs
+        assert call_kwargs["model_type"] == ModelType.FAST
+
+    @pytest.mark.asyncio
+    async def test_passes_none_model_type_when_step_has_no_model_type(self, mock_task: Mock, mock_plan_service: Mock):
+        """When step.model_type is None, model_type=None is passed to create_sub_agent_conversation."""
+        mock_execution_manager = Mock()
+        mock_sub_agent_result = Mock()
+        mock_sub_agent_result.result = "Done"
+        mock_sub_agent_result.conversation_id = 42
+        mock_execution_manager.run_sub_agent_execution = AsyncMock(return_value=mock_sub_agent_result)
+
+        tool = create_execute_implementation_step_tool(
+            task=mock_task,
+            plan_service=mock_plan_service,
+            agent_config_service=Mock(),
+            conversation_repo=Mock(),
+            parent_conversation_id=None,
+            working_dir="/test/working_dir",
+            execution_manager=mock_execution_manager,
+            task_git_service=Mock(),
+        )
+
+        step = self._make_step(model_type=None)
+        mock_plan_service.get_step_by_number.return_value = step
+
+        mock_conversation = Mock()
+        mock_conversation.id = 42
+
+        with patch(
+            "devboard.agents.tools.implementation_plan_tools.create_sub_agent_conversation",
+            return_value=mock_conversation,
+        ) as mock_create:
+            await tool.function(step_number=1)
+
+        call_kwargs = mock_create.call_args.kwargs
+        assert call_kwargs["model_type"] is None

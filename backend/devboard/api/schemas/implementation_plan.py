@@ -14,6 +14,8 @@ class ImplementationStepResponse(BaseModel):
     status: str
     details: str
     outcome: str | None
+    model_type: str | None
+    model_display_name: str | None
     conversation_id: int | None
     started_at: datetime.datetime | None
     completed_at: datetime.datetime | None
@@ -36,6 +38,7 @@ class ImplementationStepUpdate(BaseModel):
     type: str | None = None
     dependencies: list[int] | None = None
     details: str | None = None
+    model_type: str | None = None
 
 
 class ImplementationStepCreate(BaseModel):
@@ -43,3 +46,4 @@ class ImplementationStepCreate(BaseModel):
     type: str
     details: str
     dependencies: list[int] = []
+    model_type: str | None = None

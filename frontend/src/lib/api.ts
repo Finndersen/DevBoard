@@ -50,6 +50,8 @@ export interface ImplementationStepResponse {
   conversation_id: number | null
   started_at: string | null
   completed_at: string | null
+  model_type: string | null
+  model_display_name: string | null
 }
 
 export interface ImplementationPlanResponse {

@@ -279,6 +279,48 @@ class TestAgentConfigService:
                 assert engine_info.is_available is True
                 assert engine_info.unavailable_reason is None
 
+    def test_get_model_id_for_type_returns_matching_model(self, agent_config_service):
+        """get_model_id_for_type returns the first model matching the requested type for the engine."""
+        model_id = agent_config_service.get_model_id_for_type(ModelType.FAST, AgentEngine.INTERNAL)
+        assert model_id is not None
+        assert ":" in model_id
+        db_model = agent_config_service._language_model_repo.get_by_model_id(model_id)
+        assert db_model is not None
+        assert db_model.model_type == ModelType.FAST
+
+    def test_get_model_id_for_type_resolves_for_engines_without_mandatory_selection(self, agent_config_service):
+        """get_model_id_for_type resolves models even for engines that don't require mandatory selection."""
+        model_id = agent_config_service.get_model_id_for_type(ModelType.FAST, AgentEngine.CLAUDE_CODE)
+        assert model_id is not None
+        assert model_id.startswith("anthropic:")
+
+        model_id = agent_config_service.get_model_id_for_type(ModelType.STANDARD, AgentEngine.GEMINI_CLI)
+        assert model_id is not None
+        assert model_id.startswith("google:")
+
+    def test_get_model_id_for_type_falls_back_to_first_available_if_no_match(
+        self, agent_role_config_repository, language_model_repository
+    ):
+        """get_model_id_for_type falls back to first available model when no model matches the requested type."""
+        mock_config_service = Mock()
+        # Simulate only OpenAI configured (no FAST models available for OpenAI in INTERNAL engine if all are STANDARD)
+        mock_config_service.validate_config_by_key.side_effect = lambda key: (
+            ConfigValidationResult(success=True, config=Mock(), errors=[])
+            if key == "llm.openai.main"
+            else ConfigValidationResult(success=False, config=None, errors=["not configured"])
+        )
+        service = AgentConfigService(
+            agent_role_config_repo=agent_role_config_repository,
+            config_service=mock_config_service,
+            language_model_repo=language_model_repository,
+            engine_registry=agent_engine_registry,
+        )
+
+        # Request ADVANCED type — OpenAI has no ADVANCED models, so should fall back to first available
+        model_id = service.get_model_id_for_type(ModelType.ADVANCED, AgentEngine.INTERNAL)
+        assert model_id is not None
+        assert model_id.startswith("openai:")
+
     def test_check_engine_availability_internal_without_providers(
         self, agent_role_config_repository, language_model_repository
     ):

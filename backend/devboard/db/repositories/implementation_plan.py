@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
+from devboard.agents.language_models import ModelType
 from devboard.db.models.implementation_plan import (
     ImplementationPlan,
     ImplementationStep,
@@ -52,6 +53,7 @@ class TaskImplementationPlanRepository(BaseRepository[ImplementationPlan]):
     def create_steps(self, plan_id: int, steps_data: list[dict[str, Any]]) -> list[ImplementationStep]:
         steps: list[ImplementationStep] = []
         for idx, step_data in enumerate(steps_data, start=1):
+            raw_model_type = step_data.get("model_type")
             step = ImplementationStep(
                 implementation_plan_id=plan_id,
                 step_number=idx,
@@ -60,6 +62,7 @@ class TaskImplementationPlanRepository(BaseRepository[ImplementationPlan]):
                 dependencies=step_data.get("dependencies", []),
                 status=ImplementationStepStatus.PENDING,
                 details=step_data["details"],
+                model_type=ModelType(raw_model_type) if raw_model_type else None,
             )
             self.db.add(step)
             steps.append(step)

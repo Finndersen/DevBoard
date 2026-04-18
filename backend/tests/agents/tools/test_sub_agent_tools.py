@@ -17,6 +17,7 @@ from devboard.agents.events import MessageRole, TextMessage
 from devboard.agents.exceptions import ConversationBusyError
 from devboard.agents.execution.manager import ConversationExecutionManager
 from devboard.agents.execution.types import ExecutionStatus, SubAgentResult
+from devboard.agents.language_models import ModelType
 from devboard.agents.roles import AgentRoleType
 from devboard.agents.tools.sub_agent_tools import (
     _MAX_FILE_DIFF_CHARS,
@@ -452,6 +453,45 @@ class TestCreateSubAgentConversation:
         )
 
         assert call_order == ["create", "commit"]
+
+    def test_uses_role_default_model_when_no_model_type(self, mock_agent_config_service, mock_conv_repo):
+        """When model_type is None, the role's default model_id is used."""
+        mock_config = Mock(spec=AgentEngineModelConfig)
+        mock_config.engine = AgentEngine.INTERNAL
+        mock_config.model_id = "anthropic:claude-sonnet"
+        mock_agent_config_service.get_effective_config.return_value = mock_config
+
+        create_sub_agent_conversation(
+            role_type=AgentRoleType.STEP_EXECUTION,
+            agent_config_service=mock_agent_config_service,
+            conversation_repo=mock_conv_repo,
+            parent_entity=make_mock_task(),
+            model_type=None,
+        )
+
+        create_kwargs = mock_conv_repo.create.call_args[1]
+        assert create_kwargs["model_id"] == "anthropic:claude-sonnet"
+        mock_agent_config_service.get_model_id_for_type.assert_not_called()
+
+    def test_resolves_model_id_for_type_when_model_type_provided(self, mock_agent_config_service, mock_conv_repo):
+        """When model_type is provided, get_model_id_for_type is called and its result used as model_id."""
+        mock_config = Mock(spec=AgentEngineModelConfig)
+        mock_config.engine = AgentEngine.INTERNAL
+        mock_config.model_id = "anthropic:claude-sonnet"
+        mock_agent_config_service.get_effective_config.return_value = mock_config
+        mock_agent_config_service.get_model_id_for_type.return_value = "anthropic:claude-haiku"
+
+        create_sub_agent_conversation(
+            role_type=AgentRoleType.STEP_EXECUTION,
+            agent_config_service=mock_agent_config_service,
+            conversation_repo=mock_conv_repo,
+            parent_entity=make_mock_task(),
+            model_type=ModelType.FAST,
+        )
+
+        mock_agent_config_service.get_model_id_for_type.assert_called_once_with(ModelType.FAST, AgentEngine.INTERNAL)
+        create_kwargs = mock_conv_repo.create.call_args[1]
+        assert create_kwargs["model_id"] == "anthropic:claude-haiku"
 
 
 class TestRunSubAgent:
