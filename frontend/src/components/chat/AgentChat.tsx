@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, forwardRef, useRef, useImperativeHandle } from 'react'
 import { ChatBubbleLeftIcon, TrashIcon, InformationCircleIcon, PlusIcon, MagnifyingGlassCircleIcon } from '@heroicons/react/24/outline'
 import ConversationChat, { type ConversationChatHandle } from './ConversationChat'
-import ConversationModelSelector from './ConversationModelSelector'
 import RunningIndicator from './RunningIndicator'
 import Button from '../ui/Button'
 import Card from '../ui/Card'
@@ -22,7 +21,6 @@ import ContextUsageDisplay from './ContextUsageDisplay'
 
 interface AgentChatProps {
   conversationId: number | null
-  placeholder?: string
   emptyStateMessage?: string
   className?: string
   padding?: 'none' | 'xs' | 'sm' | 'md' | 'lg'
@@ -31,18 +29,19 @@ interface AgentChatProps {
   initialMessage?: string | null
   onInitialMessageSent?: () => void
   workingDir?: string
-  isDisabled?: boolean
   onConversationReset?: (newConversationId: number) => void
   conversationSelector?: React.ReactNode
   onNewConversation?: () => void
 }
 
-/** Handle exposed by AgentChat ref - same as ConversationChatHandle */
-export type AgentChatHandle = ConversationChatHandle
+/** Handle exposed by AgentChat ref - extends ConversationChatHandle with session state */
+export interface AgentChatHandle extends ConversationChatHandle {
+  /** Whether the session has expired */
+  sessionExpired: boolean
+}
 
 const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
   conversationId,
-  placeholder = "Ask a question...",
   emptyStateMessage = "Start a conversation!",
   className = "flex flex-col overflow-hidden",
   padding = "xs",
@@ -51,7 +50,6 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
   initialMessage,
   onInitialMessageSent,
   workingDir,
-  isDisabled = false,
   onConversationReset,
   conversationSelector,
   onNewConversation,
@@ -60,12 +58,30 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
   const [sessionExpired, setSessionExpired] = useState(false)
   const conversationChatRef = useRef<ConversationChatHandle>(null)
 
-  // Forward the ref to ConversationChat
+  // Forward the ref to ConversationChat and expose sessionExpired state
   useImperativeHandle(ref, () => ({
     sendMessage: (message: string) => {
       conversationChatRef.current?.sendMessage(message)
+    },
+    get inputMessage() {
+      return conversationChatRef.current?.inputMessage ?? ''
+    },
+    setInputMessage: (text: string) => {
+      conversationChatRef.current?.setInputMessage(text)
+    },
+    handleSendMessage: () => {
+      conversationChatRef.current?.handleSendMessage()
+    },
+    get isQueued() {
+      return conversationChatRef.current?.isQueued ?? false
+    },
+    stopStream: () => {
+      conversationChatRef.current?.stopStream()
+    },
+    get sessionExpired() {
+      return sessionExpired
     }
-  }), [])
+  }), [sessionExpired])
   const [loadingConversation, setLoadingConversation] = useState(false)
 
   // Use new custom hooks to eliminate boilerplate
@@ -179,6 +195,11 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
             </div>
           )}
           <div className="flex items-center space-x-3">
+            {conversation?.engine && (
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                {conversation.engine.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+              </span>
+            )}
             {conversation?.external_session_id && (
               <button
                 onClick={sessionIdModal.open}
@@ -190,14 +211,6 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
             )}
             {conversationId && !loadingConversation && (
               <ContextUsageDisplay conversationId={conversationId} />
-            )}
-            {conversationId && !loadingConversation && (
-              <ConversationModelSelector
-                conversationId={conversationId}
-                onModelChange={(engine, modelId, modelName) => {
-                  console.log(`Model changed: ${engine} / ${modelName} (${modelId})`)
-                }}
-              />
             )}
             {conversationId && !conversationSelector && (
               <Button
@@ -218,21 +231,12 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
             <ConversationChat
               ref={conversationChatRef}
               conversationId={conversationId}
-              placeholder={placeholder}
               emptyStateMessage={emptyStateMessage}
               isRunningAction={isRunningAction}
               actionMessage={actionMessage}
               initialMessage={initialMessage}
               onInitialMessageSent={onInitialMessageSent}
               workingDir={workingDir}
-              isDisabled={isDisabled || sessionExpired}
-              disabledMessage={
-                sessionExpired
-                  ? "Session expired — clear this conversation to start a new one"
-                  : isDisabled
-                    ? "Chat disabled — task is complete"
-                    : undefined
-              }
               engine={conversation?.engine}
             />
           ) : (

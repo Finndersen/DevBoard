@@ -10,10 +10,11 @@ import {
   FolderIcon,
 } from '@heroicons/react/24/outline'
 import { TaskStatus } from '../../lib/api'
-import type { Task, Codebase, TaskGitStatus } from '../../lib/api'
+import type { Task, Codebase, TaskGitStatus, CustomFieldDefinition } from '../../lib/api'
 import { useEditableField } from '../../hooks/useEditableField'
 import { Button, Input, StatusBadge, ConfirmDialog } from '../ui'
 import { textColors, borderColors, surfaces } from '../../styles/designSystem'
+import { CustomFieldsPopover } from '../common/CustomFieldsPanel'
 
 // Git branch icon (Y-shape: trunk at bottom splitting into branch at top-right)
 const GitBranchIcon = ({ className }: { className?: string }) => (
@@ -34,12 +35,15 @@ interface TaskDetailHeaderProps {
   selectedCodebase: Codebase | null | undefined
   gitStatus: TaskGitStatus | null
   branchStatusLoading: boolean
-  workflowActionButtons: React.ReactElement | null
   onCodebaseSelect: (codebaseId: number | null) => void
   onOpenBranchStatusModal: () => void
   onDeleteTask: (deleteBranch: boolean) => void
   deleteLoading: boolean
   deleteError: unknown
+  customFields?: Record<string, unknown>
+  customFieldDefinitions?: CustomFieldDefinition[]
+  onCustomFieldChange?: (fieldName: string, value: unknown) => void
+  customFieldsSaving?: boolean
 }
 
 const getStatusVariant = (status: TaskStatus): 'default' | 'success' | 'warning' | 'error' | 'info' => {
@@ -64,11 +68,14 @@ export function TaskDetailHeader({
   selectedCodebase,
   gitStatus,
   branchStatusLoading,
-  workflowActionButtons,
   onCodebaseSelect,
   onOpenBranchStatusModal,
   onDeleteTask,
   deleteLoading,
+  customFields,
+  customFieldDefinitions,
+  onCustomFieldChange,
+  customFieldsSaving,
 }: TaskDetailHeaderProps) {
   const [showCodebaseSelector, setShowCodebaseSelector] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -240,6 +247,16 @@ export function TaskDetailHeader({
           </div>
         </div>
 
+        {/* Custom Fields */}
+        {customFieldDefinitions && customFieldDefinitions.length > 0 && (
+          <CustomFieldsPopover
+            customFields={customFields ?? {}}
+            fieldDefinitions={customFieldDefinitions}
+            onFieldChange={onCustomFieldChange ?? (() => {})}
+            saving={customFieldsSaving ?? false}
+          />
+        )}
+
         {/* Branch Status Icon - only shown when task has a branch_name and is not complete */}
         {gitStatus?.branch_name && task.status !== TaskStatus.COMPLETE && (
           <button
@@ -279,9 +296,6 @@ export function TaskDetailHeader({
           </button>
         )}
 
-        <div className="flex-shrink-0">
-          {workflowActionButtons}
-        </div>
       </div>
 
       {/* Delete Confirmation Dialog */}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeftIcon, DocumentTextIcon, NumberedListIcon, CodeBracketIcon, CheckCircleIcon, ArrowPathIcon, XCircleIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 import { TaskStatus } from '../lib/api'
 import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse, PRFeedbackResponse, PRDetailResponse, CustomFieldDefinition } from '../lib/api'
 import { useTask, useUpdateTask, useDeleteTask, useEditableField, useCodebases, useProject, useDocument, useUpdateDocument, useImplementationPlan } from '../hooks'
@@ -8,11 +8,9 @@ import { useViewTitle } from '../hooks/useViewTitle'
 import { useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
 import { useDataStore } from '../stores/dataStore'
 import { useUIStore } from '../stores/uiStore'
-import { useIsNarrowContainer } from '../hooks/useMediaQuery'
-import CollapsedPanelStrip from '../components/ui/CollapsedPanelStrip'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
-import { Button, Card, ErrorMessage } from '../components/ui'
-import { loadingSpinner, layouts, textColors, borderColors } from '../styles/designSystem'
+import { ErrorMessage, Card } from '../components/ui'
+import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat, { type AgentChatHandle } from '../components/chat/AgentChat'
 import GitBranchStatusModal from '../components/modals/GitBranchStatusModal'
 import { apiClient } from '../lib/api'
@@ -26,10 +24,10 @@ import { SpecificationTab } from '../components/task/SpecificationTab'
 import { PlanTab } from '../components/task/PlanTab'
 import { ChangesTab } from '../components/task/ChangesTab'
 import { PullRequestTab } from '../components/task/PullRequestTab'
-import { StatusIndicator, ReviewBadge } from '../components/github/PRStatusComponents'
-import { GitHubIcon } from '../components/icons/GitHubIcon'
 import { SummaryTab } from '../components/task/SummaryTab'
-import { CustomFieldsPopover } from '../components/common/CustomFieldsPanel'
+import ChatDetailLayout from '../components/layout/ChatDetailLayout'
+import AgentActionBar from '../components/layout/AgentActionBar'
+import { TaskArtifactStepper } from '../components/task/TaskArtifactStepper'
 
 const WORKFLOW_ACTION_LABELS: Record<string, string> = {
   'task.create_implementation_plan': 'Create Implementation Plan',
@@ -435,21 +433,23 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   const { status: codeReviewStatus } = useCodeReviewStatus(task?.conversation_id ?? null)
 
-  // Panel toggle state — based on container width, not viewport
-  const [isNarrow, containerRef] = useIsNarrowContainer()
+  // Layout state
+  const isNarrowRef = useRef(false)
+  const handleNarrowChange = useCallback((narrow: boolean) => { isNarrowRef.current = narrow }, [])
   const expandedPanel = useUIStore(s => s.expandedPanel)
   const setExpandedPanel = useUIStore(s => s.setExpandedPanel)
 
-  // Chat activity indicator
+  // Panel attention indicators for narrow mode
   const [chatNeedsAttention, setChatNeedsAttention] = useState(false)
+  const [detailsNeedsAttention, setDetailsNeedsAttention] = useState(false)
   const prevStreamingRef = useRef(isConversationStreaming)
 
   useEffect(() => {
-    if (prevStreamingRef.current && !isConversationStreaming && isNarrow && expandedPanel === 'details') {
+    if (prevStreamingRef.current && !isConversationStreaming && isNarrowRef.current && expandedPanel === 'details') {
       setChatNeedsAttention(true)
     }
     prevStreamingRef.current = isConversationStreaming
-  }, [isConversationStreaming, isNarrow, expandedPanel])
+  }, [isConversationStreaming, expandedPanel])
 
   useEffect(() => {
     if (expandedPanel === 'chat') {
@@ -458,7 +458,6 @@ function TaskDetail({ id }: TaskDetailProps) {
   }, [expandedPanel])
 
   // Details content change detection
-  const [detailsNeedsAttention, setDetailsNeedsAttention] = useState(false)
   const prevDetailsDataRef = useRef<string>('')
 
   useEffect(() => {
@@ -466,16 +465,16 @@ function TaskDetail({ id }: TaskDetailProps) {
       spec: specificationDoc?.content,
       planDoc: implementationPlanDoc?.content,
       planStatus: implementationPlan?.status,
-      planSteps: implementationPlan?.steps.map(s => `${s.step_number}:${s.status}`),
+      planSteps: implementationPlan?.steps?.map(s => `${s.step_number}:${s.status}`),
       diff: diffData,
     })
     if (prevDetailsDataRef.current && dataFingerprint !== prevDetailsDataRef.current) {
-      if (isNarrow && expandedPanel === 'chat') {
+      if (isNarrowRef.current && expandedPanel === 'chat') {
         setDetailsNeedsAttention(true)
       }
     }
     prevDetailsDataRef.current = dataFingerprint
-  }, [specificationDoc?.content, implementationPlanDoc?.content, implementationPlan?.status, implementationPlan?.steps, diffData, isNarrow, expandedPanel])
+  }, [specificationDoc?.content, implementationPlanDoc?.content, implementationPlan?.status, implementationPlan?.steps, diffData, expandedPanel])
 
   useEffect(() => {
     if (expandedPanel === 'details') {
@@ -539,11 +538,39 @@ function TaskDetail({ id }: TaskDetailProps) {
     }
   }
 
-  const handleTriggerRebase = useCallback(() => {
-    executeWorkflowAction('task.rebase_branch', 'Rebasing branch...')
-  }, [task?.id, task?.conversation_id])
+  // Panel switching callbacks
+  const handleSendMessage = useCallback(() => {
+    // Auto-switch to chat panel when user sends a message (narrow mode only handled by ChatDetailLayout)
+    setExpandedPanel('chat')
+  }, [setExpandedPanel])
 
-  // Configuration for workflow action buttons
+  const handleWorkflowAction = (actionKey: string) => {
+    const config = getButtonConfigForAction(actionKey)
+    executeWorkflowAction(actionKey, config.loadingMessage)
+    if (isNarrowRef.current && expandedPanel !== 'chat') {
+      setExpandedPanel('chat')
+    }
+  }
+
+  const handleStepClick = useCallback((stepId: string) => {
+    // Map stepper step IDs to tab names (stepper uses: specification, plan, changes, pullrequest)
+    const stepToTab: Record<string, typeof activeTab> = {
+      'specification': 'specification',
+      'plan': 'plan',
+      'changes': 'changes',
+      'pullrequest': 'pullrequest'
+    }
+    const tab = stepToTab[stepId]
+    if (tab) {
+      setActiveTab(tab)
+      // Auto-switch to details panel on narrow screens
+      if (isNarrowRef.current && expandedPanel !== 'details') {
+        setExpandedPanel('details')
+      }
+    }
+  }, [setActiveTab, expandedPanel, setExpandedPanel])
+
+  // Helper function for workflow action button configuration
   const getButtonConfigForAction = (actionKey: string) => {
     const configs: Record<string, { loadingMessage: string; className?: string; isDisabled?: () => boolean; title?: () => string | undefined }> = {
       'task.create_implementation_plan': {
@@ -577,38 +604,10 @@ function TaskDetail({ id }: TaskDetailProps) {
     return configs[actionKey] || { loadingMessage: 'Processing...' }
   }
 
-  const getWorkflowActionButtons = () => {
-    if (!task?.available_workflow_actions?.length) return null
+  const handleTriggerRebase = useCallback(() => {
+    executeWorkflowAction('task.rebase_branch', 'Rebasing branch...')
+  }, [task?.id, task?.conversation_id])
 
-    // Filter out rebase action - it's handled separately in the branch status modal
-    const actionsToShow = task.available_workflow_actions.filter(
-      action => action.key !== 'task.rebase_branch'
-    )
-
-    if (actionsToShow.length === 0) return null
-
-    return (
-      <div className="flex gap-2">
-        {actionsToShow.map(action => {
-          const config = getButtonConfigForAction(action.key)
-          const isDisabled = isConversationStreaming || (config.isDisabled?.() ?? false)
-
-          return (
-            <Button
-              key={action.key}
-              onClick={() => executeWorkflowAction(action.key, config.loadingMessage)}
-              variant="primary"
-              className={config.className}
-              disabled={isDisabled}
-              title={config.title?.()}
-            >
-              {getActionLabel(action.key, gitStatus, prStatus)}
-            </Button>
-          )
-        })}
-      </div>
-    )
-  }
 
   // Only show loading spinner on initial load (when task data doesn't exist yet)
   // Don't show during refetches to avoid UI flash
@@ -639,7 +638,7 @@ function TaskDetail({ id }: TaskDetailProps) {
   }
 
   return (
-    <div ref={containerRef} className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Error Display */}
       {updateError && (
         <ErrorMessage error={updateError} className="mb-6" />
@@ -657,279 +656,67 @@ function TaskDetail({ id }: TaskDetailProps) {
         selectedCodebase={selectedCodebase}
         gitStatus={gitStatus}
         branchStatusLoading={branchStatusLoading}
-        workflowActionButtons={getWorkflowActionButtons()}
         onCodebaseSelect={handleCodebaseSelect}
         onOpenBranchStatusModal={handleOpenBranchStatusModal}
         onDeleteTask={handleDeleteTask}
         deleteLoading={deleteLoading}
         deleteError={deleteError}
+        customFields={task.custom_fields}
+        customFieldDefinitions={customFieldDefinitions}
+        onCustomFieldChange={handleCustomFieldChange}
+        customFieldsSaving={updateTaskLoading}
       />
 
       {/* Main Content Layout */}
-      {isNarrow ? (
-        <div className="flex gap-2 flex-1 min-h-0 overflow-hidden">
-          {/* Chat panel */}
-          <div
-            className="relative h-full overflow-hidden transition-[flex] duration-200 ease-in-out"
-            style={{ flex: expandedPanel === 'chat' ? '1 1 0%' : '0 0 2.5rem' }}
-          >
-            <div className={`h-full min-w-0 ${expandedPanel !== 'chat' ? 'invisible' : ''}`}>
-              <AgentChat
-                ref={agentChatRef}
-                conversationId={task.conversation_id}
-                placeholder="Ask me to help with task specification or implementation planning..."
-                emptyStateMessage="Welcome to the Task Agent!"
-                className="h-full flex flex-col overflow-hidden"
-                padding="xs"
-                isRunningAction={isConversationStreaming}
-                actionMessage={streamingMessage}
-                initialMessage={pendingInitialMessage}
-                onInitialMessageSent={() => setPendingInitialMessage(null)}
-                workingDir={gitStatus?.worktree_slot_path ?? selectedCodebase?.local_path}
-                isDisabled={task.status === TaskStatus.COMPLETE}
-                onConversationReset={handleConversationReset}
-              />
-            </div>
-            {expandedPanel !== 'chat' && (
-              <div className="absolute inset-0">
-                <CollapsedPanelStrip
-                  variant="chat"
-                  icon="💬"
-                  label="Chat"
-                  isStreaming={isConversationStreaming}
-                  needsAttention={chatNeedsAttention}
-                  onClick={() => setExpandedPanel('chat')}
-                  className="h-full"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Details panel */}
-          <div
-            className="relative h-full overflow-hidden transition-[flex] duration-200 ease-in-out"
-            style={{ flex: expandedPanel === 'details' ? '1 1 0%' : '0 0 2.5rem' }}
-          >
-            <Card padding="none" className={`h-full flex flex-col overflow-hidden ${expandedPanel !== 'details' ? 'invisible' : ''}`}>
-              {/* Card Header with Tabs */}
-              <div className={`border-b ${borderColors.default}`}>
-                <div className="px-6 py-3">
-                  <div className="flex items-center justify-between">
-                    <nav className="flex space-x-6">
-                      {[
-                        { id: 'specification' as const, name: 'Task Specification', icon: DocumentTextIcon, badge: null as number | null },
-                        ...(task.implementation_plan_id || task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Implementation Plan', icon: ClipboardDocumentListIcon, badge: null as number | null }] : []),
-                        ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon, badge: (diffData?.files?.length ?? null) as number | null }] : []),
-                        ...(task.github_pr_number && [TaskStatus.PR_OPEN, TaskStatus.COMPLETE].includes(task.status) ? [{ id: 'pullrequest' as const, name: 'Pull Request', icon: GitHubIcon, badge: null as number | null }] : []),
-                        ...(task.change_summary_document_id ? [{ id: 'summary' as const, name: 'Change Summary', icon: DocumentTextIcon, badge: null as number | null }] : []),
-                      ].map((tab) => (
-                        <button
-                          key={tab.id}
-                          onClick={() => setActiveTab(tab.id)}
-                          className={`py-1 px-1 font-medium text-sm flex items-center space-x-2 transition-colors ${activeTab === tab.id
-                              ? 'text-blue-600 dark:text-blue-400'
-                              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                            }`}
-                        >
-                          <tab.icon className="w-4 h-4" />
-                          <span>{tab.name}</span>
-                          {tab.badge != null && tab.badge > 0 && (
-                            <span className="text-xs bg-gray-100 dark:bg-white/[0.05] rounded-full px-1.5">
-                              {tab.badge}
-                            </span>
-                          )}
-                          {tab.id === 'changes' && task?.status === TaskStatus.IMPLEMENTING && codeReviewStatus === 'reviewed' && (
-                            <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
-                          )}
-                          {tab.id === 'plan' && implementationPlan?.status === 'executing' && (
-                            <ArrowPathIcon className="w-3.5 h-3.5 text-blue-500 animate-spin" />
-                          )}
-                          {tab.id === 'plan' && implementationPlan?.status === 'complete' && (
-                            <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
-                          )}
-                          {tab.id === 'plan' && implementationPlan?.status === 'failed' && (
-                            <XCircleIcon className="w-3.5 h-3.5 text-red-500" />
-                          )}
-                          {tab.id === 'pullrequest' && prStatus && !prStatus.merged && (
-                            <StatusIndicator mergeableState={prStatus.mergeable_state} ciStatus={prStatus.ci_status} />
-                          )}
-                          {tab.id === 'pullrequest' && prStatus?.merged && (
-                            <CheckCircleIcon className="w-3.5 h-3.5 text-purple-500" />
-                          )}
-                          {tab.id === 'pullrequest' && prStatus?.review_decision && (
-                            <ReviewBadge decision={prStatus.review_decision} />
-                          )}
-                        </button>
-                      ))}
-                    </nav>
-
-                    <CustomFieldsPopover
-                      customFields={task.custom_fields}
-                      fieldDefinitions={customFieldDefinitions}
-                      onFieldChange={handleCustomFieldChange}
-                      saving={updateTaskLoading}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Tab Content */}
-              <div className="flex-1 p-6 overflow-hidden">
-                {activeTab === 'specification' && (
-                  <SpecificationTab
-                    specificationDoc={specificationDoc}
-                    specificationField={specificationField}
-                  />
-                )}
-
-                {activeTab === 'plan' && (
-                  <PlanTab
-                    taskId={task.id}
-                    taskStatus={task.status}
-                    implementationPlan={implementationPlan}
-                    onPlanUpdated={refetchImplementationPlan2}
-                    implementationPlanDoc={implementationPlanDoc}
-                  />
-                )}
-
-                {activeTab === 'changes' && (
-                  <ChangesTab
-                    branchInfo={branchInfo}
-                    diffData={diffData}
-                    diffLoading={diffLoading}
-                    branchInfoLoading={branchInfoLoading}
-                    lastDiffUpdate={lastDiffUpdate}
-                    onRefresh={handleDiffRefresh}
-                    onSubmitComments={handleSubmitReviewComments}
-                    isStreaming={isConversationStreaming}
-                    {...(task?.status === TaskStatus.IMPLEMENTING && {
-                      codeReviewStatus,
-                      onAutoReview: handleAutoReview,
-                    })}
-                  />
-                )}
-
-                {activeTab === 'pullrequest' && (
-                  <PullRequestTab
-                    prStatus={prStatus}
-                    prStatusLoading={prStatusLoading}
-                    prFeedback={prFeedback}
-                    prDetail={prDetail}
-                    prDetailLoading={prDetailLoading}
-                    taskStatus={task.status}
-                    onRefreshPrStatus={handleRefreshPrStatus}
-                    onResolveConflicts={handleResolveConflicts}
-                    onSubmitComments={handleSubmitReviewComments}
-                    isConversationStreaming={isConversationStreaming}
-                  />
-                )}
-
-                {activeTab === 'summary' && (
-                  <SummaryTab changeSummaryDoc={changeSummaryDoc} />
-                )}
-              </div>
-            </Card>
-            {expandedPanel !== 'details' && (
-              <div className="absolute inset-0">
-                <CollapsedPanelStrip
-                  variant="details"
-                  icon="📄"
-                  label="Details"
-                  needsAttention={detailsNeedsAttention}
-                  onClick={() => setExpandedPanel('details')}
-                  className="h-full"
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0 overflow-hidden">
-          {/* Left Column: Task Agent Chat */}
-          <div className="h-full overflow-hidden">
-            <AgentChat
-              ref={agentChatRef}
-              conversationId={task.conversation_id}
-              placeholder="Ask me to help with task specification or implementation planning..."
-              emptyStateMessage="Welcome to the Task Agent!"
-              className="h-full flex flex-col overflow-hidden"
-              padding="xs"
-              isRunningAction={isConversationStreaming}
-              actionMessage={streamingMessage}
-              initialMessage={pendingInitialMessage}
-              onInitialMessageSent={() => setPendingInitialMessage(null)}
-              workingDir={gitStatus?.worktree_slot_path ?? selectedCodebase?.local_path}
-              isDisabled={task.status === TaskStatus.COMPLETE}
-              onConversationReset={handleConversationReset}
-            />
-          </div>
-
-          {/* Right Column: Document Content with Integrated Tabs */}
+      <ChatDetailLayout
+        expandedPanel={expandedPanel}
+        onNarrowChange={handleNarrowChange}
+        onExpandPanel={(panel) => setExpandedPanel(panel)}
+        hideDetails={!specificationDoc?.content}
+        chatStripProps={{
+          isStreaming: isConversationStreaming,
+          needsAttention: chatNeedsAttention,
+        }}
+        detailsStripProps={{
+          needsAttention: detailsNeedsAttention,
+        }}
+        chatContent={
+          <AgentChat
+            ref={agentChatRef}
+            conversationId={task.conversation_id}
+            emptyStateMessage="Welcome to the Task Agent!"
+            className="h-full flex flex-col overflow-hidden"
+            padding="xs"
+            isRunningAction={isConversationStreaming}
+            actionMessage={streamingMessage}
+            initialMessage={pendingInitialMessage}
+            onInitialMessageSent={() => setPendingInitialMessage(null)}
+            workingDir={gitStatus?.worktree_slot_path ?? selectedCodebase?.local_path}
+            onConversationReset={handleConversationReset}
+          />
+        }
+        detailsContent={
           <Card padding="none" className="h-full flex flex-col overflow-hidden">
-            {/* Card Header with Tabs */}
-            <div className="border-b border-gray-200 dark:border-white/[0.08]">
-              <div className="px-6 py-3">
-                <div className="flex items-center justify-between">
-                  <nav className="flex space-x-6">
-                    {[
-                      { id: 'specification' as const, name: 'Specification', icon: DocumentTextIcon, badge: null as number | null },
-                      ...(task.implementation_plan_id || task.implementation_plan_document_id ? [{ id: 'plan' as const, name: 'Plan', icon: NumberedListIcon, badge: null as number | null }] : []),
-                      ...(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN].includes(task.status) ? [{ id: 'changes' as const, name: 'File Changes', icon: CodeBracketIcon, badge: (diffData?.files?.length ?? null) as number | null }] : []),
-                      ...(task.github_pr_number && [TaskStatus.PR_OPEN, TaskStatus.COMPLETE].includes(task.status) ? [{ id: 'pullrequest' as const, name: 'Pull Request', icon: GitHubIcon, badge: null as number | null }] : []),
-                      ...(task.change_summary_document_id ? [{ id: 'summary' as const, name: 'Change Summary', icon: DocumentTextIcon, badge: null as number | null }] : []),
-                    ].map((tab) => (
-                      <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`py-1 px-1 font-medium text-sm flex items-center space-x-2 transition-colors ${activeTab === tab.id
-                            ? 'text-blue-600 dark:text-blue-400'
-                            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                          }`}
-                      >
-                        <tab.icon className="w-4 h-4" />
-                        <span>{tab.name}</span>
-                        {tab.badge != null && tab.badge > 0 && (
-                          <span className="text-xs bg-gray-100 dark:bg-white/[0.05] rounded-full px-1.5">
-                            {tab.badge}
-                          </span>
-                        )}
-                        {tab.id === 'changes' && task?.status === TaskStatus.IMPLEMENTING && codeReviewStatus === 'reviewed' && (
-                          <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
-                        )}
-                        {tab.id === 'plan' && implementationPlan?.status === 'executing' && (
-                          <ArrowPathIcon className="w-3.5 h-3.5 text-blue-500 animate-spin" />
-                        )}
-                        {tab.id === 'plan' && implementationPlan?.status === 'complete' && (
-                          <CheckCircleIcon className="w-3.5 h-3.5 text-green-500" />
-                        )}
-                        {tab.id === 'plan' && implementationPlan?.status === 'failed' && (
-                          <XCircleIcon className="w-3.5 h-3.5 text-red-500" />
-                        )}
-                        {tab.id === 'pullrequest' && prStatus && !prStatus.merged && (
-                          <StatusIndicator mergeableState={prStatus.mergeable_state} ciStatus={prStatus.ci_status} />
-                        )}
-                        {tab.id === 'pullrequest' && prStatus?.merged && (
-                          <CheckCircleIcon className="w-3.5 h-3.5 text-purple-500" />
-                        )}
-                        {tab.id === 'pullrequest' && prStatus?.review_decision && (
-                          <ReviewBadge decision={prStatus.review_decision} />
-                        )}
-                      </button>
-                    ))}
-                  </nav>
+            <TaskArtifactStepper
+              activeStep={activeTab}
+              onStepClick={handleStepClick}
+              taskStatus={task.status}
+              hasSpecification={!!specificationDoc?.content}
+              hasPlan={!!(task.implementation_plan_id || task.implementation_plan_document_id)}
+              planStatus={implementationPlan?.status as 'pending' | 'executing' | 'complete' | 'failed' | undefined}
+              hasChanges={!!(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN, TaskStatus.COMPLETE].includes(task.status))}
+              changeCount={diffData?.files?.length}
+              hasPR={!!(task.github_pr_number && [TaskStatus.PR_OPEN, TaskStatus.COMPLETE].includes(task.status))}
+              prStatus={prStatus ? {
+                mergeable_state: prStatus.mergeable_state,
+                ci_status: prStatus.ci_status,
+                merged: prStatus.merged,
+                review_decision: prStatus.review_decision,
+              } : undefined}
+              hasSummary={!!task.change_summary_document_id}
+            />
 
-                  <CustomFieldsPopover
-                    customFields={task.custom_fields}
-                    fieldDefinitions={customFieldDefinitions}
-                    onFieldChange={handleCustomFieldChange}
-                    saving={updateTaskLoading}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Tab Content */}
-            <div className="flex-1 p-6 overflow-hidden">
+            <div className="flex-1 min-h-0 p-6 overflow-y-auto">
               {activeTab === 'specification' && (
                 <SpecificationTab
                   specificationDoc={specificationDoc}
@@ -984,9 +771,51 @@ function TaskDetail({ id }: TaskDetailProps) {
               )}
             </div>
           </Card>
+        }
+        actionBar={
+          <AgentActionBar
+            conversationId={task.conversation_id}
+            onSendMessage={(text) => {
+              agentChatRef.current?.sendMessage(text)
+              handleSendMessage()
+            }}
+            isStreaming={isConversationStreaming}
+            onStopStream={() => agentChatRef.current?.stopStream()}
+            isDisabled={task.status === TaskStatus.COMPLETE || (agentChatRef.current?.sessionExpired ?? false)}
+            disabledMessage={
+              task.status === TaskStatus.COMPLETE
+                ? "Task is complete - chat disabled"
+                : "Session expired - please refresh"
+            }
+            workflowActions={
+              task?.available_workflow_actions?.length ? (
+                <div className="flex gap-2">
+                  {task.available_workflow_actions
+                    .filter(action => action.key !== 'task.rebase_branch')
+                    .map(action => {
+                      const config = getButtonConfigForAction(action.key)
+                      const isDisabled = isConversationStreaming || (config.isDisabled?.() ?? false)
 
-        </div>
-      )}
+                      return (
+                        <button
+                          key={action.key}
+                          onClick={() => handleWorkflowAction(action.key)}
+                          disabled={isDisabled}
+                          title={config.title?.()}
+                          className={`px-3 py-1.5 text-sm font-medium rounded-md border transition-colors ${
+                            config.className || 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                          } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          {getActionLabel(action.key, gitStatus, prStatus)}
+                        </button>
+                      )
+                    })}
+                </div>
+              ) : undefined
+            }
+          />
+        }
+      />
 
       {/* Branch Status Modal */}
       <GitBranchStatusModal

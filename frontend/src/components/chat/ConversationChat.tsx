@@ -5,7 +5,6 @@ import PendingApprovalsList from '../approvals/common/PendingApprovalsList'
 import { usePendingMessages } from '../../contexts/PendingMessagesContext'
 import { createConversationPendingKey } from '../../utils/approvalKeys'
 import ConversationMessageList from './ConversationMessageList'
-import ConversationInput from './ConversationInput'
 import TodoPanel from './TodoPanel'
 import { useStreamSubscription } from './hooks/useStreamSubscription'
 import { useToolApprovalLogic } from './hooks/useToolApprovalLogic'
@@ -17,39 +16,43 @@ import Alert from '../ui/Alert'
 import { surfaces, statusColors } from '../../styles/designSystem'
 
 /**
- * Handle exposed by ConversationChat ref for external message submission.
- * Allows external components to send messages through the same flow as the input field.
+ * Handle exposed by ConversationChat ref for external message submission and input state management.
+ * Allows external components to send messages and control input state.
  */
 export interface ConversationChatHandle {
   /** Send a message as if it was typed into the input and submitted */
   sendMessage: (message: string) => void
+  /** Current input message text */
+  inputMessage: string
+  /** Set the input message text */
+  setInputMessage: (text: string) => void
+  /** Handle sending the current input message */
+  handleSendMessage: () => void
+  /** Whether a message is queued for sending */
+  isQueued: boolean
+  /** Stop the current stream */
+  stopStream: () => void
 }
 
 interface ConversationChatProps {
   conversationId: number
-  placeholder?: string
   emptyStateMessage?: string
   isRunningAction?: boolean
   actionMessage?: string
   initialMessage?: string | null
   onInitialMessageSent?: () => void
   workingDir?: string
-  isDisabled?: boolean
-  disabledMessage?: string
   engine?: string
 }
 
 const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProps>(({
   conversationId,
-  placeholder = "Ask a question...",
   emptyStateMessage = "Start a conversation!",
   isRunningAction = false,
   actionMessage = '',
   initialMessage,
   onInitialMessageSent,
   workingDir,
-  isDisabled = false,
-  disabledMessage,
   engine
 }, ref) => {
   // Track conversationId changes for debugging
@@ -123,8 +126,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
     await sendMessageViaHook(pendingMsg.text_content, pendingMsg.id)
   }, [pendingMessages, sendMessageViaHook])
 
-  // Expose sendMessage method via ref for external callers (e.g., review comments)
-  // This goes through the same flow as typing in the input - queueing if busy
+  // Expose input state and methods via ref for external ActionBar
   useImperativeHandle(ref, () => ({
     sendMessage: (message: string) => {
       const messageText = message.trim()
@@ -145,8 +147,17 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
 
       // Not busy - send immediately
       sendMessageViaHook(messageText)
-    }
-  }), [conversationId, pendingApprovals.length, isRunningAction, setQueued, sendMessageViaHook, setInputMessage])
+    },
+    get inputMessage() {
+      return inputMessage
+    },
+    setInputMessage,
+    handleSendMessage,
+    get isQueued() {
+      return isQueued
+    },
+    stopStream: () => stopStream(conversationId)
+  }), [conversationId, pendingApprovals.length, isRunningAction, setQueued, sendMessageViaHook, inputMessage, setInputMessage, handleSendMessage, isQueued, stopStream])
 
   // Auto-send initial message when provided (e.g., from task creation with description)
   useEffect(() => {
@@ -265,32 +276,6 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
             </svg>
             New messages
           </button>
-        )}
-      </div>
-
-      <div className="border-t border-gray-200 dark:border-gray-600 p-3 flex-shrink-0">
-        {isDisabled ? (
-          <div className="text-center text-gray-500 dark:text-gray-400 py-3 text-sm">
-            {disabledMessage ?? "Chat disabled — task is complete"}
-          </div>
-        ) : (
-          <>
-            <ConversationInput
-              value={inputMessage}
-              onChange={setInputMessage}
-              onSendMessage={handleSendMessage}
-              placeholder={placeholder}
-              isStreaming={isStreaming}
-              onStopStream={() => stopStream(conversationId)}
-              isQueued={isQueued}
-            />
-
-            {pendingMessage && pendingMessage.status !== 'failed' && (
-              <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-                Waiting for agent response...
-              </p>
-            )}
-          </>
         )}
       </div>
     </div>

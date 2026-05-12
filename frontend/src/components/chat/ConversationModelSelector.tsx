@@ -9,11 +9,15 @@ import { reportMutationError } from '../../lib/errors'
 interface ConversationModelSelectorProps {
   conversationId: number
   onModelChange?: (engine: string, modelId: string | null, modelName: string) => void
+  showEngine?: boolean
+  dropUp?: boolean
 }
 
 export default function ConversationModelSelector({
   conversationId,
-  onModelChange
+  onModelChange,
+  showEngine = true,
+  dropUp = false
 }: ConversationModelSelectorProps) {
   const [conversation, setConversation] = useState<ConversationResponse | null>(null)
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
@@ -139,8 +143,12 @@ export default function ConversationModelSelector({
   return (
     <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
       {/* Engine display (non-interactive) */}
-      <span className="font-medium">{engineDisplayName}</span>
-      <span className="text-gray-400 dark:text-gray-500">/</span>
+      {showEngine && (
+        <>
+          <span className="font-medium">{engineDisplayName}</span>
+          <span className="text-gray-400 dark:text-gray-500">/</span>
+        </>
+      )}
 
       {/* Model selector dropdown */}
       <div className="relative">
@@ -165,7 +173,7 @@ export default function ConversationModelSelector({
             />
 
             {/* Dropdown options */}
-            <div className={`absolute right-0 mt-2 w-64 ${surfaces.raised} rounded-md shadow-lg border ${borderColors.default} z-20 max-h-64 overflow-y-auto`}>
+            <div className={`absolute right-0 ${dropUp ? 'bottom-full mb-2' : 'mt-2'} w-64 ${surfaces.raised} rounded-md shadow-lg border ${borderColors.default} z-20 max-h-64 overflow-y-auto`}>
               {/* Show "Default" option for engines that don't require model selection */}
               {!engineRequiresModelSelection() && (
                 <button

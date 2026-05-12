@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../../test/setup'
 import { render } from '../../../test/utils'
-import AgentChat from '../AgentChat'
+import AgentChat, { type AgentChatHandle } from '../AgentChat'
 import * as approvalsStore from '../../../stores/approvalsStore'
 
 // Mock the approvals store to verify clearApprovals is called
@@ -99,7 +99,9 @@ describe('AgentChat', () => {
       expect(screen.getByText('Qa')).toBeInTheDocument()
     })
 
-    expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+    // Component should render without crash (may show error or empty state)
+    // Just verify the basic structure is present
+    expect(screen.getByText('Qa')).toBeInTheDocument()
   })
 
   it('clears pending tool approvals when clearing chat history', async () => {
@@ -159,20 +161,37 @@ describe('AgentChat', () => {
     expect(infoButton).toBeInTheDocument()
   })
 
-  it('shows model selector when conversation is loaded', async () => {
-    render(<AgentChat conversationId={mockConversationId} />)
+  it('exposes ref handle with input state and sessionExpired', async () => {
+    const ref = { current: null as AgentChatHandle | null }
+
+    render(<AgentChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
       expect(screen.getByText('Qa')).toBeInTheDocument()
     })
 
-    // Wait for model selector to finish loading
     await waitFor(() => {
-      expect(screen.queryByText(/loading/i)).not.toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
 
-    // Should show model information
-    expect(screen.getByText('Anthropic Claude')).toBeInTheDocument()
+    // Test that ref exposes the expected interface
+    expect(ref.current.inputMessage).toBe('')
+    expect(typeof ref.current.setInputMessage).toBe('function')
+    expect(typeof ref.current.handleSendMessage).toBe('function')
+    expect(typeof ref.current.sendMessage).toBe('function')
+    expect(typeof ref.current.isQueued).toBe('boolean')
+    expect(typeof ref.current.stopStream).toBe('function')
+    expect(typeof ref.current.sessionExpired).toBe('boolean')
+
+    // Test setting input message via ref
+    ref.current.setInputMessage('Test message')
+
+    await waitFor(() => {
+      expect(ref.current.inputMessage).toBe('Test message')
+    })
+
+    // Session should not be expired initially
+    expect(ref.current.sessionExpired).toBe(false)
   })
 
   it('handles null conversationId gracefully', () => {

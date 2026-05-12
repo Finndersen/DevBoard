@@ -166,7 +166,7 @@ describe('useIsNarrowContainer', () => {
     })
 
     act(() => {
-      observeCallback([{ contentRect: { width: 1200 } } as ResizeObserverEntry], {} as ResizeObserver)
+      observeCallback([{ contentRect: { width: 1400 } } as ResizeObserverEntry], {} as ResizeObserver)
     })
 
     expect(result.current[0]).toBe(false)

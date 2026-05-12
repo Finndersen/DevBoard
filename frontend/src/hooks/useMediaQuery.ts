@@ -27,7 +27,7 @@ export function useIsBelow2xl(): boolean {
  * element. Uses ResizeObserver so it responds to container size changes
  * (e.g. sidebar collapse/expand) rather than viewport width.
  */
-export function useIsNarrowContainer(breakpoint: number = 1100): [boolean, (node: HTMLElement | null) => void] {
+export function useIsNarrowContainer(breakpoint: number = 1280): [boolean, (node: HTMLElement | null) => void] {
   const [isNarrow, setIsNarrow] = useState(false)
   const [element, setElement] = useState<HTMLElement | null>(null)
 

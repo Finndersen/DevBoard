@@ -20,9 +20,10 @@ import { useConversationStore } from '../stores/conversationStore'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
 import { useNotificationStore } from '../stores/notificationStore'
 import { reportMutationError } from '../lib/errors'
-import { useIsNarrowContainer } from '../hooks/useMediaQuery'
-import CollapsedPanelStrip from '../components/ui/CollapsedPanelStrip'
 import { CustomFieldsPopover } from '../components/common/CustomFieldsPanel'
+import ChatDetailLayout from '../components/layout/ChatDetailLayout'
+import AgentActionBar from '../components/layout/AgentActionBar'
+import type { AgentChatHandle } from '../components/chat/AgentChat'
 
 interface ProjectDetailProps {
   id: string
@@ -49,6 +50,9 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const { data: allCodebases, refetch: refetchAllCodebases } = useCodebases()
   const { mutate: linkCodebase, loading: linkingCodebase } = useLinkCodebaseToProject()
   const { mutate: unlinkCodebase, loading: unlinkingCodebase } = useUnlinkCodebaseFromProject()
+
+  // Ref to AgentChat for sending messages
+  const agentChatRef = useRef<AgentChatHandle>(null)
 
   // Active conversation management — initialize from URL param if present
   const [activeConversationId, setActiveConversationId] = useState<number | null>(() => {
@@ -196,8 +200,9 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
   useToolResultHandler(projectSpecificationHandler)
 
-  // Panel toggle state — based on container width, not viewport
-  const [isNarrow, containerRef] = useIsNarrowContainer()
+  // Layout state
+  const isNarrowRef = useRef(false)
+  const handleNarrowChange = useCallback((narrow: boolean) => { isNarrowRef.current = narrow }, [])
   const expandedPanel = useUIStore(s => s.expandedPanel)
   const setExpandedPanel = useUIStore(s => s.setExpandedPanel)
 
@@ -211,11 +216,11 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const prevStreamingRef = useRef(isStreaming)
 
   useEffect(() => {
-    if (prevStreamingRef.current && !isStreaming && isNarrow && expandedPanel === 'details') {
+    if (prevStreamingRef.current && !isStreaming && isNarrowRef.current && expandedPanel === 'details') {
       setChatNeedsAttention(true)
     }
     prevStreamingRef.current = isStreaming
-  }, [isStreaming, isNarrow, expandedPanel])
+  }, [isStreaming, expandedPanel])
 
   useEffect(() => {
     if (expandedPanel === 'chat') {
@@ -230,12 +235,12 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   useEffect(() => {
     const dataFingerprint = specificationDoc?.content ?? ''
     if (prevDetailsDataRef.current && dataFingerprint !== prevDetailsDataRef.current) {
-      if (isNarrow && expandedPanel === 'chat') {
+      if (isNarrowRef.current && expandedPanel === 'chat') {
         setDetailsNeedsAttention(true)
       }
     }
     prevDetailsDataRef.current = dataFingerprint
-  }, [specificationDoc?.content, isNarrow, expandedPanel])
+  }, [specificationDoc?.content, expandedPanel])
 
   useEffect(() => {
     if (expandedPanel === 'details') {
@@ -361,6 +366,12 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     }
   }, [id, linkCodebase, refetchProjectCodebases, refetchAllCodebases, addNotification, project])
 
+  // Panel switching callbacks
+  const handleSendMessage = useCallback(() => {
+    // Auto-switch to chat panel when user sends a message (narrow mode only handled by ChatDetailLayout)
+    setExpandedPanel('chat')
+  }, [setExpandedPanel])
+
   // Only show loading spinner on initial load (when project data doesn't exist yet)
   // Don't show during refetches to avoid UI flash
   if (loading && !project) {
@@ -384,7 +395,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   }
 
   return (
-    <div ref={containerRef} className="h-full flex flex-col">
+    <div className="h-full flex flex-col">
       {/* Navigation Tabs with Project Name and Actions */}
       <div className={`border-b ${borderColors.default} mb-4 flex-shrink-0`}>
         <div className="flex items-center justify-between">
@@ -502,83 +513,21 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
       {/* Tab Content */}
       {activeTab === 'editor' && (
-        isNarrow ? (
-          <div className="flex gap-2 flex-1 min-h-0 overflow-hidden">
-            {/* Chat panel */}
-            <div
-              className="relative h-full overflow-hidden transition-[flex] duration-200 ease-in-out"
-              style={{ flex: expandedPanel === 'chat' ? '1 1 0%' : '0 0 2.5rem' }}
-            >
-              <AgentChat
-                conversationId={activeConversationId}
-                placeholder="Ask a question about this project..."
-                emptyStateMessage="Ask me anything about this project!"
-                className={`h-full min-w-0 flex flex-col overflow-hidden ${expandedPanel !== 'chat' ? 'invisible' : ''}`}
-                conversationSelector={
-                  activeConversationId ? (
-                    <ProjectConversationSelector
-                      projectId={project.id}
-                      activeConversationId={activeConversationId}
-                      onSelect={handleSelectConversation}
-                      onNew={handleNewConversation}
-                      onDelete={handleDeleteConversation}
-                      onRename={handleRenameConversation}
-                    />
-                  ) : undefined
-                }
-                onNewConversation={handleNewConversation}
-              />
-              {expandedPanel !== 'chat' && (
-                <div className="absolute inset-0">
-                  <CollapsedPanelStrip
-                    variant="chat"
-                    icon="💬"
-                    label="Chat"
-                    isStreaming={isStreaming}
-                    needsAttention={chatNeedsAttention}
-                    onClick={() => setExpandedPanel('chat')}
-                    className="h-full"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Details panel */}
-            <div
-              className="relative h-full overflow-hidden transition-[flex] duration-200 ease-in-out"
-              style={{ flex: expandedPanel === 'details' ? '1 1 0%' : '0 0 2.5rem' }}
-            >
-              <Card padding="xs" className={`h-full flex flex-col overflow-hidden ${expandedPanel !== 'details' ? 'invisible' : ''}`}>
-                <h3 className={`text-lg font-medium ${textColors.primary} mb-2 flex-shrink-0`}>Project Context</h3>
-                <div className="flex-1 overflow-hidden flex flex-col">
-                  <MarkdownDocumentEditor
-                    content={specificationDoc?.content}
-                    field={specificationField}
-                    placeholder="Enter project specification in Markdown format..."
-                    emptyText="No project context provided."
-                    textareaClassName="w-full font-mono text-sm"
-                  />
-                </div>
-              </Card>
-              {expandedPanel !== 'details' && (
-                <div className="absolute inset-0">
-                  <CollapsedPanelStrip
-                    variant="details"
-                    icon="📄"
-                    label="Details"
-                    needsAttention={detailsNeedsAttention}
-                    onClick={() => setExpandedPanel('details')}
-                    className="h-full"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0 overflow-hidden">
+        <ChatDetailLayout
+          expandedPanel={expandedPanel}
+          onNarrowChange={handleNarrowChange}
+          onExpandPanel={(panel) => setExpandedPanel(panel)}
+          chatStripProps={{
+            isStreaming: isStreaming,
+            needsAttention: chatNeedsAttention,
+          }}
+          detailsStripProps={{
+            needsAttention: detailsNeedsAttention,
+          }}
+          chatContent={
             <AgentChat
+              ref={agentChatRef}
               conversationId={activeConversationId}
-              placeholder="Ask a question about this project..."
               emptyStateMessage="Ask me anything about this project!"
               className="h-full flex flex-col overflow-hidden"
               conversationSelector={
@@ -595,23 +544,36 @@ function ProjectDetail({ id }: ProjectDetailProps) {
               }
               onNewConversation={handleNewConversation}
             />
-
-            <div className="flex flex-col overflow-hidden">
-              <Card padding="xs" className="h-full flex flex-col overflow-hidden">
-                <h3 className={`text-lg font-medium ${textColors.primary} mb-2 flex-shrink-0`}>Project Context</h3>
-                <div className="flex-1 overflow-hidden flex flex-col">
-                  <MarkdownDocumentEditor
-                    content={specificationDoc?.content}
-                    field={specificationField}
-                    placeholder="Enter project specification in Markdown format..."
-                    emptyText="No project context provided."
-                    textareaClassName="w-full font-mono text-sm"
-                  />
-                </div>
-              </Card>
-            </div>
-          </div>
-        )
+          }
+          detailsContent={
+            <Card padding="xs" className="h-full flex flex-col overflow-hidden">
+              <h3 className={`text-lg font-medium ${textColors.primary} mb-2 flex-shrink-0`}>Project Context</h3>
+              <div className="flex-1 overflow-hidden flex flex-col">
+                <MarkdownDocumentEditor
+                  content={specificationDoc?.content}
+                  field={specificationField}
+                  placeholder="Enter project specification in Markdown format..."
+                  emptyText="No project context provided."
+                  textareaClassName="w-full font-mono text-sm"
+                />
+              </div>
+            </Card>
+          }
+          actionBar={
+            <AgentActionBar
+              conversationId={activeConversationId}
+              onSendMessage={(text) => {
+                agentChatRef.current?.sendMessage(text)
+                handleSendMessage()
+              }}
+              isStreaming={isStreaming}
+              onStopStream={() => agentChatRef.current?.stopStream()}
+              isDisabled={agentChatRef.current?.sessionExpired ?? false}
+              disabledMessage="Session expired - please refresh"
+              placeholder="Ask a question about this project..."
+            />
+          }
+        />
       )}
 
       {activeTab === 'settings' && (

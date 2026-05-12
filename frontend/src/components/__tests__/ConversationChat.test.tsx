@@ -5,7 +5,7 @@ import { enableMapSet } from 'immer'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/setup'
 import { render } from '../../test/utils'
-import ConversationChat from '../chat/ConversationChat'
+import ConversationChat, { type ConversationChatHandle } from '../chat/ConversationChat'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { useApprovalsStore } from '../../stores/approvalsStore'
 import type { ConversationEvent } from '../../lib/api'
@@ -85,14 +85,12 @@ describe('ConversationChat', () => {
     )
   })
 
-  it('renders chat interface with input and messages area', async () => {
+  it('renders chat interface with messages area', async () => {
     render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(screen.getByText(/start a conversation/i)).toBeInTheDocument()
     })
-
-    expect(screen.getByRole('button', { name: /send message/i })).toBeInTheDocument()
   })
 
   it('loads and displays chat history on mount', async () => {
@@ -133,8 +131,8 @@ describe('ConversationChat', () => {
     expect(assistantMessageText).toBeInTheDocument()
   })
 
-  it('sends new message when form is submitted', async () => {
-    const user = userEvent.setup()
+  it('exposes input state and methods via ref handle', async () => {
+    const ref = { current: null as ConversationChatHandle | null }
 
     server.use(
       http.post('*/api/conversations/1/messages', () => {
@@ -150,35 +148,38 @@ describe('ConversationChat', () => {
       })
     )
 
-    render(<ConversationChat conversationId={mockConversationId} />)
+    render(<ConversationChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question/i)
-    const sendButton = screen.getByRole('button', { name: /send message/i })
+    // Test that ref exposes the expected interface
+    expect(ref.current.inputMessage).toBe('')
+    expect(typeof ref.current.setInputMessage).toBe('function')
+    expect(typeof ref.current.handleSendMessage).toBe('function')
+    expect(typeof ref.current.sendMessage).toBe('function')
+    expect(typeof ref.current.isQueued).toBe('boolean')
+    expect(typeof ref.current.stopStream).toBe('function')
 
-    await user.type(input, 'New question')
-    await user.click(sendButton)
+    // Test setting input message
+    ref.current.setInputMessage('Test message')
 
-    // Input should be cleared immediately
-    expect(input).toHaveValue('')
-
-    // Check that the message appears somewhere - either as pending or confirmed
     await waitFor(() => {
-      const messages = screen.getAllByText(/New question|AI response to: New question/)
-      expect(messages.length).toBeGreaterThan(0)
-    }, { timeout: 3000 })
+      expect(ref.current.inputMessage).toBe('Test message')
+    })
 
-    // Should show AI response after API call
+    // Test sending message via ref
+    ref.current.handleSendMessage()
+
+    // Check that the message appears
     await waitFor(() => {
       expect(screen.getByText('AI response to: New question')).toBeInTheDocument()
     }, { timeout: 3000 })
   })
 
-  it('sends message on Enter key press', async () => {
-    const user = userEvent.setup()
+  it('sends message via ref sendMessage method', async () => {
+    const ref = { current: null as ConversationChatHandle | null }
 
     server.use(
       http.post('*/api/conversations/1/messages', () => {
@@ -194,15 +195,13 @@ describe('ConversationChat', () => {
       })
     )
 
-    render(<ConversationChat conversationId={mockConversationId} />)
+    render(<ConversationChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question/i)
-
-    await user.type(input, 'Test message{enter}')
+    ref.current.sendMessage('Test message')
 
     await waitFor(() => {
       const messages = screen.getAllByText(/Test message|AI response/)
@@ -210,8 +209,8 @@ describe('ConversationChat', () => {
     })
   })
 
-  it('allows multi-line input with Shift+Enter but submits on Enter', async () => {
-    const user = userEvent.setup()
+  it('handles multi-line messages via ref interface', async () => {
+    const ref = { current: null as ConversationChatHandle | null }
 
     server.use(
       http.post('*/api/conversations/1/messages', () => {
@@ -227,55 +226,61 @@ describe('ConversationChat', () => {
       })
     )
 
-    render(<ConversationChat conversationId={mockConversationId} />)
+    render(<ConversationChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
 
-    const textarea = screen.getByPlaceholderText(/ask a question/i)
+    // Set multi-line message via ref
+    const multilineMessage = 'Line 1\nLine 2\nLine 3'
+    ref.current.setInputMessage(multilineMessage)
 
-    // Type multi-line message with Shift+Enter
-    await user.type(textarea, 'Line 1{Shift>}{Enter}{/Shift}Line 2{Shift>}{Enter}{/Shift}Line 3')
+    await waitFor(() => {
+      expect(ref.current.inputMessage).toBe(multilineMessage)
+    })
 
-    // Verify multi-line content is in textarea
-    expect(textarea).toHaveValue('Line 1\nLine 2\nLine 3')
+    // Send message via ref
+    ref.current.handleSendMessage()
 
-    // Press Enter without Shift to submit
-    await user.type(textarea, '{Enter}')
+    // Should clear the input after sending
+    await waitFor(() => {
+      expect(ref.current.inputMessage).toBe('')
+    })
 
-    // Should clear the input immediately
-    expect(textarea).toHaveValue('')
-
-    // Should send multi-line message and get response
+    // Should receive response
     await waitFor(() => {
       expect(screen.getByText(/Got: Line 1.*Line 2.*Line 3/s)).toBeInTheDocument()
     }, { timeout: 3000 })
   })
 
-  it('prevents sending empty messages', async () => {
-    const user = userEvent.setup()
+  it('prevents sending empty messages via ref', async () => {
+    const ref = { current: null as ConversationChatHandle | null }
 
-    render(<ConversationChat conversationId={mockConversationId} />)
+    render(<ConversationChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
 
-    const sendButton = screen.getByRole('button', { name: /send message/i })
+    // Get initial message count
+    await waitFor(() => {
+      expect(screen.getByText(/start a conversation/i)).toBeInTheDocument()
+    })
 
-    // Button should be disabled when input is empty
-    expect(sendButton).toBeDisabled()
+    const initialContent = screen.getByText(/start a conversation/i)
+    expect(initialContent).toBeInTheDocument()
 
-    // Try to click disabled button - should not work
-    await user.click(sendButton)
+    // Try to send empty message via ref
+    ref.current.sendMessage('')
+    ref.current.sendMessage('   ') // whitespace only
 
-    // No new messages should be added (empty state message should still be shown)
+    // Empty state should still be shown (no new messages)
     expect(screen.getByText(/start a conversation/i)).toBeInTheDocument()
   })
 
-  it('shows loading state while sending message', async () => {
-    const user = userEvent.setup()
+  it('exposes streaming state via ref handle', async () => {
+    const ref = { current: null as ConversationChatHandle | null }
 
     server.use(
       http.post('*/api/conversations/1/messages', async () => {
@@ -292,34 +297,28 @@ describe('ConversationChat', () => {
       })
     )
 
-    render(<ConversationChat conversationId={mockConversationId} />)
+    render(<ConversationChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question/i)
-    const sendButton = screen.getByRole('button', { name: /send message/i })
+    // Send message via ref
+    ref.current.sendMessage('Test message')
 
-    await user.type(input, 'Test message')
-    await user.click(sendButton)
-
-    // Stop button should appear during streaming (replaces send button)
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /stop streaming/i })).toBeInTheDocument()
-    })
-
-    // Should show user message immediately (may be in pending state)
+    // Should show user message immediately
     await waitFor(() => {
       const messages = screen.getAllByText(/Test message|AI response/)
       expect(messages.length).toBeGreaterThan(0)
     })
 
-    // Wait for response and send button to reappear
+    // Wait for response
     await waitFor(() => {
       expect(screen.getByText('AI response')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /send message/i })).toBeInTheDocument()
     }, { timeout: 3000 })
+
+    // Test stopStream method is available
+    expect(typeof ref.current.stopStream).toBe('function')
   })
 
   it('handles API error when loading history', async () => {
@@ -341,8 +340,8 @@ describe('ConversationChat', () => {
     consoleSpy.mockRestore()
   })
 
-  it('handles API error when sending message', async () => {
-    const user = userEvent.setup()
+  it('handles API error when sending message via ref', async () => {
+    const ref = { current: null as ConversationChatHandle | null }
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     server.use(
@@ -351,17 +350,13 @@ describe('ConversationChat', () => {
       })
     )
 
-    render(<ConversationChat conversationId={mockConversationId} />)
+    render(<ConversationChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question/i)
-    const sendButton = screen.getByRole('button', { name: /send message/i })
-
-    await user.type(input, 'Test message')
-    await user.click(sendButton)
+    ref.current.sendMessage('Test message')
 
     // Error should be logged
     await waitFor(() => {
@@ -395,8 +390,8 @@ describe('ConversationChat', () => {
     })
   })
 
-  it('auto-scrolls to bottom when new messages are added', async () => {
-    const user = userEvent.setup()
+  it('auto-scrolls to bottom when new messages are added via ref', async () => {
+    const ref = { current: null as ConversationChatHandle | null }
 
     // Mock scrollTop property on HTMLElement
     const mockScrollTop = vi.fn()
@@ -426,16 +421,13 @@ describe('ConversationChat', () => {
       })
     )
 
-    render(<ConversationChat conversationId={mockConversationId} />)
+    render(<ConversationChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question/i)
-
-    await user.type(input, 'New message')
-    await user.click(screen.getByRole('button', { name: /send/i }))
+    ref.current.sendMessage('New message')
 
     await waitFor(() => {
       expect(screen.getByText('AI response')).toBeInTheDocument()
@@ -485,7 +477,8 @@ describe('ConversationChat', () => {
     expect(messageElements[2]).toHaveTextContent('Third message')
   })
 
-  it('handles tool approval workflow for document editing', async () => {
+  it('handles tool approval workflow for document editing via ref', async () => {
+    const ref = { current: null as ConversationChatHandle | null }
     const user = userEvent.setup()
 
     server.use(
@@ -518,26 +511,19 @@ describe('ConversationChat', () => {
       })
     )
 
-    render(<ConversationChat conversationId={mockConversationId} />)
+    render(<ConversationChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question/i)
-    const sendButton = screen.getByRole('button', { name: /send message/i })
-
-    await user.type(input, 'Please update the project specification')
-    await user.click(sendButton)
+    ref.current.sendMessage('Please update the project specification')
 
     // Should show pending approval
     await waitFor(() => {
       expect(screen.getByText(/Tool.*Awaiting Approval/i)).toBeInTheDocument()
       expect(screen.getByText('Updating project specification')).toBeInTheDocument()
     })
-
-    // Input is always enabled (users can queue messages while waiting)
-    expect(input).not.toBeDisabled()
 
     // Find and click approve button
     const approveButton = screen.getByRole('button', { name: /approve/i })
@@ -547,15 +533,10 @@ describe('ConversationChat', () => {
     await waitFor(() => {
       expect(screen.getByText('Successfully updated the project specification.')).toBeInTheDocument()
     })
-
-    // Input should be enabled again (wait for pending message to be cleared)
-    await waitFor(() => {
-      expect(input).not.toBeDisabled()
-    })
   })
 
-  it('queues messages while tool approval is pending', async () => {
-    const user = userEvent.setup()
+  it('queues messages while tool approval is pending via ref', async () => {
+    const ref = { current: null as ConversationChatHandle | null }
 
     server.use(
       http.post('*/api/conversations/1/messages', () => {
@@ -571,33 +552,31 @@ describe('ConversationChat', () => {
       })
     )
 
-    render(<ConversationChat conversationId={mockConversationId} />)
+    render(<ConversationChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question/i)
-
-    await user.type(input, 'Test message')
-    await user.click(screen.getByRole('button', { name: /send message/i }))
+    ref.current.sendMessage('Test message')
 
     // Wait for approval to appear
     await waitFor(() => {
       expect(screen.getByText(/Tool.*Awaiting Approval/i)).toBeInTheDocument()
     })
 
-    // Input is always enabled (users can type and queue messages)
-    expect(input).not.toBeDisabled()
+    // Send a follow-up message while approval is pending
+    ref.current.sendMessage('Queued follow-up')
 
-    // Type a new message while approval is pending
-    await user.type(input, 'Queued follow-up')
-    await user.click(screen.getByRole('button', { name: /send message/i }))
-
-    // Should show queued indicator
+    // Should have the queued message in input (message gets queued instead of sent)
     await waitFor(() => {
-      expect(screen.getByText(/queued/i)).toBeInTheDocument()
+      expect(ref.current.inputMessage).toBe('Queued follow-up')
     })
+
+    // Verify that the message was queued rather than sent immediately
+    // (the message should be in the input field, not displayed as a new message)
+    const messages = screen.queryAllByText(/Queued follow-up/)
+    expect(messages).toHaveLength(0) // Message should not appear as sent
   })
 
   it('handles empty chat history gracefully', async () => {
@@ -610,14 +589,11 @@ describe('ConversationChat', () => {
     render(<ConversationChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(screen.getByText(/start a conversation/i)).toBeInTheDocument()
     })
-
-    // Should show empty state
-    expect(screen.getByText(/start a conversation/i)).toBeInTheDocument()
   })
 
-  it('accepts custom placeholder and empty state message', async () => {
+  it('accepts custom empty state message', async () => {
     server.use(
       http.get('*/api/conversations/1/messages', () => {
         return HttpResponse.json({ messages: [], context_usage: null })
@@ -627,28 +603,23 @@ describe('ConversationChat', () => {
     render(
       <ConversationChat
         conversationId={mockConversationId}
-        placeholder="Custom placeholder text"
         emptyStateMessage="Custom empty state"
       />
     )
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/custom placeholder text/i)).toBeInTheDocument()
+      expect(screen.getByText(/custom empty state/i)).toBeInTheDocument()
     })
-
-    expect(screen.getByText(/custom empty state/i)).toBeInTheDocument()
   })
 
-  it('handles multiple messages without key collisions', async () => {
-    const user = userEvent.setup()
+  it('handles multiple messages without key collisions via ref', async () => {
+    const ref = { current: null as ConversationChatHandle | null }
 
-    render(<ConversationChat conversationId={mockConversationId} />)
+    render(<ConversationChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
-
-    const input = screen.getByPlaceholderText(/ask a question/i)
 
     // Override handler for first message send
     server.use(
@@ -666,17 +637,11 @@ describe('ConversationChat', () => {
     )
 
     // Send first message
-    await user.type(input, 'First message')
-    await user.click(screen.getByRole('button', { name: /send/i }))
+    ref.current.sendMessage('First message')
 
     // Wait for first AI response to appear
     await waitFor(() => {
       expect(screen.getByText('First AI response')).toBeInTheDocument()
-    }, { timeout: 3000 })
-
-    // Wait for input to be enabled again before sending second message
-    await waitFor(() => {
-      expect(input).not.toBeDisabled()
     }, { timeout: 3000 })
 
     // Override handler for second message send
@@ -694,9 +659,8 @@ describe('ConversationChat', () => {
       })
     )
 
-    // Send second message - can only send after first completes
-    await user.type(input, 'Second message')
-    await user.click(screen.getByRole('button', { name: /send/i }))
+    // Send second message
+    ref.current.sendMessage('Second message')
 
     // Wait for second AI response to appear
     await waitFor(() => {
@@ -708,8 +672,8 @@ describe('ConversationChat', () => {
     expect(screen.getByText('Second AI response')).toBeInTheDocument()
   })
 
-  it('converts pending message to confirmed message on first streamed event', async () => {
-    const user = userEvent.setup()
+  it('converts pending message to confirmed message on first streamed event via ref', async () => {
+    const ref = { current: null as ConversationChatHandle | null }
 
     server.use(
       http.post('*/api/conversations/1/messages', () => {
@@ -725,17 +689,13 @@ describe('ConversationChat', () => {
       })
     )
 
-    render(<ConversationChat conversationId={mockConversationId} />)
+    render(<ConversationChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question/i)
-    const sendButton = screen.getByRole('button', { name: /send message/i })
-
-    await user.type(input, 'Test message conversion')
-    await user.click(sendButton)
+    ref.current.sendMessage('Test message conversion')
 
     // Wait for the response and verify no duplicate pending messages
     await waitFor(() => {
@@ -747,8 +707,8 @@ describe('ConversationChat', () => {
     expect(userMessages).toHaveLength(1)
   })
 
-  it('does not show duplicate user message during streaming', async () => {
-    const user = userEvent.setup()
+  it('does not show duplicate user message during streaming via ref', async () => {
+    const ref = { current: null as ConversationChatHandle | null }
 
     server.use(
       http.post('*/api/conversations/1/messages', () => {
@@ -770,18 +730,14 @@ describe('ConversationChat', () => {
       })
     )
 
-    render(<ConversationChat conversationId={mockConversationId} />)
+    render(<ConversationChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question/i)
-    const sendButton = screen.getByRole('button', { name: /send message/i })
-
     const messageText = 'User query for streaming test'
-    await user.type(input, messageText)
-    await user.click(sendButton)
+    ref.current.sendMessage(messageText)
 
     // Wait for all responses to appear
     await waitFor(() => {
@@ -793,7 +749,8 @@ describe('ConversationChat', () => {
     expect(userMessages).toHaveLength(1)
   })
 
-  it('handles tool approval with pending message conversion', async () => {
+  it('handles tool approval with pending message conversion via ref', async () => {
+    const ref = { current: null as ConversationChatHandle | null }
     const user = userEvent.setup()
 
     server.use(
@@ -821,17 +778,13 @@ describe('ConversationChat', () => {
       })
     )
 
-    render(<ConversationChat conversationId={mockConversationId} />)
+    render(<ConversationChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question/i)
-    const sendButton = screen.getByRole('button', { name: /send message/i })
-
-    await user.type(input, 'Please edit the document')
-    await user.click(sendButton)
+    ref.current.sendMessage('Please edit the document')
 
     // Wait for tool approval to appear
     await waitFor(() => {
@@ -847,16 +800,12 @@ describe('ConversationChat', () => {
       expect(screen.getByText('Tool execution complete')).toBeInTheDocument()
     }, { timeout: 3000 })
 
-    // Verify the input is enabled again (pending message has been cleared)
-    const finalInput = screen.getByPlaceholderText(/ask a question/i)
-    expect(finalInput).not.toBeDisabled()
-
     // Verify the tool execution message is displayed
     expect(screen.getByText('Tool execution complete')).toBeInTheDocument()
   })
 
-  it('passes event handler registry and invokes SystemEvent handlers', async () => {
-    const user = userEvent.setup()
+  it('passes event handler registry and invokes SystemEvent handlers via ref', async () => {
+    const ref = { current: null as ConversationChatHandle | null }
 
     server.use(
       http.post('*/api/conversations/1/messages', () => {
@@ -885,17 +834,13 @@ describe('ConversationChat', () => {
       })
     )
 
-    render(<ConversationChat conversationId={mockConversationId} />)
+    render(<ConversationChat ref={ref} conversationId={mockConversationId} />)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/ask a question/i)).toBeInTheDocument()
+      expect(ref.current).toBeTruthy()
     })
 
-    const input = screen.getByPlaceholderText(/ask a question/i)
-    const sendButton = screen.getByRole('button', { name: /send message/i })
-
-    await user.type(input, 'Update the task status')
-    await user.click(sendButton)
+    ref.current.sendMessage('Update the task status')
 
     // Wait for agent response (SystemEvent should be handled in background)
     await waitFor(() => {

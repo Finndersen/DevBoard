@@ -81,25 +81,28 @@ export function useMessageQueueing(
     }
   }, [inputMessage, isQueued, conversationId, setQueued])
 
-  // Auto-send queued message when stream completes successfully
+  // Auto-send queued message when stream completes successfully.
+  // Uses inputMessageRef (not closure inputMessage) because the ref is updated
+  // synchronously by setInputMessage, avoiding stale-closure races when messages
+  // are queued via the imperative sendMessage ref handle.
   useStreamCompleteHandler(useCallback(() => {
     const currentStreamState = useConversationStreamStore.getState().activeStreams.get(conversationId)
+    const queuedText = inputMessageRef.current.trim()
 
     if (
       currentStreamState?.isQueued &&
-      inputMessage.trim() &&
+      queuedText &&
       (!currentStreamState.pendingToolRequests || currentStreamState.pendingToolRequests.length === 0)
     ) {
-      const messageToSend = inputMessage.trim()
       inputMessageRef.current = ''
       setInputMessageRaw('')
       hadTextRef.current = false
       if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current)
       useUIStore.getState().clearDraftMessage(conversationId, viewType, entityId)
       setQueued(conversationId, false)
-      sendMessageViaHook(messageToSend)
+      sendMessageViaHook(queuedText)
     }
-  }, [conversationId, inputMessage, setQueued, sendMessageViaHook, viewType, entityId]))
+  }, [conversationId, setQueued, sendMessageViaHook, viewType, entityId]))
 
   return { inputMessage, setInputMessage, handleSendMessage }
 }
