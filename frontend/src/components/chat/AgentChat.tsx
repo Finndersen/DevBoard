@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, forwardRef, useRef, useImperativeHandle } from 'react'
-import { ChatBubbleLeftIcon, TrashIcon, InformationCircleIcon, PlusIcon, MagnifyingGlassCircleIcon } from '@heroicons/react/24/outline'
+import { ChatBubbleLeftIcon, TrashIcon, PlusIcon, MagnifyingGlassCircleIcon } from '@heroicons/react/24/outline'
 import ConversationChat, { type ConversationChatHandle } from './ConversationChat'
 import RunningIndicator from './RunningIndicator'
 import Button from '../ui/Button'
 import Card from '../ui/Card'
 import ClearChatHistoryModal from '../modals/ClearChatHistoryModal'
-import SessionIdModal from '../modals/SessionIdModal'
 import AgentInspectorModal from '../modals/AgentInspectorModal'
 import { textColors } from '../../styles/designSystem'
 import { apiClient } from '../../lib/api'
@@ -86,7 +85,6 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
 
   // Use new custom hooks to eliminate boilerplate
   const clearChatModal = useModal()
-  const sessionIdModal = useModal()
   const inspectorModal = useModal()
   const { clearConversationMessages } = usePendingMessages()
   const { clearApprovals } = useApprovalActions()
@@ -195,20 +193,6 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
             </div>
           )}
           <div className="flex items-center space-x-3">
-            {conversation?.engine && (
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                {conversation.engine.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-              </span>
-            )}
-            {conversation?.external_session_id && (
-              <button
-                onClick={sessionIdModal.open}
-                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-                title="View session ID"
-              >
-                <InformationCircleIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-              </button>
-            )}
             {conversationId && !loadingConversation && (
               <ContextUsageDisplay conversationId={conversationId} />
             )}
@@ -258,21 +242,15 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
         />
       )}
 
-      {/* Session ID Modal */}
-      {conversation?.external_session_id && (
-        <SessionIdModal
-          isOpen={sessionIdModal.isOpen}
-          onClose={sessionIdModal.close}
-          sessionId={conversation.external_session_id}
-        />
-      )}
-
       {/* Agent Inspector Modal */}
       {conversationId && (
         <AgentInspectorModal
           isOpen={inspectorModal.isOpen}
           onClose={inspectorModal.close}
           conversationId={conversationId}
+          engine={conversation?.engine}
+          modelId={conversation?.model_id}
+          externalSessionId={conversation?.external_session_id}
         />
       )}
     </>

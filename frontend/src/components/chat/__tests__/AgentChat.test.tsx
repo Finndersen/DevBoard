@@ -149,16 +149,15 @@ describe('AgentChat', () => {
     })
   })
 
-  it('displays session ID when available', async () => {
+  it('displays session ID in agent inspector modal', async () => {
     render(<AgentChat conversationId={mockConversationId} />)
 
     await waitFor(() => {
       expect(screen.getByText('Qa')).toBeInTheDocument()
     })
 
-    // Should show info button
-    const infoButton = screen.getByTitle('View session ID')
-    expect(infoButton).toBeInTheDocument()
+    // Session ID button should NOT be in the header anymore
+    expect(screen.queryByTitle('View session ID')).not.toBeInTheDocument()
   })
 
   it('exposes ref handle with input state and sessionExpired', async () => {

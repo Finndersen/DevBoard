@@ -9,14 +9,12 @@ import { reportMutationError } from '../../lib/errors'
 interface ConversationModelSelectorProps {
   conversationId: number
   onModelChange?: (engine: string, modelId: string | null, modelName: string) => void
-  showEngine?: boolean
   dropUp?: boolean
 }
 
 export default function ConversationModelSelector({
   conversationId,
   onModelChange,
-  showEngine = true,
   dropUp = false
 }: ConversationModelSelectorProps) {
   const [conversation, setConversation] = useState<ConversationResponse | null>(null)
@@ -129,12 +127,6 @@ export default function ConversationModelSelector({
     return null
   }
 
-  // Format engine name for display
-  const engineDisplayName = conversation.engine
-    .split('_')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
-
   // Extract model name from model_id (format: "provider:name")
   const modelDisplayName = conversation.model_id === null
     ? 'Default'
@@ -142,14 +134,6 @@ export default function ConversationModelSelector({
 
   return (
     <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-      {/* Engine display (non-interactive) */}
-      {showEngine && (
-        <>
-          <span className="font-medium">{engineDisplayName}</span>
-          <span className="text-gray-400 dark:text-gray-500">/</span>
-        </>
-      )}
-
       {/* Model selector dropdown */}
       <div className="relative">
         <button

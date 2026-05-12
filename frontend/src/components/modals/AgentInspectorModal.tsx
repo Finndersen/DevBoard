@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline'
 import Modal from '../ui/Modal'
 import type { AgentConfigResponse, ToolInfo } from '../../lib/api'
 import { apiClient } from '../../lib/api'
@@ -8,6 +9,9 @@ interface AgentInspectorModalProps {
   isOpen: boolean
   onClose: () => void
   conversationId: number
+  engine?: string
+  modelId?: string | null
+  externalSessionId?: string | null
 }
 
 type FilterType = 'all' | 'role' | 'mcp' | 'builtin'
@@ -30,7 +34,8 @@ function getSourceBadgeText(tool: ToolInfo): string {
   return tool.source === 'role' ? 'Role' : 'Builtin'
 }
 
-export default function AgentInspectorModal({ isOpen, onClose, conversationId }: AgentInspectorModalProps) {
+export default function AgentInspectorModal({ isOpen, onClose, conversationId, engine, modelId, externalSessionId }: AgentInspectorModalProps) {
+  const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<AgentConfigResponse | null>(null)
@@ -116,6 +121,43 @@ export default function AgentInspectorModal({ isOpen, onClose, conversationId }:
 
       {data && !loading && (
         <div className="overflow-y-auto flex-1">
+          {/* Metadata bar */}
+          <div className="bg-gray-800/50 border border-gray-700 rounded-lg px-4 py-2 mb-4 mx-1 flex items-center gap-6 text-sm">
+            {engine && (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">Engine</span>
+                <span className="text-gray-200 font-medium">
+                  {engine.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500">Model</span>
+              <span className="text-gray-200 font-medium">
+                {modelId ? (modelId.split(':')[1] || modelId) : 'Default'}
+              </span>
+            </div>
+            {externalSessionId && (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">Session ID</span>
+                <span className="text-gray-200 font-mono text-xs">{externalSessionId}</span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(externalSessionId)
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 2000)
+                  }}
+                  className="p-0.5 hover:bg-gray-700 rounded transition-colors"
+                  title="Copy session ID"
+                >
+                  {copied
+                    ? <CheckIcon className="w-4 h-4 text-green-400" />
+                    : <ClipboardDocumentIcon className="w-4 h-4 text-gray-400" />
+                  }
+                </button>
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-4 p-1">
             {/* Behaviour Guidelines — left column */}
             <div className="bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">

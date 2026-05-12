@@ -89,7 +89,6 @@ export default function AgentActionBar({
             <ConversationModelSelector
               conversationId={conversationId}
               onModelChange={onModelChange}
-              showEngine={false}
               dropUp
             />
           </div>
