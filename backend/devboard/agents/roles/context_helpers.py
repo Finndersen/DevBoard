@@ -208,4 +208,4 @@ def build_task_context(
     if task.custom_fields:
         sections.append(_format_custom_fields(task))
 
-    return "\n\n".join(sections)
+    return "\n--------\n".join(sections)

@@ -17,16 +17,30 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.create_unique_constraint(
-        "uq_implementation_step_number",
-        "implementation_steps",
-        ["implementation_plan_id", "step_number"],
+    conn = op.get_bind()
+    conn.execute(__import__("sqlalchemy").text("DROP TABLE IF EXISTS _alembic_tmp_implementation_steps"))
+    conn.execute(
+        __import__("sqlalchemy").text(
+            """
+            DELETE FROM implementation_steps
+            WHERE id NOT IN (
+                SELECT MAX(id)
+                FROM implementation_steps
+                GROUP BY implementation_plan_id, step_number
+            )
+            """
+        )
     )
+    with op.batch_alter_table("implementation_steps") as batch_op:
+        batch_op.create_unique_constraint(
+            "uq_implementation_step_number",
+            ["implementation_plan_id", "step_number"],
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "uq_implementation_step_number",
-        "implementation_steps",
-        type_="unique",
-    )
+    with op.batch_alter_table("implementation_steps") as batch_op:
+        batch_op.drop_constraint(
+            "uq_implementation_step_number",
+            type_="unique",
+        )
