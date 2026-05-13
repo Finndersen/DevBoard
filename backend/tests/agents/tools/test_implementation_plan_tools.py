@@ -71,7 +71,11 @@ class TestExecuteImplementationStepStatusValidation:
     """Tests for status validation in execute_implementation_step."""
 
     @pytest.fixture
-    def execute_step_tool(self, mock_task: Mock, mock_plan_service: Mock) -> Mock:
+    def mock_execution_manager(self) -> Mock:
+        return Mock()
+
+    @pytest.fixture
+    def execute_step_tool(self, mock_task: Mock, mock_plan_service: Mock, mock_execution_manager: Mock) -> Mock:
         mock_task.implementation_plan_structured = Mock(spec=ImplementationPlan)
         return create_execute_implementation_step_tool(
             task=mock_task,
@@ -80,13 +84,14 @@ class TestExecuteImplementationStepStatusValidation:
             conversation_repo=Mock(),
             parent_conversation_id=None,
             working_dir="/test/working_dir",
-            execution_manager=Mock(),
+            execution_manager=mock_execution_manager,
         )
 
     def _make_step(self, status: ImplementationStepStatus) -> Mock:
         step = Mock(spec=ImplementationStep)
         step.status = status
         step.step_number = 1
+        step.conversation_id = None
         return step
 
     @pytest.mark.asyncio
@@ -103,19 +108,24 @@ class TestExecuteImplementationStepStatusValidation:
         mock_plan_service.set_step_status.assert_any_call(step, status=ImplementationStepStatus.RUNNING)
 
     @pytest.mark.asyncio
-    async def test_rejects_running_step(self, execute_step_tool: Mock, mock_plan_service: Mock):
+    async def test_allows_running_step_without_conversation_id(self, execute_step_tool: Mock, mock_plan_service: Mock):
+        """A step in RUNNING with no conversation_id is allowed (stale RUNNING from startup)."""
         step = self._make_step(ImplementationStepStatus.RUNNING)
+        step.conversation_id = None
         mock_plan_service.get_step_by_number.return_value = step
 
-        with pytest.raises(ModelRetry, match="expected 'pending', 'failed', or 'interrupted'"):
+        # Should pass status validation, then fail at sub-agent call
+        with pytest.raises((TypeError, Exception)):
             await execute_step_tool.function(step_number=1)
+
+        mock_plan_service.set_step_status.assert_any_call(step, status=ImplementationStepStatus.RUNNING)
 
     @pytest.mark.asyncio
     async def test_rejects_complete_step(self, execute_step_tool: Mock, mock_plan_service: Mock):
         step = self._make_step(ImplementationStepStatus.COMPLETE)
         mock_plan_service.get_step_by_number.return_value = step
 
-        with pytest.raises(ModelRetry, match="expected 'pending', 'failed', or 'interrupted'"):
+        with pytest.raises(ModelRetry, match="expected 'pending', 'running', 'failed', or 'interrupted'"):
             await execute_step_tool.function(step_number=1)
 
     @pytest.mark.asyncio
@@ -123,8 +133,40 @@ class TestExecuteImplementationStepStatusValidation:
         step = self._make_step(ImplementationStepStatus.SKIPPED)
         mock_plan_service.get_step_by_number.return_value = step
 
-        with pytest.raises(ModelRetry, match="expected 'pending', 'failed', or 'interrupted'"):
+        with pytest.raises(ModelRetry, match="expected 'pending', 'running', 'failed', or 'interrupted'"):
             await execute_step_tool.function(step_number=1)
+
+    @pytest.mark.asyncio
+    async def test_allows_retry_of_stale_running_step(
+        self, execute_step_tool: Mock, mock_plan_service: Mock, mock_execution_manager: Mock
+    ):
+        """A step in RUNNING status with no active execution can be retried without force_run."""
+        step = self._make_step(ImplementationStepStatus.RUNNING)
+        step.conversation_id = 42
+        mock_plan_service.get_step_by_number.return_value = step
+        # execution_manager.has_active_execution returns False (no active execution)
+        mock_execution_manager.has_active_execution.return_value = False
+
+        # Should pass the active execution check and status validation,
+        # then fail at the sub-agent call (TypeError from mocks) to confirm it got past.
+        with pytest.raises((TypeError, Exception)):
+            await execute_step_tool.function(step_number=1)
+
+        mock_plan_service.set_step_status.assert_any_call(step, status=ImplementationStepStatus.RUNNING)
+
+    @pytest.mark.asyncio
+    async def test_rejects_running_step_with_active_execution_even_with_force_run(
+        self, execute_step_tool: Mock, mock_plan_service: Mock, mock_execution_manager: Mock
+    ):
+        """A step in RUNNING status with active execution is rejected even if force_run=True."""
+        step = self._make_step(ImplementationStepStatus.RUNNING)
+        step.conversation_id = 99
+        mock_plan_service.get_step_by_number.return_value = step
+        # execution_manager.has_active_execution returns True (active execution)
+        mock_execution_manager.has_active_execution.return_value = True
+
+        with pytest.raises(ModelRetry, match="Step 1 is already running"):
+            await execute_step_tool.function(step_number=1, force_run=True)
 
 
 class TestExecuteImplementationStepConversationFlow:

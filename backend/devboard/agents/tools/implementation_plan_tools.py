@@ -314,10 +314,10 @@ def create_execute_implementation_step_tool(
     ) -> str:
         """Execute a specific implementation step by delegating to a step execution sub-agent.
 
-        The step must be in 'pending', 'failed', or 'interrupted' status and all its dependency steps must be 'complete'.
-        Failed or interrupted steps resume the existing conversation so the sub-agent retains full
-        prior context. Use `notes` to describe what has changed since the last run or what to do
-        differently.
+        The step must be in 'pending', 'running' (if no active execution), 'failed', or 'interrupted' status
+        and all its dependency steps must be 'complete'. Failed, interrupted, or stale-running steps resume
+        the existing conversation so the sub-agent retains full prior context. Use `notes` to describe
+        what has changed since the last run or what to do differently.
 
         Args:
             step_number: The step number to execute
@@ -339,17 +339,25 @@ def create_execute_implementation_step_tool(
         if not step:
             raise ModelRetry(f"Step {step_number} not found.")
 
+        # Guard: reject steps in RUNNING status if they have active execution,
+        # even with force_run=True, to prevent running the same step twice.
+        if step.status == ImplementationStepStatus.RUNNING and step.conversation_id is not None:
+            if execution_manager.has_active_execution(step.conversation_id):
+                raise ModelRetry(f"Step {step_number} is already running.")
+
         if not force_run:
             # INTERRUPTED steps can be re-executed like FAILED steps — they resume the
             # existing conversation so the sub-agent retains full prior context.
+            # RUNNING steps with no active execution can also be re-executed (stale RUNNING status).
             EXECUTABLE_STATUSES = {
                 ImplementationStepStatus.PENDING,
+                ImplementationStepStatus.RUNNING,
                 ImplementationStepStatus.FAILED,
                 ImplementationStepStatus.INTERRUPTED,
             }
             if step.status not in EXECUTABLE_STATUSES:
                 raise ModelRetry(
-                    f"Step {step_number} is in '{step.status}' status, expected 'pending', 'failed', or 'interrupted'."
+                    f"Step {step_number} is in '{step.status}' status, expected 'pending', 'running', 'failed', or 'interrupted'."
                 )
             try:
                 plan_service.check_dependencies_resolved(plan, step)
