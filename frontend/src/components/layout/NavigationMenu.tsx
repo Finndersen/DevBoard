@@ -39,7 +39,7 @@ export default function NavigationMenu() {
   const {
     navigationCompactMode,
     toggleNavigationCompactMode,
-    openCreateTaskModal,
+    createAndOpenDraft,
   } = useUIStore()
 
   const isCompact = navigationCompactMode
@@ -88,7 +88,7 @@ export default function NavigationMenu() {
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    openCreateTaskModal()
+                    createAndOpenDraft('task')
                   }}
                   className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
                   title="New task"

@@ -129,12 +129,13 @@ export interface PRFeedbackResponse {
 }
 
 export interface TaskCreate {
-  title: string
+  title?: string  // Optional - auto-generated from initial_message if not provided
   codebase_id: number
   specification_content: string | null
   branch_name?: string  // Optional - auto-generated if not provided
   base_branch?: string  // Optional - defaults to "main"
   custom_fields?: Record<string, unknown> | null
+  initial_message?: string  // Optional - initial prompt to send to conversation
 }
 
 // Custom Field Definition types
@@ -1188,9 +1189,13 @@ export class ApiClient {
     return this.request<ConversationResponse[]>(`/api/projects/${projectId}/conversations`)
   }
 
-  async createProjectConversation(projectId: number | string): Promise<CreateConversationResponse> {
+  async createProjectConversation(
+    projectId: number | string,
+    data?: { initial_message?: string }
+  ): Promise<CreateConversationResponse> {
     return this.request<CreateConversationResponse>(`/api/projects/${projectId}/conversations`, {
       method: 'POST',
+      ...(data && { body: JSON.stringify(data) }),
     })
   }
 

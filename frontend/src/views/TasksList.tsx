@@ -2,15 +2,14 @@ import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { PlusIcon, ListBulletIcon, FunnelIcon, ChatBubbleLeftIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { useAllTasks, useProjects, useRefetchOnViewActivation } from '../hooks'
-import { useModal } from '../hooks/useModal'
 import { useOpenPRs } from '../hooks/useGitHubPRs'
-import CreateTaskModal from '../components/modals/CreateTaskModal'
 import { Button, Card, ErrorMessage } from '../components/ui'
 import { textColors, loadingSpinner } from '../styles/designSystem'
 import { TaskStatus } from '../lib/api'
 import type { TaskListItem, OpenPRItem } from '../lib/api'
 import ViewHeader from '../components/layout/ViewHeader'
 import { StatusIndicator, ReviewBadge } from '../components/github/PRStatusComponents'
+import { useUIStore } from '../stores/uiStore'
 
 const STATUS_COLUMNS: TaskStatus[] = [TaskStatus.PLANNING, TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN, TaskStatus.COMPLETE]
 
@@ -48,7 +47,7 @@ export default function TasksList() {
   const { data: tasks, loading: tasksLoading, error: tasksError, refetch: refetchTasks } = useAllTasks(selectedProjectId)
   const { data: projects } = useProjects()
   const { data: openPRsData, refetch: refetchOpenPRs } = useOpenPRs()
-  const createTaskModal = useModal()
+  const { createAndOpenDraft } = useUIStore()
   const [refreshing, setRefreshing] = useState(false)
 
   const handleRefresh = useCallback(async () => {
@@ -104,11 +103,10 @@ export default function TasksList() {
     setSelectedProjectId(value ? Number(value) : undefined)
   }, [])
 
-  // Refetch tasks when modal closes (task may have been created)
-  const handleTaskModalClose = useCallback(() => {
-    createTaskModal.close()
-    refetchTasks()
-  }, [createTaskModal, refetchTasks])
+  // Handler to open new task modal
+  const handleCreateTask = useCallback(() => {
+    createAndOpenDraft('task')
+  }, [createAndOpenDraft])
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -143,7 +141,7 @@ export default function TasksList() {
                 ))}
               </select>
             </div>
-            <Button onClick={createTaskModal.open} icon={<PlusIcon />}>
+            <Button onClick={handleCreateTask} icon={<PlusIcon />}>
               New Task
             </Button>
           </div>
@@ -231,11 +229,6 @@ export default function TasksList() {
       )}
       </div>
 
-      {/* Create Task Modal - no projectId means user must select one */}
-      <CreateTaskModal
-        isOpen={createTaskModal.isOpen}
-        onClose={handleTaskModalClose}
-      />
     </div>
   )
 }

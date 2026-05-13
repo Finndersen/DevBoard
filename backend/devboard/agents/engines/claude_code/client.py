@@ -19,6 +19,7 @@ from claude_agent_sdk import (
 )
 from claude_agent_sdk.types import McpSdkServerConfig, SandboxSettings, SystemPromptPreset
 from mcp.types import ToolAnnotations
+from pydantic import BaseModel
 from pydantic_ai import Tool
 
 from .utils import BUILTIN_TOOLS_MCP_NAME, describe_message, load_env_from_settings
@@ -62,6 +63,7 @@ class ClaudeCodeResult:
     text_content: str
     result_message: ResultMessage
     session_id: str
+    structured_output: BaseModel | None = None
 
 
 class ClaudeToolTextBlock(TypedDict):
@@ -102,6 +104,7 @@ class ClaudeClient:
         load_settings: bool = True,
         sandbox_enabled: bool = True,
         additional_write_dirs: list[str] | None = None,
+        output_model: type[BaseModel] | None = None,
     ):
         """Initialize Claude Code client.
 
@@ -116,7 +119,11 @@ class ClaudeClient:
             load_settings: Whether to load local, project and user-level .settings.json and CLAUDE.md files
             sandbox_enabled: Whether to enable OS-level sandboxing for bash commands (default: True)
             additional_write_dirs: Optional list of additional directories to grant write access via Edit tool rules
+            output_model: Optional Pydantic model class for structured output. The JSON schema is derived
+                from the model and used to request structured output from Claude. The response is validated
+                and parsed into an instance of this model, available as ClaudeCodeResult.structured_output.
         """
+        self._output_model = output_model
         self.session_id = session_id
         self._tools = tools or []
 
@@ -155,6 +162,10 @@ class ClaudeClient:
             region_prefix = env_vars.get("AWS_REGION", "us-west-1").split("-")[0]
             model = f"{region_prefix}.anthropic.{model}-v1:0"
 
+        output_format = (
+            {"type": "json_schema", "schema": output_model.model_json_schema()} if output_model is not None else None
+        )
+
         self.options = ClaudeAgentOptions(
             resume=session_id,
             system_prompt=self._build_system_prompt(system_prompt, include_builtin_system_prompt),
@@ -169,6 +180,7 @@ class ClaudeClient:
             env=env_vars,
             stderr=lambda line: logfire.warning("Claude CLI stderr: {line}", line=line),
             sandbox=SandboxSettings(enabled=True, allowUnsandboxedCommands=False) if sandbox_enabled else None,  # type: ignore[misc]
+            output_format=output_format,
         )
 
     def _build_system_prompt(
@@ -298,10 +310,16 @@ class ClaudeClient:
         if not result_message or result_message.result is None:
             raise RuntimeError("No ResultMessage received from Claude Code")
 
+        raw_output = getattr(result_message, "structured_output", None)
+        parsed_output: BaseModel | None = None
+        if raw_output is not None and self._output_model is not None:
+            parsed_output = self._output_model.model_validate(raw_output)
+
         return ClaudeCodeResult(
             text_content=result_message.result,
             result_message=result_message,
             session_id=result_message.session_id,
+            structured_output=parsed_output,
         )
 
     async def stream(self, user_query: str, interrupt_event: asyncio.Event | None = None) -> AsyncIterator[Message]:

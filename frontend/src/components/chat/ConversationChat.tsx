@@ -39,8 +39,6 @@ interface ConversationChatProps {
   emptyStateMessage?: string
   isRunningAction?: boolean
   actionMessage?: string
-  initialMessage?: string | null
-  onInitialMessageSent?: () => void
   workingDir?: string
   engine?: string
 }
@@ -50,8 +48,6 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
   emptyStateMessage = "Start a conversation!",
   isRunningAction = false,
   actionMessage = '',
-  initialMessage,
-  onInitialMessageSent,
   workingDir,
   engine
 }, ref) => {
@@ -88,11 +84,9 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
     handleToolApproval,
   } = useToolApprovalLogic(conversationId, pendingToolRequests, clearPendingToolRequests, approveTools)
 
-  const { fetchHistoryError, lastFetchedConversationIdRef } = useConversationHistory(
+  const { fetchHistoryError } = useConversationHistory(
     conversationId, messages, historyLoaded, setStoreMessages, setApprovals, approvalKey
   )
-
-  const initialMessageSentRef = useRef(false)
 
   const { getPendingMessages } = usePendingMessages()
   const pendingKey = useMemo(() => createConversationPendingKey(conversationId), [conversationId])
@@ -159,35 +153,6 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
     stopStream: () => stopStream(conversationId)
   }), [conversationId, pendingApprovals.length, isRunningAction, setQueued, sendMessageViaHook, inputMessage, setInputMessage, handleSendMessage, isQueued, stopStream])
 
-  // Auto-send initial message when provided (e.g., from task creation with description)
-  useEffect(() => {
-    // Only send if:
-    // 1. We have an initial message
-    // 2. Haven't sent it yet
-    // 3. Not currently streaming
-    // 4. No pending approvals
-    // 5. Conversation history has been fetched (lastFetchedConversationIdRef is set)
-    if (
-      initialMessage &&
-      !initialMessageSentRef.current &&
-      !isStreaming &&
-      pendingApprovals.length === 0 &&
-      !isRunningAction &&
-      lastFetchedConversationIdRef.current === conversationId
-    ) {
-      initialMessageSentRef.current = true
-      // Use setTimeout to ensure this runs after render cycle
-      setTimeout(() => {
-        sendMessageViaHook(initialMessage)
-        onInitialMessageSent?.()
-      }, 0)
-    }
-  }, [initialMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, sendMessageViaHook, onInitialMessageSent, lastFetchedConversationIdRef])
-
-  // Reset initial message sent ref when conversation changes
-  useEffect(() => {
-    initialMessageSentRef.current = false
-  }, [conversationId])
 
   // Cleanup: stop stream if component unmounts while streaming
   // Note: This won't actually stop background streams in the store,

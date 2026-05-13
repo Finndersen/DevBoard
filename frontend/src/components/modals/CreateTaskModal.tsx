@@ -6,54 +6,78 @@ import { apiClient } from '../../lib/api'
 import type { Codebase, CustomFieldDefinition } from '../../lib/api'
 import { useProjects, useProjectCodebases } from '../../hooks'
 import { useDataStore } from '../../stores/dataStore'
+import { useUIStore } from '../../stores/uiStore'
 import { CustomFieldInputs } from '../common/CustomFieldInputs'
 
 interface CreateTaskModalProps {
-  isOpen: boolean
+  draftId: string
   onClose: () => void
   projectId?: string
 }
 
-export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTaskModalProps) {
+export default function CreateTaskModal({ draftId, onClose, projectId }: CreateTaskModalProps) {
   const navigate = useNavigate()
   const { data: projects } = useProjects()
   const { setTask, fetchProjectTasks } = useDataStore()
+  const { modalDrafts, openModalDraft, saveModalDraft, removeModalDraft, setOpenModalDraft } = useUIStore()
 
-  // Selected project (from prop or user selection)
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(projectId ?? '')
+  const isOpen = openModalDraft === draftId
+  const currentDraft = modalDrafts[draftId]
 
-  // Fetch codebases for selected project
-  const { data: codebases, loading: codebasesLoading, refetch: refetchCodebases } = useProjectCodebases(selectedProjectId || '0')
+  // Initialize form data from draft or defaults
+  const initializeFormData = useCallback(() => {
+    const draftData = currentDraft?.formData
+    return {
+      title: (draftData?.title as string) || '',
+      codebase_id: (draftData?.codebase_id as number) || null,
+      working_branch: (draftData?.working_branch as string) || '',
+      base_branch: (draftData?.base_branch as string) || '',
+      initial_message: (draftData?.initial_message as string) || '',
+      selectedProjectId: (draftData?.selectedProjectId as string) || projectId || '',
+      autoGenerateBranch: (draftData?.autoGenerateBranch as boolean) ?? true,
+      customFieldValues: (draftData?.customFieldValues as Record<string, unknown>) || {}
+    }
+  }, [currentDraft?.formData, projectId])
 
-  const [newTask, setNewTask] = useState({
-    title: '',
-    codebase_id: null as number | null,
-    working_branch: '',
-    base_branch: '',
-    initial_message: ''
-  })
+  const [formData, setFormData] = useState(initializeFormData)
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
-  const [autoGenerateBranch, setAutoGenerateBranch] = useState(true)
+
+  // Fetch codebases for selected project
+  const { data: codebases, loading: codebasesLoading, refetch: refetchCodebases } = useProjectCodebases(formData.selectedProjectId || '0')
 
   // Custom fields state
   const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
-  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>({})
   const [customFieldsLoading, setCustomFieldsLoading] = useState(false)
 
-  // Update selected project when prop changes
+  // Auto-save draft
+  const saveDraft = useCallback(() => {
+    const previewLabel = formData.initial_message?.slice(0, 30) || formData.title?.slice(0, 30) || 'New Task'
+    saveModalDraft(draftId, {
+      type: 'task',
+      formData,
+      previewLabel,
+      createdAt: Date.now()
+    })
+  }, [draftId, formData, saveModalDraft])
+
+  // Debounced save
   useEffect(() => {
-    if (projectId) {
-      setSelectedProjectId(projectId)
-    }
-  }, [projectId])
+    const timer = setTimeout(saveDraft, 300)
+    return () => clearTimeout(timer)
+  }, [saveDraft])
+
+  // Reset form data when draft changes (e.g., when opening a different draft)
+  useEffect(() => {
+    setFormData(initializeFormData())
+  }, [initializeFormData])
 
   // Refetch codebases when selected project changes
   useEffect(() => {
-    if (isOpen && selectedProjectId) {
+    if (isOpen && formData.selectedProjectId) {
       refetchCodebases()
     }
-  }, [isOpen, selectedProjectId, refetchCodebases])
+  }, [isOpen, formData.selectedProjectId, refetchCodebases])
 
   // Fetch custom fields when modal opens
   useEffect(() => {
@@ -62,49 +86,43 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       apiClient.getCustomFieldDefinitions('task')
         .then(fields => {
           setCustomFieldDefinitions(fields)
-          const initialValues: Record<string, unknown> = {}
-          fields.forEach(field => {
-            if (field.type === 'boolean') {
-              initialValues[field.name] = false
-            } else {
-              initialValues[field.name] = ''
-            }
-          })
-          setCustomFieldValues(initialValues)
+          // Only initialize custom field values if they don't exist in the draft
+          if (!currentDraft?.formData?.customFieldValues || Object.keys(currentDraft.formData.customFieldValues).length === 0) {
+            const initialValues: Record<string, unknown> = {}
+            fields.forEach(field => {
+              if (field.type === 'boolean') {
+                initialValues[field.name] = false
+              } else {
+                initialValues[field.name] = ''
+              }
+            })
+            setFormData(prev => ({ ...prev, customFieldValues: initialValues }))
+          }
         })
         .catch(err => console.error('Failed to load custom fields:', err))
         .finally(() => setCustomFieldsLoading(false))
     }
-  }, [isOpen])
+  }, [isOpen, currentDraft?.formData?.customFieldValues])
 
-  // Reset form when modal closes
+  // Reset error state when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setNewTask({
-        title: '',
-        codebase_id: null,
-        working_branch: '',
-        base_branch: '',
-        initial_message: ''
-      })
       setIsCreating(false)
       setCreateError(null)
-      setAutoGenerateBranch(true)
-      setCustomFieldValues({})
-      if (!projectId) {
-        setSelectedProjectId('')
-      }
     }
-  }, [isOpen, projectId])
+  }, [isOpen])
 
   const handleProjectChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedProjectId(e.target.value)
-    // Reset codebase selection when project changes
-    setNewTask(prev => ({ ...prev, codebase_id: null, base_branch: '' }))
+    setFormData(prev => ({
+      ...prev,
+      selectedProjectId: e.target.value,
+      codebase_id: null,
+      base_branch: ''
+    }))
   }, [])
 
   const handleTaskTitleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewTask(prev => ({ ...prev, title: e.target.value }))
+    setFormData(prev => ({ ...prev, title: e.target.value }))
   }, [])
 
   const handleTaskCodebaseChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -112,7 +130,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
     const selectedCodebase = codebaseId && codebases
       ? codebases.find((c: Codebase) => c.id === codebaseId)
       : null
-    setNewTask(prev => ({
+    setFormData(prev => ({
       ...prev,
       codebase_id: codebaseId,
       base_branch: selectedCodebase?.default_branch || ''
@@ -120,38 +138,54 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
   }, [codebases])
 
   const handleWorkingBranchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewTask(prev => ({ ...prev, working_branch: e.target.value }))
+    setFormData(prev => ({ ...prev, working_branch: e.target.value }))
   }, [])
 
   const handleBaseBranchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewTask(prev => ({ ...prev, base_branch: e.target.value }))
+    setFormData(prev => ({ ...prev, base_branch: e.target.value }))
   }, [])
 
   const handleInitialMessageChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setNewTask(prev => ({ ...prev, initial_message: e.target.value }))
+    setFormData(prev => ({ ...prev, initial_message: e.target.value }))
   }, [])
 
   const handleAutoGenerateChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const isChecked = e.target.checked
-    setAutoGenerateBranch(isChecked)
-    if (isChecked) {
-      setNewTask(prev => ({ ...prev, working_branch: '' }))
-    }
+    setFormData(prev => ({
+      ...prev,
+      autoGenerateBranch: isChecked,
+      working_branch: isChecked ? '' : prev.working_branch
+    }))
   }, [])
 
   const handleCustomFieldChange = useCallback((fieldName: string, value: unknown) => {
-    setCustomFieldValues(prev => ({ ...prev, [fieldName]: value }))
+    setFormData(prev => ({
+      ...prev,
+      customFieldValues: { ...prev.customFieldValues, [fieldName]: value }
+    }))
   }, [])
 
   const areMandatoryFieldsFilled = useCallback(() => {
     const mandatoryFields = customFieldDefinitions.filter(f => f.mandatory)
     return mandatoryFields.every(field => {
-      const value = customFieldValues[field.name]
+      const value = formData.customFieldValues[field.name]
       return value !== undefined && value !== null && value !== ''
     })
-  }, [customFieldDefinitions, customFieldValues])
+  }, [customFieldDefinitions, formData.customFieldValues])
 
-  const effectiveProjectId = projectId ?? selectedProjectId
+  const effectiveProjectId = projectId ?? formData.selectedProjectId
+
+  // Minimize handler - saves draft and hides modal
+  const handleMinimize = useCallback(() => {
+    saveDraft()
+    setOpenModalDraft(null)
+  }, [saveDraft, setOpenModalDraft])
+
+  // Close handler - removes draft and hides modal
+  const handleClose = useCallback(() => {
+    removeModalDraft(draftId)
+    onClose()
+  }, [draftId, removeModalDraft, onClose])
 
   const handleCreateTask = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -160,25 +194,34 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
     setCreateError(null)
     try {
       const customFields: Record<string, unknown> = {}
-      Object.entries(customFieldValues).forEach(([name, value]) => {
+      Object.entries(formData.customFieldValues).forEach(([name, value]) => {
         if (value !== '' && value !== null && value !== undefined) {
           customFields[name] = value
         }
       })
 
       const taskData: Record<string, unknown> = {
-        title: newTask.title,
-        codebase_id: newTask.codebase_id,
+        codebase_id: formData.codebase_id,
         specification_content: null,
         custom_fields: Object.keys(customFields).length > 0 ? customFields : null
       }
 
-      if (newTask.working_branch.trim()) {
-        taskData.branch_name = newTask.working_branch.trim()
+      // Only include title if provided
+      if (formData.title?.trim()) {
+        taskData.title = formData.title.trim()
       }
 
-      if (newTask.base_branch.trim()) {
-        taskData.base_branch = newTask.base_branch.trim()
+      // Include initial_message if provided
+      if (formData.initial_message?.trim()) {
+        taskData.initial_message = formData.initial_message.trim()
+      }
+
+      if (formData.working_branch.trim()) {
+        taskData.branch_name = formData.working_branch.trim()
+      }
+
+      if (formData.base_branch.trim()) {
+        taskData.base_branch = formData.base_branch.trim()
       }
 
       const createdTask = await apiClient.createTask(effectiveProjectId, taskData)
@@ -186,58 +229,64 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
       setTask(createdTask)
       await fetchProjectTasks(effectiveProjectId)
 
-      const initialMessage = newTask.initial_message.trim() || null
-
-      setNewTask({
-        title: '',
-        codebase_id: null,
-        working_branch: '',
-        base_branch: '',
-        initial_message: ''
-      })
-
+      // Remove the draft and close modal on success
+      removeModalDraft(draftId)
       onClose()
-      navigate(`/tasks/${createdTask.id}`, {
-        state: initialMessage ? { initialMessage, taskId: createdTask.id } : undefined
-      })
+
+      // Navigate directly without initial message state (backend handles it)
+      navigate(`/tasks/${createdTask.id}`)
     } catch (error) {
       console.error('Failed to create task:', error)
       setCreateError(error instanceof Error ? error.message : 'Failed to create task')
     } finally {
       setIsCreating(false)
     }
-  }, [newTask, effectiveProjectId, navigate, onClose, setTask, fetchProjectTasks, customFieldValues])
+  }, [formData, effectiveProjectId, navigate, onClose, setTask, fetchProjectTasks, draftId, removeModalDraft])
 
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
-      title="Create New Task"
+      onClose={handleClose}
+      title={
+        <div className="flex items-center justify-between">
+          <span>Create New Task</span>
+          <button
+            type="button"
+            onClick={handleMinimize}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors ml-2"
+            title="Minimize to draft"
+            aria-label="Minimize to draft"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+            </svg>
+          </button>
+        </div>
+      }
       maxWidth="xl"
     >
       <form onSubmit={handleCreateTask} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Task Title
+            Initial Prompt
           </label>
-          <Input
-            type="text"
-            value={newTask.title}
-            onChange={handleTaskTitleChange}
-            placeholder="Enter task title"
-            required
+          <Textarea
+            value={formData.initial_message}
+            onChange={handleInitialMessageChange}
+            placeholder="Describe what you want to do with this task, including as much detail and context as possible. This will be used to start the conversation with the AI assistant."
+            rows={6}
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Initial Prompt (Optional)
+            Task Title (Optional)
           </label>
-          <Textarea
-            value={newTask.initial_message}
-            onChange={handleInitialMessageChange}
-            placeholder="Describe what you want to do with this task, including as much detail and context as possible. This will be used to start the conversation with the AI assistant."
-            rows={6}
+          <Input
+            type="text"
+            value={formData.title}
+            onChange={handleTaskTitleChange}
+            placeholder="Auto-generated from prompt if empty"
           />
         </div>
 
@@ -248,7 +297,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
               Project
             </label>
             <select
-              value={selectedProjectId}
+              value={formData.selectedProjectId}
               onChange={handleProjectChange}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white"
               required
@@ -262,7 +311,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
         )}
 
         {/* Codebase and Base Branch - only show when project is selected */}
-        {selectedProjectId && (
+        {formData.selectedProjectId && (
           <div className="grid grid-cols-4 gap-4">
             <div className="col-span-3">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -276,7 +325,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
                   <p>
                     Please{' '}
                     <Link
-                      to={`/projects/${selectedProjectId}?tab=settings`}
+                      to={`/projects/${formData.selectedProjectId}?tab=settings`}
                       onClick={onClose}
                       className="font-medium underline hover:opacity-80"
                     >
@@ -287,7 +336,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
                 </Alert>
               ) : (
                 <select
-                  value={newTask.codebase_id ?? ''}
+                  value={formData.codebase_id ?? ''}
                   onChange={handleTaskCodebaseChange}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white"
                   required
@@ -302,14 +351,14 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
               )}
             </div>
 
-            {newTask.codebase_id && (
+            {formData.codebase_id && (
               <div className="col-span-1">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Base Branch
                 </label>
                 <Input
                   type="text"
-                  value={newTask.base_branch}
+                  value={formData.base_branch}
                   onChange={handleBaseBranchChange}
                   placeholder="origin/main"
                 />
@@ -319,13 +368,13 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
         )}
 
         {/* Working Branch Configuration */}
-        {newTask.codebase_id && (
+        {formData.codebase_id && (
           <div>
             <div className="flex items-center mb-2">
               <input
                 type="checkbox"
                 id="auto-generate-branch"
-                checked={autoGenerateBranch}
+                checked={formData.autoGenerateBranch}
                 onChange={handleAutoGenerateChange}
                 className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
@@ -333,10 +382,10 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
                 Auto-generate working branch
               </label>
             </div>
-            {!autoGenerateBranch && (
+            {!formData.autoGenerateBranch && (
               <Input
                 type="text"
-                value={newTask.working_branch}
+                value={formData.working_branch}
                 onChange={handleWorkingBranchChange}
                 placeholder="custom-branch-name"
               />
@@ -347,7 +396,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
         {/* Custom Fields */}
         <CustomFieldInputs
           definitions={customFieldDefinitions}
-          values={customFieldValues}
+          values={formData.customFieldValues}
           onChange={handleCustomFieldChange}
           loading={customFieldsLoading}
         />
@@ -358,7 +407,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
           <Button
             type="button"
             variant="secondary"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={isCreating}
           >
             Cancel
@@ -367,7 +416,7 @@ export default function CreateTaskModal({ isOpen, onClose, projectId }: CreateTa
             type="submit"
             variant="primary"
             loading={isCreating}
-            disabled={!newTask.title.trim() || !newTask.codebase_id || !selectedProjectId || isCreating || !areMandatoryFieldsFilled()}
+            disabled={(!formData.title.trim() && !formData.initial_message.trim()) || !formData.codebase_id || !formData.selectedProjectId || isCreating || !areMandatoryFieldsFilled()}
           >
             Create Task
           </Button>

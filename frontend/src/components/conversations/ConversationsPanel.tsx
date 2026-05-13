@@ -6,6 +6,7 @@ import {
   CodeBracketIcon,
   ChatBubbleLeftRightIcon,
   ExclamationCircleIcon,
+  PlusIcon,
 } from '@heroicons/react/24/outline'
 import { useConversations } from '../../hooks/useConversations'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
@@ -88,6 +89,11 @@ export default function ConversationsPanel() {
   const conversationsPanelCollapsed = useUIStore(s => s.conversationsPanelCollapsed)
   const clearUnreadConversations = useUIStore(s => s.clearUnreadConversations)
   const removeUnreadConversation = useUIStore(s => s.removeUnreadConversation)
+  const { modalDrafts, setOpenModalDraft, createAndOpenDraft } = useUIStore()
+
+  // Dropdown state for the "+" button
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   // Subscribe only to which entities have drafts (not content) to avoid re-renders on every keystroke
   const draftKeysStr = useUIStore(
     useCallback((s) => Object.keys(s.draftMessages).sort().join(','), [])
@@ -234,6 +240,23 @@ export default function ConversationsPanel() {
   // Sync view activity status from stream store
   useViewStreamStatus(conversations)
 
+  // Click outside to close dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+
+    if (dropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [dropdownOpen])
+
+  // Get draft count for badge
+  const draftCount = Object.keys(modalDrafts).length
+
   const activeView = cachedViews.find(v => v.id === activeViewId)
 
   const activeConversationIdFromUrl = useMemo(() => {
@@ -260,8 +283,94 @@ export default function ConversationsPanel() {
     removeUnreadConversation(item.id)
   }
 
+  const handleNewTask = () => {
+    createAndOpenDraft('task')
+    setDropdownOpen(false)
+  }
+
+  const handleNewProjectConversation = () => {
+    createAndOpenDraft('project_conversation')
+    setDropdownOpen(false)
+  }
+
+  const handleRestoreDraft = (draftId: string) => {
+    setOpenModalDraft(draftId)
+    setDropdownOpen(false)
+  }
+
   return (
     <div className={`${conversationsPanelCollapsed ? 'w-0' : 'w-80'} shrink-0 ${surfaces.raised} ${conversationsPanelCollapsed ? '' : `border-r ${borderColors.default}`} flex flex-col overflow-hidden transition-all duration-300`}>
+      {/* Header with new conversation button */}
+      {!conversationsPanelCollapsed && (
+        <div className={`p-3 border-b ${borderColors.default} shrink-0 relative`} ref={dropdownRef}>
+          <button
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md transition-colors ${hoverColors.subtle} border ${borderColors.input}`}
+          >
+            <PlusIcon className="w-4 h-4" />
+            <span className="text-sm font-medium">New</span>
+            {draftCount > 0 && (
+              <span className="ml-auto inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-semibold rounded-full bg-blue-50 text-blue-600 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800 min-w-[1.25rem]">
+                {draftCount}
+              </span>
+            )}
+          </button>
+
+          {/* Dropdown menu */}
+          {dropdownOpen && (
+            <div className={`absolute top-full left-3 right-3 mt-1 z-50 ${surfaces.raised} border ${borderColors.default} rounded-md shadow-lg`}>
+              <div className="py-1">
+                {/* Drafts section */}
+                {draftCount > 0 && (
+                  <>
+                    <div className={`px-3 py-2 text-xs font-semibold uppercase tracking-wider ${textColors.secondary} border-b ${borderColors.default}`}>
+                      Drafts
+                    </div>
+                    {Object.entries(modalDrafts).map(([draftId, draft]) => (
+                      <button
+                        key={draftId}
+                        onClick={() => handleRestoreDraft(draftId)}
+                        className={`w-full text-left px-3 py-2 text-sm ${hoverColors.subtle} flex items-center gap-2`}
+                      >
+                        {draft.type === 'task' ? (
+                          <ClipboardDocumentListIcon className="w-4 h-4 flex-shrink-0" />
+                        ) : (
+                          <ChatBubbleLeftRightIcon className="w-4 h-4 flex-shrink-0" />
+                        )}
+                        <span className="flex-1 truncate">
+                          {draft.type === 'task' ? 'New Task: ' : 'Project: '}{draft.previewLabel}
+                        </span>
+                        <span className="text-xs opacity-75">●</span>
+                      </button>
+                    ))}
+                    <div className={`border-t ${borderColors.default} my-1`} />
+                  </>
+                )}
+
+                {/* New conversation options */}
+                <div className={`px-3 py-2 text-xs font-semibold uppercase tracking-wider ${textColors.secondary}`}>
+                  New
+                </div>
+                <button
+                  onClick={handleNewTask}
+                  className={`w-full text-left px-3 py-2 text-sm ${hoverColors.subtle} flex items-center gap-2`}
+                >
+                  <ClipboardDocumentListIcon className="w-4 h-4 flex-shrink-0" />
+                  <span>New Task</span>
+                </button>
+                <button
+                  onClick={handleNewProjectConversation}
+                  className={`w-full text-left px-3 py-2 text-sm ${hoverColors.subtle} flex items-center gap-2`}
+                >
+                  <ChatBubbleLeftRightIcon className="w-4 h-4 flex-shrink-0" />
+                  <span>Project Conversation</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto">
         {loading && !conversations && (

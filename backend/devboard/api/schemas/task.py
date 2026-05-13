@@ -3,7 +3,7 @@
 import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from devboard.db.models.task import TaskStatus
 
@@ -29,12 +29,20 @@ class TaskCreate(BaseModel):
 class TaskCreateNested(BaseModel):
     """Schema for creating a new task under a project (project_id from URL)."""
 
-    title: str
+    title: str | None = None
     codebase_id: int
     specification_content: str | None = None
     branch_name: str | None = None
     base_branch: str | None = None
     custom_fields: dict[str, Any] | None = None
+    initial_message: str | None = None
+
+    @model_validator(mode="after")
+    def validate_title_or_initial_message(self):
+        """Validate that at least one of title or initial_message is provided."""
+        if self.title is None and self.initial_message is None:
+            raise ValueError("Either title or initial_message must be provided")
+        return self
 
 
 class TaskUpdate(BaseModel):

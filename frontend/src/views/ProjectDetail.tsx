@@ -3,7 +3,6 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon, XMarkIcon, CodeBracketIcon, ListBulletIcon } from '@heroicons/react/24/outline'
 import AgentChat from '../components/chat/AgentChat'
 import ProjectConversationSelector from '../components/chat/ProjectConversationSelector'
-import CreateTaskModal from '../components/modals/CreateTaskModal'
 import CreateCodebaseModal from '../components/modals/CreateCodebaseModal'
 import { Button, Card, Input } from '../components/ui'
 import { MarkdownDocumentEditor } from '../components/MarkdownDocumentEditor'
@@ -80,8 +79,10 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     return tab === 'settings' ? 'settings' : 'editor'
   })
 
+  // Get UI store actions
+  const { createAndOpenDraft, invalidateConversations } = useUIStore()
+
   // Use new custom hooks
-  const createTaskModal = useModal()
   const specificationField = useEditableField(
     specificationDoc?.content || '',
     async (value) => {
@@ -248,24 +249,17 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     }
   }, [expandedPanel])
 
-  // Handle creating a new project conversation
-  const invalidateConversations = useUIStore(s => s.invalidateConversations)
-  const handleNewConversation = useCallback(async () => {
+  // Handle creating a new project conversation using draft system
+  const handleNewConversation = useCallback(() => {
     if (!project) return
-    try {
-      const result = await apiClient.createProjectConversation(project.id)
-      setActiveConversationId(result.id)
-      updateConversationUrl(result.id)
-      invalidateConversations()
-    } catch (error) {
-      reportMutationError(addNotification, error, {
-        entityType: 'project',
-        entityId: project?.id.toString() ?? null,
-        entityTitle: project?.name ?? null,
-        fallbackMessage: 'Failed to create new conversation',
-      })
-    }
-  }, [project, addNotification, updateConversationUrl, invalidateConversations])
+    createAndOpenDraft('project_conversation', { projectId: project.id.toString() })
+  }, [project, createAndOpenDraft])
+
+  // Handle creating a new task using draft system
+  const handleCreateTask = useCallback(() => {
+    if (!project) return
+    createAndOpenDraft('task', { selectedProjectId: project.id.toString() })
+  }, [project, createAndOpenDraft])
 
   // Handle switching conversations
   const handleSelectConversation = useCallback((conversationId: number) => {
@@ -503,7 +497,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
               <ListBulletIcon className="w-4 h-4 mr-2" />
               View Tasks
             </Button>
-            <Button onClick={createTaskModal.open} size="sm">
+            <Button onClick={handleCreateTask} size="sm">
               <PlusIcon className="w-4 h-4 mr-2" />
               New Task
             </Button>
@@ -670,12 +664,6 @@ function ProjectDetail({ id }: ProjectDetailProps) {
         </div>
       )}
 
-      {/* Create Task Modal */}
-      <CreateTaskModal
-        isOpen={createTaskModal.isOpen}
-        onClose={createTaskModal.close}
-        projectId={id!}
-      />
 
       {/* Create Codebase Modal */}
       <CreateCodebaseModal

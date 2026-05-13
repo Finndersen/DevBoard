@@ -1,5 +1,7 @@
 """Tests for project conversation API endpoints and conversation PATCH/DELETE endpoints."""
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from devboard.agents.engines import AgentEngine
@@ -123,6 +125,99 @@ class TestCreateProjectConversation:
     def test_returns_404_for_nonexistent_project(self, client):
         response = client.post("/api/projects/99999/conversations")
         assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_creates_conversation_with_initial_message(self, client, db_session, project_with_conversation):
+        project, _ = project_with_conversation
+
+        with patch(
+            "devboard.api.routers.projects.generate_conversation_title", new_callable=AsyncMock
+        ) as mock_title_gen:
+            with patch("devboard.api.routers.projects.get_execution_manager") as mock_exec_mgr:
+                mock_title_gen.return_value = "Test Conversation"
+                mock_manager = MagicMock()
+                mock_exec_mgr.return_value = mock_manager
+
+                response = client.post(
+                    f"/api/projects/{project.id}/conversations",
+                    json={"initial_message": "Can you help me with this feature?"},
+                )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["title"] == "Test Conversation"
+        assert data["parent_entity_type"] == "project"
+        assert data["is_active"] is True
+
+        mock_title_gen.assert_called_once_with("Can you help me with this feature?")
+        mock_manager.start_agent_execution.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_creates_conversation_without_initial_message(self, client, db_session, project_with_conversation):
+        project, _ = project_with_conversation
+
+        with patch(
+            "devboard.api.routers.projects.generate_conversation_title", new_callable=AsyncMock
+        ) as mock_title_gen:
+            with patch("devboard.api.routers.projects.get_execution_manager") as mock_exec_mgr:
+                response = client.post(f"/api/projects/{project.id}/conversations")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["title"] is None
+
+        mock_title_gen.assert_not_called()
+        mock_exec_mgr.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_sets_conversation_title_from_initial_message(self, client, db_session, project_with_conversation):
+        project, _ = project_with_conversation
+
+        with patch(
+            "devboard.api.routers.projects.generate_conversation_title", new_callable=AsyncMock
+        ) as mock_title_gen:
+            with patch("devboard.api.routers.projects.get_execution_manager") as mock_exec_mgr:
+                generated_title = "Generated Title"
+                mock_title_gen.return_value = generated_title
+                mock_manager = MagicMock()
+                mock_exec_mgr.return_value = mock_manager
+
+                response = client.post(
+                    f"/api/projects/{project.id}/conversations",
+                    json={"initial_message": "Some initial message"},
+                )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["title"] == generated_title
+
+        conversation_repo = ConversationRepository(db_session)
+        conversation = conversation_repo.get_by_id(data["id"])
+        assert conversation is not None
+        assert conversation.title == generated_title
+
+    @pytest.mark.asyncio
+    async def test_starts_agent_execution_with_initial_message(self, client, db_session, project_with_conversation):
+        project, _ = project_with_conversation
+        initial_msg = "Help me implement this"
+
+        with patch(
+            "devboard.api.routers.projects.generate_conversation_title", new_callable=AsyncMock
+        ) as mock_title_gen:
+            with patch("devboard.api.routers.projects.get_execution_manager") as mock_exec_mgr:
+                mock_title_gen.return_value = "Title"
+                mock_manager = MagicMock()
+                mock_exec_mgr.return_value = mock_manager
+
+                response = client.post(
+                    f"/api/projects/{project.id}/conversations",
+                    json={"initial_message": initial_msg},
+                )
+
+        assert response.status_code == 200
+        conversation_id = response.json()["id"]
+
+        mock_manager.start_agent_execution.assert_called_once_with(conversation_id, initial_msg)
 
 
 class TestUpdateConversation:

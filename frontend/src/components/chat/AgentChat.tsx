@@ -25,8 +25,6 @@ interface AgentChatProps {
   padding?: 'none' | 'xs' | 'sm' | 'md' | 'lg'
   isRunningAction?: boolean
   actionMessage?: string
-  initialMessage?: string | null
-  onInitialMessageSent?: () => void
   workingDir?: string
   onConversationReset?: (newConversationId: number) => void
   conversationSelector?: React.ReactNode
@@ -46,8 +44,6 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
   padding = "xs",
   isRunningAction = false,
   actionMessage = '',
-  initialMessage,
-  onInitialMessageSent,
   workingDir,
   onConversationReset,
   conversationSelector,
@@ -218,8 +214,6 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
               emptyStateMessage={emptyStateMessage}
               isRunningAction={isRunningAction}
               actionMessage={actionMessage}
-              initialMessage={initialMessage}
-              onInitialMessageSent={onInitialMessageSent}
               workingDir={workingDir}
               engine={conversation?.engine}
             />

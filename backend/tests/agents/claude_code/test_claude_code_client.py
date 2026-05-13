@@ -16,6 +16,7 @@ from claude_agent_sdk import (
     tool as sdk_tool,
 )
 from mcp.types import CallToolRequest, CallToolRequestParams
+from pydantic import BaseModel
 from pydantic_ai import Tool
 from pydantic_core import ValidationError
 
@@ -710,3 +711,123 @@ class TestWaitForSubprocessFlush:
             await task
 
         assert process_waited.is_set(), "process.wait() should complete even when task is cancelled"
+
+
+class _SampleOutput(BaseModel):
+    name: str
+    value: int
+
+
+class TestOutputModel:
+    """Tests for output_model parameter and structured_output functionality."""
+
+    def test_output_model_generates_json_schema_in_options(self):
+        """Test that output_model generates the correct JSON schema in ClaudeAgentOptions."""
+        client = ClaudeClient(output_model=_SampleOutput, load_settings=False)
+
+        expected_schema = _SampleOutput.model_json_schema()
+        assert client.options.output_format == {"type": "json_schema", "schema": expected_schema}
+
+    def test_output_format_none_by_default(self):
+        """Test that output_format is None in options when no output_model is provided."""
+        client = ClaudeClient(load_settings=False)
+
+        assert client.options.output_format is None
+
+    @pytest.mark.asyncio
+    async def test_structured_output_parsed_into_model(self, mock_sdk_client):
+        """Test that structured_output from ResultMessage is validated into the model."""
+        result_msg = ResultMessage(
+            subtype="complete",
+            duration_ms=1000,
+            duration_api_ms=800,
+            is_error=False,
+            num_turns=1,
+            session_id="session-123",
+            result="JSON response",
+        )
+        result_msg.structured_output = {"name": "test", "value": 42}
+
+        async def mock_receive_response():
+            yield result_msg
+
+        mock_sdk_client.receive_response = mock_receive_response
+
+        client = ClaudeClient(output_model=_SampleOutput)
+        result = await client.run("Test query")
+
+        assert isinstance(result.structured_output, _SampleOutput)
+        assert result.structured_output == _SampleOutput(name="test", value=42)
+
+    @pytest.mark.asyncio
+    async def test_structured_output_none_when_no_model(self, mock_sdk_client):
+        """Test that structured_output is None when no output_model is configured."""
+        result_msg = ResultMessage(
+            subtype="complete",
+            duration_ms=1000,
+            duration_api_ms=800,
+            is_error=False,
+            num_turns=1,
+            session_id="session-123",
+            result="Regular response",
+        )
+        result_msg.structured_output = {"name": "ignored", "value": 0}
+
+        async def mock_receive_response():
+            yield result_msg
+
+        mock_sdk_client.receive_response = mock_receive_response
+
+        client = ClaudeClient()
+        result = await client.run("Test query")
+
+        assert result.structured_output is None
+
+    @pytest.mark.asyncio
+    async def test_structured_output_none_when_not_present(self, mock_sdk_client):
+        """Test that structured_output is None when absent from ResultMessage."""
+        result_msg = ResultMessage(
+            subtype="complete",
+            duration_ms=1000,
+            duration_api_ms=800,
+            is_error=False,
+            num_turns=1,
+            session_id="session-123",
+            result="Regular response",
+        )
+
+        async def mock_receive_response():
+            yield result_msg
+
+        mock_sdk_client.receive_response = mock_receive_response
+
+        client = ClaudeClient(output_model=_SampleOutput)
+        result = await client.run("Test query")
+
+        assert result.structured_output is None
+
+    @pytest.mark.asyncio
+    async def test_output_model_schema_passed_and_output_parsed(self, mock_sdk_client):
+        """Test end-to-end: output_model schema passed to options and response parsed into instance."""
+        result_msg = ResultMessage(
+            subtype="complete",
+            duration_ms=1000,
+            duration_api_ms=800,
+            is_error=False,
+            num_turns=1,
+            session_id="session-123",
+            result="Generated output",
+        )
+        result_msg.structured_output = {"name": "fix-bug", "value": 1}
+
+        async def mock_receive_response():
+            yield result_msg
+
+        mock_sdk_client.receive_response = mock_receive_response
+
+        client = ClaudeClient(output_model=_SampleOutput)
+        result = await client.run("Generate details")
+
+        expected_schema = _SampleOutput.model_json_schema()
+        assert client.options.output_format == {"type": "json_schema", "schema": expected_schema}
+        assert result.structured_output == _SampleOutput(name="fix-bug", value=1)

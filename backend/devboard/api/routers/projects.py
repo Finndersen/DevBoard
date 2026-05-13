@@ -1,7 +1,9 @@
 """Project API endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
+from devboard.agents.execution.registry import get_execution_manager
+from devboard.agents.title_generator import generate_conversation_title, generate_task_title_and_branch
 from devboard.api.dependencies.entities import get_verified_codebase, get_verified_project
 from devboard.api.dependencies.repositories import (
     get_codebase_repository,
@@ -26,7 +28,11 @@ from devboard.api.schemas import (
     TaskCreateNested,
     TaskResponse,
 )
-from devboard.api.schemas.conversation import ConversationResponse, CreateConversationResponse
+from devboard.api.schemas.conversation import (
+    ConversationResponse,
+    CreateConversationResponse,
+    CreateProjectConversationRequest,
+)
 from devboard.db.models import ParentEntityType
 from devboard.db.models.enums import EntityType
 from devboard.db.models.project import Project
@@ -214,10 +220,21 @@ async def create_project_conversation(
     project_id: int,
     project: Project = Depends(get_verified_project),
     conversation_service: ConversationService = Depends(get_conversation_service),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+    request: CreateProjectConversationRequest | None = Body(default=None),
 ) -> CreateConversationResponse:
-    """Create a new conversation for a project."""
+    """Create a new conversation for a project with optional initial message."""
     result = conversation_service.create_project_conversation(project_id)
     conv = result.conversation
+
+    if request and request.initial_message:
+        title = await generate_conversation_title(request.initial_message)
+        conversation_repo.update_title(conv, title)
+        conversation_repo.db.commit()
+
+        execution_manager = get_execution_manager()
+        execution_manager.start_agent_execution(conv.id, request.initial_message)
+
     return CreateConversationResponse(
         id=conv.id,
         parent_entity_type=conv.parent_entity_type,
@@ -282,6 +299,7 @@ async def create_project_task(
     project_id: int,
     task: TaskCreateNested,
     task_service: TaskService = Depends(get_task_service),
+    conversation_service: ConversationService = Depends(get_conversation_service),
     codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     project_repo: ProjectRepository = Depends(get_project_repository),
@@ -298,14 +316,26 @@ async def create_project_task(
     # Use provided base_branch or fall back to codebase's default_branch
     base_branch = task.base_branch or codebase.default_branch
 
+    # Generate title and branch name if title not provided
+    if task.title is None:
+        if task.initial_message is None:
+            raise HTTPException(status_code=400, detail="Either title or initial_message must be provided")
+
+        title_result = await generate_task_title_and_branch(task.initial_message)
+        task_title = title_result.title
+        task_branch_name = task.branch_name or title_result.branch_name
+    else:
+        task_title = task.title
+        task_branch_name = task.branch_name
+
     # Create task using service (creates task + documents + conversation)
     # Tasks always start in PLANNING status
     created_task = await task_service.create_task(
         project_id=project_id,
-        title=task.title,
+        title=task_title,
         codebase_id=task.codebase_id,
         specification_content=task.specification_content or "",
-        branch_name=task.branch_name,
+        branch_name=task_branch_name,
         base_branch=base_branch,
         custom_fields=task.custom_fields,
     )
@@ -313,6 +343,19 @@ async def create_project_task(
     # Get the active conversation that was just created
     # Will raise NoActiveConversationError if not found
     conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, created_task.id)
+
+    # If initial message provided, start agent execution and set conversation title
+    if task.initial_message is not None:
+        # Commit before starting background execution so the new DB session
+        # opened by the execution manager can see the task and conversation
+        conversation_repo.commit()
+
+        try:
+            get_execution_manager().start_agent_execution(conversation.id, task.initial_message)
+            # Set conversation title to the task title (AI-generated or user-provided)
+            conversation_repo.update_title(conversation, task_title)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to start agent execution: {e}") from e
 
     return TaskResponse(
         id=created_task.id,

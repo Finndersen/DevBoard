@@ -20,6 +20,13 @@ export interface CachedViewState {
   lastActivity: Date
 }
 
+export interface ModalDraft {
+  type: 'task' | 'project_conversation'
+  formData: Record<string, unknown>
+  previewLabel: string
+  createdAt: number
+}
+
 const MAX_CACHED_VIEWS = 12
 
 interface UIState {
@@ -30,7 +37,8 @@ interface UIState {
   tasksVersion: number
   draftMessages: Record<string, string>
   shouldPushHistory: boolean
-  createTaskModalOpen: boolean
+  modalDrafts: Record<string, ModalDraft>
+  openModalDraft: string | null
   conversationsPanelCollapsed: boolean
   expandedPanel: 'chat' | 'details'
   unreadConversationIds: number[]
@@ -53,7 +61,13 @@ interface UIActions {
   // Tasks
   invalidateTasks: () => void
 
-  // Create task modal
+  // Modal drafts
+  saveModalDraft: (draftId: string, draft: ModalDraft) => void
+  removeModalDraft: (draftId: string) => void
+  setOpenModalDraft: (draftId: string | null) => void
+  createAndOpenDraft: (type: 'task' | 'project_conversation', initialFormData?: Record<string, unknown>) => string
+
+  // Create task modal (deprecated, kept for compatibility with draft system)
   openCreateTaskModal: () => void
   closeCreateTaskModal: () => void
 
@@ -102,7 +116,8 @@ export const useUIStore = create<UIStore>()(
       tasksVersion: 0,
       draftMessages: {},
       shouldPushHistory: false,
-      createTaskModalOpen: false,
+      modalDrafts: {},
+      openModalDraft: null,
       conversationsPanelCollapsed: false,
       expandedPanel: 'chat' as const,
       unreadConversationIds: [],
@@ -235,15 +250,61 @@ export const useUIStore = create<UIStore>()(
         })
       },
 
-      openCreateTaskModal: () => {
-        set((draft) => {
-          draft.createTaskModalOpen = true
+      // Modal drafts
+      saveModalDraft: (draftId, draft) => {
+        set((state) => {
+          state.modalDrafts[draftId] = draft
         })
+      },
+
+      removeModalDraft: (draftId) => {
+        set((state) => {
+          delete state.modalDrafts[draftId]
+          if (state.openModalDraft === draftId) {
+            state.openModalDraft = null
+          }
+        })
+      },
+
+      setOpenModalDraft: (draftId) => {
+        set((state) => {
+          state.openModalDraft = draftId
+        })
+      },
+
+      createAndOpenDraft: (type, initialFormData = {}) => {
+        const draftId = `draft-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        const previewLabel = type === 'task'
+          ? (initialFormData.prompt as string)?.slice(0, 30) || type
+          : (initialFormData.projectId as string) || type
+
+        const newDraft: ModalDraft = {
+          type,
+          formData: initialFormData,
+          previewLabel,
+          createdAt: Date.now()
+        }
+
+        set((state) => {
+          state.modalDrafts[draftId] = newDraft
+          state.openModalDraft = draftId
+        })
+
+        return draftId
+      },
+
+      openCreateTaskModal: () => {
+        const state = get()
+        // If there's no open modal draft or it's not a task draft, create a new one
+        if (state.openModalDraft === null || state.modalDrafts[state.openModalDraft]?.type !== 'task') {
+          state.createAndOpenDraft('task')
+        }
+        // If there's already an open task draft, do nothing (it's already open)
       },
 
       closeCreateTaskModal: () => {
         set((draft) => {
-          draft.createTaskModalOpen = false
+          draft.openModalDraft = null
         })
       },
 
@@ -353,6 +414,7 @@ export const useUIStore = create<UIStore>()(
       partialize: (state) => ({
         navigationCompactMode: state.navigationCompactMode,
         draftMessages: state.draftMessages,
+        modalDrafts: state.modalDrafts,
         conversationsPanelCollapsed: state.conversationsPanelCollapsed,
         expandedPanel: state.expandedPanel,
       }),

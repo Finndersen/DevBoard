@@ -7,6 +7,12 @@ from pydantic import BaseModel
 from devboard.agents.events import ContextUsage, ConversationEvent
 
 
+class CreateProjectConversationRequest(BaseModel):
+    """Request schema for creating a project conversation with optional initial message."""
+
+    initial_message: str | None = None
+
+
 class ConversationMessagesResponse(BaseModel):
     """Response schema for conversation messages endpoint."""
 

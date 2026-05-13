@@ -1,6 +1,6 @@
 """Tests for projects router."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -596,6 +596,160 @@ class TestProjectTasksRouter:
         response = client.post("/api/projects/999/tasks", json=api_task_data)
         assert response.status_code == 404
         assert response.json()["detail"] == "Project not found"
+
+    def test_create_project_task_with_title_only(self, client, db_session, test_project_data, test_codebase):
+        """Test creating a task with title only (existing behavior)."""
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
+        )
+        db_session.commit()
+
+        api_task_data = {
+            "title": "Task created with title only",
+            "codebase_id": test_codebase.id,
+        }
+
+        response = client.post(f"/api/projects/{created_project.id}/tasks", json=api_task_data)
+        assert response.status_code == 200
+
+        task_data = response.json()
+        assert task_data["title"] == "Task created with title only"
+        assert task_data["status"] == "planning"
+
+    @patch("devboard.api.routers.projects.generate_task_title_and_branch")
+    @patch("devboard.api.routers.projects.get_execution_manager")
+    def test_create_project_task_with_initial_message_only(
+        self, mock_get_execution_manager, mock_generate_title, client, db_session, test_project_data, test_codebase
+    ):
+        """Test creating a task with initial_message only (generates title, starts agent)."""
+        # Mock title generation
+        mock_generate_title.return_value = {"title": "Generated Task Title", "branch_name": "generated-task-title"}
+
+        # Mock execution manager
+        mock_manager = Mock()
+        mock_get_execution_manager.return_value = mock_manager
+
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
+        )
+        db_session.commit()
+
+        api_task_data = {
+            "codebase_id": test_codebase.id,
+            "initial_message": "Please help me implement user authentication",
+        }
+
+        response = client.post(f"/api/projects/{created_project.id}/tasks", json=api_task_data)
+        assert response.status_code == 200
+
+        task_data = response.json()
+        assert task_data["title"] == "Generated Task Title"
+        assert task_data["status"] == "planning"
+
+        # Verify title generation was called with initial message
+        mock_generate_title.assert_called_once_with("Please help me implement user authentication")
+
+        # Verify agent execution was started
+        mock_manager.start_agent_execution.assert_called_once()
+        # Get the call arguments
+        call_args = mock_manager.start_agent_execution.call_args
+        assert call_args[0][1] == "Please help me implement user authentication"  # Second arg is the message
+
+    @patch("devboard.api.routers.projects.generate_task_title_and_branch")
+    @patch("devboard.api.routers.projects.get_execution_manager")
+    def test_create_project_task_with_title_and_initial_message(
+        self, mock_get_execution_manager, mock_generate_title, client, db_session, test_project_data, test_codebase
+    ):
+        """Test creating a task with both title and initial_message provided."""
+        # Mock execution manager
+        mock_manager = Mock()
+        mock_get_execution_manager.return_value = mock_manager
+
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
+        )
+        db_session.commit()
+
+        api_task_data = {
+            "title": "Custom Task Title",
+            "codebase_id": test_codebase.id,
+            "initial_message": "Please help me implement user authentication",
+        }
+
+        response = client.post(f"/api/projects/{created_project.id}/tasks", json=api_task_data)
+        assert response.status_code == 200
+
+        task_data = response.json()
+        assert task_data["title"] == "Custom Task Title"  # Uses provided title, not generated
+        assert task_data["status"] == "planning"
+
+        # Verify title generation was NOT called (since title was provided)
+        mock_generate_title.assert_not_called()
+
+        # Verify agent execution was still started
+        mock_manager.start_agent_execution.assert_called_once()
+
+    def test_create_project_task_with_neither_title_nor_initial_message(
+        self, client, db_session, test_project_data, test_codebase
+    ):
+        """Test creating a task with neither title nor initial_message (validation error)."""
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
+        )
+        db_session.commit()
+
+        api_task_data = {
+            "codebase_id": test_codebase.id,
+        }
+
+        response = client.post(f"/api/projects/{created_project.id}/tasks", json=api_task_data)
+        assert response.status_code == 422  # Validation error
+        assert "Either title or initial_message must be provided" in str(response.json())
+
+    @patch("devboard.api.routers.projects.generate_task_title_and_branch")
+    def test_create_project_task_title_generation_fallback(
+        self, mock_generate_title, client, db_session, test_project_data, test_codebase
+    ):
+        """Test that task creation handles title generation failures gracefully."""
+        # Mock title generation failure by returning a fallback result
+        mock_generate_title.return_value = {"title": "task-1642501234", "branch_name": "task-1642501234"}
+
+        # Create test project
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        created_project = project_repo.create(
+            name=test_project_data["name"], description=test_project_data["description"], specification=spec_doc
+        )
+        db_session.commit()
+
+        api_task_data = {
+            "codebase_id": test_codebase.id,
+            "initial_message": "A very long message " * 10,  # Long message to test fallback handling
+        }
+
+        response = client.post(f"/api/projects/{created_project.id}/tasks", json=api_task_data)
+        assert response.status_code == 200
+
+        task_data = response.json()
+        # Should use fallback title from mock
+        assert task_data["title"] == "task-1642501234"
 
 
 class TestProjectEventEmission:

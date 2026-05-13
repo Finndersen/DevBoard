@@ -7,6 +7,7 @@ import NotificationsPanel from '../notifications/NotificationsPanel'
 import GitHubPRDropdown from '../github/GitHubPRDropdown'
 import ConversationsPanel from '../conversations/ConversationsPanel'
 import CreateTaskModal from '../modals/CreateTaskModal'
+import CreateProjectConversationModal from '../modals/CreateProjectConversationModal'
 import { useUIStore } from '../../stores/uiStore'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { useStreamBootstrap } from '../../hooks/useStreamBootstrap'
@@ -18,12 +19,19 @@ import { usePRStatusPolling } from '../../hooks/usePRStatusPolling'
 
 export default function AppShell() {
   const {
-    createTaskModalOpen,
-    closeCreateTaskModal,
+    openModalDraft,
+    modalDrafts,
+    setOpenModalDraft,
     conversationsPanelCollapsed,
     toggleConversationsPanel,
     unreadConversationIds,
   } = useUIStore()
+
+  // Check which modal is currently open
+  const currentDraft = openModalDraft ? modalDrafts[openModalDraft] : null
+  const createTaskModalOpen = currentDraft?.type === 'task'
+  const createProjectConversationModalOpen = currentDraft?.type === 'project_conversation'
+  const closeModal = () => setOpenModalDraft(null)
 
   const streamingCount = useConversationStreamStore(
     useCallback((state) => {
@@ -120,8 +128,12 @@ export default function AppShell() {
         </div>
       </div>
 
-      {createTaskModalOpen && (
-        <CreateTaskModal isOpen={createTaskModalOpen} onClose={closeCreateTaskModal} />
+      {/* Render modals based on current draft */}
+      {createTaskModalOpen && openModalDraft && (
+        <CreateTaskModal draftId={openModalDraft} onClose={closeModal} />
+      )}
+      {createProjectConversationModalOpen && openModalDraft && (
+        <CreateProjectConversationModal isOpen={true} onClose={closeModal} draftId={openModalDraft} />
       )}
     </div>
   )

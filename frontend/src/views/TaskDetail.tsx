@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 import { TaskStatus } from '../lib/api'
 import type { Task, Codebase, TaskGitStatus, GitHubPRStatusResponse, PRFeedbackResponse, PRDetailResponse, CustomFieldDefinition } from '../lib/api'
@@ -63,7 +63,6 @@ interface TaskDetailProps {
 
 function TaskDetail({ id }: TaskDetailProps) {
   const navigate = useNavigate()
-  const location = useLocation()
   const { data: task, loading, error, refetch } = useTask(id)
 
   // Fetch documents separately - only when task is loaded with valid document IDs
@@ -150,33 +149,6 @@ function TaskDetail({ id }: TaskDetailProps) {
       .finally(() => setPrDetailLoading(false))
   }, [activeTab, task?.codebase_id, task?.github_pr_number])
 
-  // Handle initial message from navigation state (passed when creating task with description)
-  const [pendingInitialMessage, setPendingInitialMessage] = useState<string | null>(null)
-  const initialMessageProcessedRef = useRef(false)
-
-  // Check for initial message from navigation state on mount
-  useEffect(() => {
-    // Only process once per navigation and only if we have task data
-    // Validate that the message is for THIS specific task (prevents bug where mounted components from other tabs consume the message)
-    if (
-      !initialMessageProcessedRef.current &&
-      location.state?.initialMessage &&
-      location.state?.taskId === parseInt(id) &&
-      task?.conversation_id
-    ) {
-      setPendingInitialMessage(location.state.initialMessage)
-      initialMessageProcessedRef.current = true
-      // Clear the navigation state to prevent re-sending on refresh
-      navigate(location.pathname, { replace: true, state: {} })
-    }
-  }, [location.state?.initialMessage, location.state?.taskId, task?.conversation_id, navigate, location.pathname, id])
-
-  // Clear pending initial message when the task ID changes (navigating to different task)
-  // Note: We don't reset initialMessageProcessedRef here to prevent mounted components
-  // from consuming initial messages meant for other tasks
-  useEffect(() => {
-    setPendingInitialMessage(null)
-  }, [id])
 
   // Ref to AgentChat for sending review comments
   const agentChatRef = useRef<AgentChatHandle>(null)
@@ -689,8 +661,6 @@ function TaskDetail({ id }: TaskDetailProps) {
             padding="xs"
             isRunningAction={isConversationStreaming}
             actionMessage={streamingMessage}
-            initialMessage={pendingInitialMessage}
-            onInitialMessageSent={() => setPendingInitialMessage(null)}
             workingDir={gitStatus?.worktree_slot_path ?? selectedCodebase?.local_path}
             onConversationReset={handleConversationReset}
           />
