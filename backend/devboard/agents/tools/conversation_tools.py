@@ -340,7 +340,7 @@ def create_inspect_conversation_tool(conversation_repo: ConversationRepository) 
         # Create ClaudeClient and analyze
         client = ClaudeClient(
             system_prompt=system_prompt,
-            model="claude-haiku-4-5-20251001",
+            model="haiku",
             cwd=str(Path.home() / ".devboard"),
             load_settings=False,
         )

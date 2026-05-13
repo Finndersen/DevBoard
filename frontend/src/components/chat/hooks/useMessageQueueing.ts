@@ -42,6 +42,10 @@ export function useMessageQueueing(
     }, DRAFT_SAVE_DELAY_MS)
   }, [conversationId, viewType, entityId])
 
+  const setQueuedText = useCallback((text: string) => {
+    inputMessageRef.current = text
+  }, [])
+
   // Save draft text on unmount
   useEffect(() => {
     return () => {
@@ -104,5 +108,5 @@ export function useMessageQueueing(
     }
   }, [conversationId, setQueued, sendMessageViaHook, viewType, entityId]))
 
-  return { inputMessage, setInputMessage, handleSendMessage }
+  return { inputMessage, setInputMessage, setQueuedText, handleSendMessage }
 }

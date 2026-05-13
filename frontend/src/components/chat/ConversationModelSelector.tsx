@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDownIcon } from '@heroicons/react/24/outline'
 import type { ConversationResponse, ModelInfo, UpdateConversationModelRequest, AgentConfigurationResponse } from '../../lib/api'
 import { apiClient } from '../../lib/api'
-import { surfaces, borderColors, statusColors } from '../../styles/designSystem'
+import { surfaces, borderColors, textColors, hoverColors } from '../../styles/designSystem'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { reportMutationError } from '../../lib/errors'
 
@@ -10,6 +11,13 @@ interface ConversationModelSelectorProps {
   conversationId: number
   onModelChange?: (engine: string, modelId: string | null, modelName: string) => void
   dropUp?: boolean
+}
+
+interface DropdownPosition {
+  top: number
+  left: number
+  width: number
+  openUpward: boolean
 }
 
 export default function ConversationModelSelector({
@@ -23,7 +31,9 @@ export default function ConversationModelSelector({
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
+  const [dropdownPos, setDropdownPos] = useState<DropdownPosition | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const addNotification = useNotificationStore(s => s.addNotification)
 
   useEffect(() => {
@@ -32,15 +42,12 @@ export default function ConversationModelSelector({
         setLoading(true)
         setError(null)
 
-        // Fetch conversation details
         const conversationData = await apiClient.getConversation(conversationId)
         setConversation(conversationData)
 
-        // Fetch agent configuration to get engine info
         const configData = await apiClient.getAgentConfiguration(conversationData.agent_role)
         setEngineConfig(configData)
 
-        // Fetch available models for this engine
         const modelsData = await apiClient.getAvailableModelsByEngine()
         const engineModels = modelsData.models_by_engine[conversationData.engine] || []
         setAvailableModels(engineModels)
@@ -55,6 +62,38 @@ export default function ConversationModelSelector({
     fetchData()
   }, [conversationId])
 
+  const computePosition = useCallback(() => {
+    if (!triggerRef.current) return null
+    const rect = triggerRef.current.getBoundingClientRect()
+    const spaceAbove = rect.top
+    const spaceBelow = window.innerHeight - rect.bottom
+    const openUpward = dropUp || spaceBelow < 200
+    return {
+      top: openUpward ? rect.top : rect.bottom,
+      left: rect.right,
+      width: rect.width,
+      openUpward,
+    }
+  }, [dropUp])
+
+  const handleToggle = useCallback(() => {
+    if (!isOpen) {
+      setDropdownPos(computePosition())
+    }
+    setIsOpen(prev => !prev)
+  }, [isOpen, computePosition])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const update = () => setDropdownPos(computePosition())
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+    }
+  }, [isOpen, computePosition])
+
   const handleModelChange = async (newModelId: string | null) => {
     if (!conversation || newModelId === conversation.model_id) return
 
@@ -65,7 +104,6 @@ export default function ConversationModelSelector({
       const request: UpdateConversationModelRequest = { model_id: newModelId }
       await apiClient.updateConversationModel(conversationId, request)
 
-      // Find the new model name
       let newModelName: string
       if (newModelId === null) {
         newModelName = 'Default'
@@ -74,16 +112,9 @@ export default function ConversationModelSelector({
         newModelName = newModel?.name || newModelId.split(':')[1] || newModelId
       }
 
-      // Update local state
-      setConversation({
-        ...conversation,
-        model_id: newModelId
-      })
-
-      // Close dropdown
+      setConversation({ ...conversation, model_id: newModelId })
       setIsOpen(false)
 
-      // Notify parent
       if (onModelChange) {
         onModelChange(conversation.engine, newModelId, newModelName)
       }
@@ -100,7 +131,6 @@ export default function ConversationModelSelector({
     }
   }
 
-  // Check if current engine requires model selection
   const engineRequiresModelSelection = (): boolean => {
     if (!engineConfig || !conversation) return true
     const engineInfo = engineConfig.available_engines.find(e => e.engine === conversation.engine)
@@ -108,38 +138,35 @@ export default function ConversationModelSelector({
   }
 
   if (loading) {
-    return (
-      <div className="text-sm text-gray-500 dark:text-gray-400">
-        Loading...
-      </div>
-    )
+    return <div className={`text-sm ${textColors.muted}`}>Loading...</div>
   }
 
   if (error) {
-    return (
-      <div className="text-sm text-red-600 dark:text-red-400">
-        {error}
-      </div>
-    )
+    return <div className="text-sm text-red-600 dark:text-red-400">{error}</div>
   }
 
   if (!conversation) {
     return null
   }
 
-  // Extract model name from model_id (format: "provider:name")
   const modelDisplayName = conversation.model_id === null
     ? 'Default'
-    : (conversation.model_id.split(':')[1] || conversation.model_id)
+    : (availableModels.find(m => m.id === conversation.model_id)?.name || conversation.model_id.split(':')[1] || conversation.model_id)
+
+  const showDropdown = isOpen && dropdownPos && (availableModels.length > 0 || !engineRequiresModelSelection())
+
+  const itemBase = `w-full text-left px-4 py-2 text-sm ${hoverColors.default} disabled:opacity-50 transition-colors`
+  const itemSelected = `${textColors.accent} font-medium`
+  const itemDefault = textColors.primary
 
   return (
-    <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-      {/* Model selector dropdown */}
+    <div className={`flex items-center space-x-2 text-sm ${textColors.secondary}`}>
       <div className="relative">
         <button
-          onClick={() => setIsOpen(!isOpen)}
+          ref={triggerRef}
+          onClick={handleToggle}
           disabled={updating || (availableModels.length === 0 && engineRequiresModelSelection())}
-          className="flex items-center space-x-1 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          className={`flex items-center space-x-1 hover:${textColors.primary} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
         >
           <span>{modelDisplayName}</span>
           {(availableModels.length > 1 || !engineRequiresModelSelection()) && (
@@ -147,34 +174,25 @@ export default function ConversationModelSelector({
           )}
         </button>
 
-        {/* Dropdown menu */}
-        {isOpen && (availableModels.length > 0 || !engineRequiresModelSelection()) && (
+        {showDropdown && createPortal(
           <>
-            {/* Backdrop to close dropdown */}
+            <div className="fixed inset-0 z-50" onClick={() => setIsOpen(false)} />
             <div
-              className="fixed inset-0 z-10"
-              onClick={() => setIsOpen(false)}
-            />
-
-            {/* Dropdown options */}
-            <div className={`absolute right-0 ${dropUp ? 'bottom-full mb-2' : 'mt-2'} w-64 ${surfaces.raised} rounded-md shadow-lg border ${borderColors.default} z-20 max-h-64 overflow-y-auto`}>
-              {/* Show "Default" option for engines that don't require model selection */}
+              className={`fixed z-50 w-56 ${surfaces.raised} rounded-md shadow-lg border ${borderColors.default} max-h-64 overflow-y-auto`}
+              style={dropdownPos.openUpward
+                ? { bottom: window.innerHeight - dropdownPos.top + 8, right: window.innerWidth - dropdownPos.left }
+                : { top: dropdownPos.top + 8, right: window.innerWidth - dropdownPos.left }
+              }
+            >
               {!engineRequiresModelSelection() && (
                 <button
-                  key="default"
                   onClick={() => handleModelChange(null)}
                   disabled={updating}
-                  className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 ${
-                    conversation.model_id === null
-                      ? `${statusColors.info.bg} ${statusColors.info.text} font-medium`
-                      : 'text-gray-900 dark:text-gray-100'
-                  }`}
+                  className={`${itemBase} ${conversation.model_id === null ? itemSelected : itemDefault}`}
                 >
                   <div className="flex flex-col">
                     <span>Default</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      Use engine's default model
-                    </span>
+                    <span className={`text-xs ${textColors.muted}`}>Use engine's default model</span>
                   </div>
                 </button>
               )}
@@ -183,22 +201,17 @@ export default function ConversationModelSelector({
                   key={model.id}
                   onClick={() => handleModelChange(model.id)}
                   disabled={updating}
-                  className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 ${
-                    model.id === conversation.model_id
-                      ? `${statusColors.info.bg} ${statusColors.info.text} font-medium`
-                      : 'text-gray-900 dark:text-gray-100'
-                  }`}
+                  className={`${itemBase} ${model.id === conversation.model_id ? itemSelected : itemDefault}`}
                 >
                   <div className="flex flex-col">
                     <span>{model.name}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {model.provider} • {model.model_type}
-                    </span>
+                    <span className={`text-xs ${textColors.muted}`}>{model.provider} • {model.model_type}</span>
                   </div>
                 </button>
               ))}
             </div>
-          </>
+          </>,
+          document.body
         )}
       </div>
     </div>

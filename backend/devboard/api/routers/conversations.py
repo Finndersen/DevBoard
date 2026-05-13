@@ -16,6 +16,7 @@ from devboard.api.dependencies.repositories import get_conversation_repository
 from devboard.api.dependencies.services import (
     get_agent_config_service,
     get_conversation_service,
+    get_task_implementation_plan_service,
 )
 from devboard.api.schemas.agent_conversation import (
     ChatRequest,
@@ -28,6 +29,7 @@ from devboard.api.schemas.integration import UpdateConversationModelRequest
 from devboard.db.models import Conversation, Task, TaskStatus
 from devboard.db.repositories import ConversationRepository
 from devboard.services.conversation_service import ConversationService
+from devboard.services.task_implementation_plan import TaskImplementationPlanService
 
 router = APIRouter()
 
@@ -156,20 +158,24 @@ async def approve_conversation_tools(
 @router.post("/{conversation_id}/interrupt")
 async def interrupt_conversation(
     conversation: Conversation = Depends(get_verified_conversation),
+    plan_service: TaskImplementationPlanService = Depends(get_task_implementation_plan_service),
 ) -> dict[str, str]:
     """Request graceful interruption of the active execution.
 
     Sets the interrupt flag on the active execution. The agent checks this flag
     periodically and stops gracefully, persisting messages received up to that point.
+    If no active execution exists but a step is stuck in running status, resets it.
 
     Returns:
-        {"status": "interrupt_requested"}
+        {"status": "interrupt_requested"} or {"status": "step_reset"}
 
     Raises:
-        HTTPException 404: If no active execution for this conversation
+        HTTPException 404: If no active execution and no stuck running step
     """
     interrupted = get_execution_manager().request_interrupt(conversation.id)
     if not interrupted:
+        if plan_service.reset_stuck_step(conversation.id):
+            return {"status": "step_reset"}
         raise HTTPException(status_code=404, detail="No active execution for this conversation")
     return {"status": "interrupt_requested"}
 

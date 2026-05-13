@@ -1,7 +1,6 @@
 """Logfire configuration for DevBoard application."""
 
 import os
-from pathlib import Path
 from typing import cast
 
 import logfire
@@ -56,8 +55,6 @@ def setup_logfire(app: FastAPI) -> None:
         logfire.configure(send_to_logfire=False, console=console_options)
         return
 
-    # Check if Logfire token is available in environment
-    token = os.getenv("LOGFIRE_TOKEN")
     environment = os.getenv("ENVIRONMENT", "development")
     log_level: LevelName = cast(LevelName, os.getenv("LOG_LEVEL", "info" if environment == "production" else "debug"))
 
@@ -66,15 +63,13 @@ def setup_logfire(app: FastAPI) -> None:
     if environment == "development":
         console_options = ConsoleOptions(verbose=True, min_log_level=log_level)
 
-    credentials_file = Path(__file__).parents[2] / ".logfire" / "logfire_credentials.json"
-    send_to_logfire = bool(token) or credentials_file.exists()
-
     # Configure Logfire with hardcoded sensible defaults
+    # Let logfire auto-detect credentials (env var, local .logfire/, or ~/.logfire/)
+    # Only pass send_to_logfire explicitly when forcing it off via DISABLE_LOGFIRE
     logfire.configure(
         service_name="devboard",
         environment=environment,
         console=console_options,
-        send_to_logfire=send_to_logfire,
         scrubbing=logfire.ScrubbingOptions(callback=scrubbing_callback),
     )
 

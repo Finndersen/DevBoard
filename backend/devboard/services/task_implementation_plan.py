@@ -192,6 +192,16 @@ class TaskImplementationPlanService:
         self.plan_repo.update_step(step)
         return step
 
+    def reset_stuck_step(self, conversation_id: int) -> bool:
+        """Find a running step with no active execution and mark it as interrupted."""
+        step = self.plan_repo.get_running_step_by_conversation_id(conversation_id)
+        if not step:
+            return False
+        self.set_step_status(
+            step, ImplementationStepStatus.INTERRUPTED, "Step execution not found; marked as interrupted."
+        )
+        return True
+
     def get_step_by_number(self, plan: ImplementationPlan, step_number: int) -> ImplementationStep | None:
         return self.plan_repo.get_step_by_number(plan.id, step_number)
 

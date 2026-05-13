@@ -21,8 +21,12 @@ def create_document_edit_tool(
 
     def edit_document_tool(edits: list[DocumentEdit], reasoning: str = "") -> str:
         """
-        Apply edits to the virtual document.
+        Apply targeted find-replace edits to an EXISTING virtual document that already has content.
         This document DOES NOT exist on the file system, but is managed by the application.
+
+        Use this tool only to make incremental changes to content that already exists.
+        To set or replace the full document content (e.g. writing the initial specification),
+        use the `edit_task` tool with the `specification_content` parameter instead.
 
         DOCUMENT EDITING RULES:
         1. Make precise find-replace edits using DocumentEdit objects

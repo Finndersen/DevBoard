@@ -106,7 +106,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
 
   const { viewType, entityId } = useViewContext()
 
-  const { inputMessage, setInputMessage, handleSendMessage } = useMessageQueueing(
+  const { inputMessage, setInputMessage, setQueuedText, handleSendMessage } = useMessageQueueing(
     conversationId, isStreaming, pendingApprovals, isRunningAction, isQueued, setQueued, sendMessageViaHook, viewType, entityId
   )
 
@@ -133,8 +133,9 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
 
       // If agent is busy or already has a queued message, queue this one
       if (currentIsStreaming || pendingApprovals.length > 0 || isRunningAction || currentIsQueued) {
-        // Set the message in input field and mark as queued
-        setInputMessage(messageText)
+        // Write text directly to ref only — avoids triggering "unqueue on user edit"
+        // effect in useMessageQueueing, which fires on any inputMessage state change.
+        setQueuedText(messageText)
         setQueued(conversationId, true)
         return
       }
@@ -151,7 +152,7 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
       return isQueued
     },
     stopStream: () => stopStream(conversationId)
-  }), [conversationId, pendingApprovals.length, isRunningAction, setQueued, sendMessageViaHook, inputMessage, setInputMessage, handleSendMessage, isQueued, stopStream])
+  }), [conversationId, pendingApprovals.length, isRunningAction, setQueued, sendMessageViaHook, inputMessage, setInputMessage, setQueuedText, handleSendMessage, isQueued, stopStream])
 
 
   // Cleanup: stop stream if component unmounts while streaming

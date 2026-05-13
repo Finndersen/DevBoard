@@ -106,13 +106,14 @@ const StepCard = memo(function StepCard({ step, taskId, onStepUpdated }: StepCar
     setCancelling(true)
     try {
       await apiClient.interruptConversation(step.conversation_id)
+      onStepUpdated()
     } catch (error) {
       console.error('Failed to interrupt step:', error)
       addNotification({ type: 'system_error', message: 'Failed to cancel step' })
     } finally {
       setCancelling(false)
     }
-  }, [step.conversation_id, cancelling, addNotification])
+  }, [step.conversation_id, cancelling, addNotification, onStepUpdated])
 
   const handleSaveDetails = useCallback(async () => {
     setSaving(true)

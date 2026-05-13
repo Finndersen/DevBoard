@@ -22,7 +22,7 @@ from mcp.types import ToolAnnotations
 from pydantic import BaseModel
 from pydantic_ai import Tool
 
-from .utils import BUILTIN_TOOLS_MCP_NAME, describe_message, load_env_from_settings
+from .utils import BUILTIN_TOOLS_MCP_NAME, describe_message, get_message_content_details, load_env_from_settings
 
 INTERRUPT_FORCE_KILL_TIMEOUT_SECONDS = 5
 
@@ -401,7 +401,11 @@ class ClaudeClient:
                         try:
                             async for message in client.receive_response():
                                 message_desc = describe_message(message)
-                                logfire.info(f"Received message: {message_desc}")
+                                content_details = get_message_content_details(message)
+                                logfire.info(
+                                    f"Received message: {message_desc}",
+                                    content=content_details,
+                                )
                                 await queue.put(message)
                         except asyncio.CancelledError:
                             # Consumer disconnected during streaming.

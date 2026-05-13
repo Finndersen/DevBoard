@@ -568,9 +568,10 @@ describe('ConversationChat', () => {
     // Send a follow-up message while approval is pending
     ref.current.sendMessage('Queued follow-up')
 
-    // Should have the queued message in input (message gets queued instead of sent)
+    // The queued text is held in the internal ref; verify via isQueued store flag
     await waitFor(() => {
-      expect(ref.current.inputMessage).toBe('Queued follow-up')
+      const streamState = useConversationStreamStore.getState().activeStreams.get(mockConversationId)
+      expect(streamState?.isQueued).toBe(true)
     })
 
     // Verify that the message was queued rather than sent immediately

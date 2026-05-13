@@ -424,7 +424,7 @@ def _build_edit_task_json_schema(
 
     properties["specification_content"] = {
         "anyOf": [{"type": "string"}, {"type": "null"}],
-        "description": "New content for the task specification document. Replaces the entire specification. Leave null to keep unchanged.",
+        "description": "Full content to set for the task specification document. Use this to write the initial specification or to replace it entirely. Leave null to keep unchanged.",
         "default": None,
     }
 

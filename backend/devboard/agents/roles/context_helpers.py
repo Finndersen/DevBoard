@@ -183,7 +183,10 @@ def build_task_context(
         Formatted context string with consistent structure.
         PR number and implementation plan are automatically included if present.
     """
-    sections = [_format_project_metadata(task)]
+    sections = [
+        "You are working on a task associated with a project and a codebase repository.",
+        _format_project_metadata(task),
+    ]
 
     if include_project_specification:
         sections.append(_format_project_specification(task))
@@ -208,4 +211,4 @@ def build_task_context(
     if task.custom_fields:
         sections.append(_format_custom_fields(task))
 
-    return "\n--------\n".join(sections)
+    return "\n\n---\n\n".join(sections)

@@ -87,6 +87,13 @@ class TaskImplementationPlanRepository(BaseRepository[ImplementationPlan]):
         self.db.flush()
         return step
 
+    def get_running_step_by_conversation_id(self, conversation_id: int) -> ImplementationStep | None:
+        stmt = select(ImplementationStep).where(
+            ImplementationStep.conversation_id == conversation_id,
+            ImplementationStep.status == ImplementationStepStatus.RUNNING,
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
     def delete_step(self, step: ImplementationStep, plan: ImplementationPlan) -> None:
         # Check no other steps depend on this step
         for other_step in plan.steps:

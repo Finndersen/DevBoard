@@ -48,6 +48,21 @@ def load_env_from_settings() -> dict[str, str]:
         return {}
 
 
+def get_message_content_details(message: Message) -> list[dict[str, str | dict[str, object]]] | None:
+    """Extract structured content blocks from a message for detailed logfire logging."""
+    if isinstance(message, AssistantMessage):
+        blocks: list[dict[str, str | dict[str, object]]] = []
+        for block in message.content:
+            if isinstance(block, TextBlock):
+                blocks.append({"type": "text", "text": block.text})
+            elif isinstance(block, ThinkingBlock):
+                blocks.append({"type": "thinking", "text": block.thinking})
+            elif isinstance(block, ToolUseBlock):
+                blocks.append({"type": "tool_use", "name": block.name, "input": block.input})
+        return blocks or None
+    return None
+
+
 def describe_message(message: Message) -> str:
     """Generate a concise description of a Claude SDK message.
 
