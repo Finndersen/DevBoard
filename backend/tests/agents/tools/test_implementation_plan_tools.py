@@ -11,6 +11,7 @@ from devboard.agents.language_models import ModelType
 from devboard.agents.tools.implementation_plan_tools import (
     StepInput,
     create_execute_implementation_step_tool,
+    create_get_implementation_plan_overview_tool,
     create_read_implementation_step_details_tool,
 )
 from devboard.db.models.implementation_plan import (
@@ -584,3 +585,92 @@ class TestExecuteImplementationStepModelType:
 
         call_kwargs = mock_create.call_args.kwargs
         assert call_kwargs["model_type"] is None
+
+
+class TestGetImplementationPlanOverviewTool:
+    """Tests for get_implementation_plan_overview tool with conversation IDs."""
+
+    def test_returns_plan_overview_without_steps(self, mock_task: Mock):
+        """get_implementation_plan_overview returns plan overview when no steps exist."""
+        plan = Mock(spec=ImplementationPlan)
+        plan.overview = "This is the plan overview"
+        plan.steps = []
+
+        mock_task.implementation_plan_structured = plan
+
+        tool = create_get_implementation_plan_overview_tool(mock_task)
+        result = tool.function()
+
+        assert "Overview: This is the plan overview" in result
+        assert "Steps:" in result
+
+    def test_includes_conversation_id_in_output(self, mock_task: Mock):
+        """get_implementation_plan_overview includes conversation_id when present."""
+        step1 = Mock(spec=ImplementationStep)
+        step1.step_number = 1
+        step1.title = "First Step"
+        step1.type = ImplementationStepType.CODE_CHANGE
+        step1.status = ImplementationStepStatus.PENDING
+        step1.dependencies = []
+        step1.conversation_id = 99
+
+        step2 = Mock(spec=ImplementationStep)
+        step2.step_number = 2
+        step2.title = "Second Step"
+        step2.type = ImplementationStepType.CODE_REVIEW
+        step2.status = ImplementationStepStatus.COMPLETE
+        step2.dependencies = [1]
+        step2.conversation_id = 100
+
+        plan = Mock(spec=ImplementationPlan)
+        plan.overview = None
+        plan.steps = [step1, step2]
+
+        mock_task.implementation_plan_structured = plan
+
+        tool = create_get_implementation_plan_overview_tool(mock_task)
+        result = tool.function()
+
+        assert "1. [pending] First Step [code_change]" in result
+        assert "conv_id=99" in result
+        assert "2. [complete] Second Step [code_review] (depends on: 1)" in result
+        assert "conv_id=100" in result
+
+    def test_excludes_conversation_id_when_none(self, mock_task: Mock):
+        """get_implementation_plan_overview does not include conv_id when conversation_id is None."""
+        step = Mock(spec=ImplementationStep)
+        step.step_number = 1
+        step.title = "Test Step"
+        step.type = ImplementationStepType.CODE_CHANGE
+        step.status = ImplementationStepStatus.PENDING
+        step.dependencies = []
+        step.conversation_id = None
+
+        plan = Mock(spec=ImplementationPlan)
+        plan.overview = None
+        plan.steps = [step]
+
+        mock_task.implementation_plan_structured = plan
+
+        tool = create_get_implementation_plan_overview_tool(mock_task)
+        result = tool.function()
+
+        assert "1. [pending] Test Step [code_change]" in result
+        assert "conv_id=" not in result
+
+    def test_raises_when_no_plan(self, mock_task: Mock):
+        """get_implementation_plan_overview raises when no plan exists."""
+        mock_task.implementation_plan_structured = None
+
+        tool = create_get_implementation_plan_overview_tool(mock_task)
+
+        with pytest.raises(ModelRetry, match="No implementation plan exists"):
+            tool.function()
+
+    def test_docstring_mentions_inspect_conversation(self, mock_task: Mock):
+        """get_implementation_plan_overview docstring mentions inspect_conversation tool."""
+        tool = create_get_implementation_plan_overview_tool(mock_task)
+        docstring = tool.function.__doc__
+
+        assert docstring is not None
+        assert "inspect_conversation" in docstring.lower() or "conversation" in docstring.lower()

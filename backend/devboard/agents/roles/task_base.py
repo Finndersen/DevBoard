@@ -7,7 +7,11 @@ from pydantic_ai import Tool
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.execution.registry import get_execution_manager
 from devboard.agents.roles.base import AgentRole
-from devboard.agents.tools import create_list_tasks_tool, create_view_task_details_tool
+from devboard.agents.tools import (
+    create_inspect_conversation_tool,
+    create_list_tasks_tool,
+    create_view_task_details_tool,
+)
 from devboard.agents.tools.codebase_management_tools import (
     create_update_codebase_tool,
     create_view_codebase_details_tool,
@@ -52,8 +56,9 @@ class TaskAgentRoleBase(AgentRole):
         codebases = [self.task.codebase]
         return [
             create_list_tasks_tool(self.task.project, self.task_service),
-            create_view_task_details_tool(self.task.project, self.task_service),
+            create_view_task_details_tool(self.task.project, self.task_service, self.conversation_repo),
             create_create_task_tool(self.task.project, self.task_service, self.conversation_repo),
+            create_inspect_conversation_tool(self.conversation_repo),
             create_task_codebase_investigation_tool(
                 self.task,
                 self.agent_config_service,

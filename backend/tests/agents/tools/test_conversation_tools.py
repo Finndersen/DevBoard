@@ -1,9 +1,11 @@
 """Tests for conversation and agent config tools."""
 
 import datetime
+from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from fastapi import HTTPException
 from pydantic_ai import ModelRetry, Tool
 
 from devboard.agents.conversation_history import ConversationHistory
@@ -27,6 +29,7 @@ from devboard.agents.tools.conversation_tools import (
     _format_events,
     _format_tool_args,
     _truncate,
+    create_inspect_conversation_tool,
     create_list_conversations_tool,
     create_view_agent_config_tool,
     create_view_conversation_content_tool,
@@ -816,3 +819,314 @@ class TestCreateViewAgentConfigTool:
         assert "input_schema" not in result
         assert "properties" not in result
         assert "my_tool: A tool" in result
+
+
+# ──────────────────────────────────────────────
+# Test _format_events with tool_result_max_length parameter
+# ──────────────────────────────────────────────
+
+
+class TestFormatEventsWithToolResultMaxLength:
+    def _ts(self) -> datetime.datetime:
+        return FIXED_TS
+
+    def test_tool_result_max_length_zero_excludes_tool_results(self):
+        """Test that tool_result_max_length=0 excludes ToolResult events entirely."""
+        events = [
+            ToolCall(tool_call_id="tc1", tool_name="test_tool", tool_args=None, timestamp=self._ts()),
+            ToolResult(tool_call_id="tc1", result_content="this should be excluded", timestamp=self._ts()),
+            TextMessage(role=MessageRole.AGENT, text_content="Response", timestamp=self._ts()),
+        ]
+        result = _format_events(events, include_thinking=False, tool_result_max_length=0)
+
+        assert "TOOL_CALL test_tool" in result
+        assert "RESULT" not in result
+        assert "this should be excluded" not in result
+        assert "AGENT: Response" in result
+
+    def test_tool_result_custom_max_length_truncates_to_length(self):
+        """Test that custom tool_result_max_length truncates to that length."""
+        long_result = "x" * 100
+        events = [
+            ToolResult(tool_call_id="tc1", result_content=long_result, timestamp=self._ts()),
+        ]
+        result = _format_events(events, include_thinking=False, tool_result_max_length=20)
+
+        assert "→ RESULT:" in result
+        assert long_result not in result  # Full result shouldn't be there
+        assert "x" * 20 in result  # Truncated version should be there
+        assert "..." in result  # Should have truncation marker
+
+    def test_tool_result_default_max_length_unchanged(self):
+        """Test that default tool_result_max_length behavior is unchanged."""
+        long_result = "y" * 300
+        events = [
+            ToolResult(tool_call_id="tc1", result_content=long_result, timestamp=self._ts()),
+        ]
+
+        # Test with explicit default parameter
+        result_explicit = _format_events(events, include_thinking=False, tool_result_max_length=200)
+
+        # Test with no parameter (using default)
+        result_default = _format_events(events, include_thinking=False)
+
+        # Should behave the same
+        assert result_explicit == result_default
+        assert "→ RESULT:" in result_default
+        assert "y" * 200 in result_default
+        assert "..." in result_default
+
+    def test_tool_result_short_content_not_truncated(self):
+        """Test that short tool result content is not truncated."""
+        short_result = "short result"
+        events = [
+            ToolResult(tool_call_id="tc1", result_content=short_result, timestamp=self._ts()),
+        ]
+        result = _format_events(events, include_thinking=False, tool_result_max_length=50)
+
+        assert "→ RESULT: short result" in result
+        assert "..." not in result
+
+
+# ──────────────────────────────────────────────
+# create_inspect_conversation_tool tests
+# ──────────────────────────────────────────────
+
+
+class TestCreateInspectConversationTool:
+    def test_tool_creation(self, mock_conversation_repo):
+        tool = create_inspect_conversation_tool(mock_conversation_repo)
+        assert isinstance(tool, Tool)
+        assert tool.name == "inspect_conversation"
+
+    @pytest.mark.asyncio
+    async def test_conversation_not_found_raises_model_retry(self, mock_conversation_repo):
+        mock_conversation_repo.get_by_id.return_value = None
+
+        tool = create_inspect_conversation_tool(mock_conversation_repo)
+
+        with pytest.raises(ModelRetry) as exc_info:
+            await tool.function(conversation_id=999)
+
+        assert "999" in str(exc_info.value)
+        assert "not found" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_conversation_history_error_raises_model_retry(self, mock_conversation_repo, mock_conversation):
+        mock_conversation_repo.get_by_id.return_value = mock_conversation
+
+        with patch(
+            "devboard.agents.tools.conversation_tools.create_conversation_history_service",
+            side_effect=HTTPException(status_code=400, detail="History error"),
+        ):
+            tool = create_inspect_conversation_tool(mock_conversation_repo)
+
+            with pytest.raises(ModelRetry) as exc_info:
+                await tool.function(conversation_id=42)
+
+            assert "Cannot load conversation history" in str(exc_info.value)
+            assert "History error" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_inspect_conversation_with_summary_mode(self, mock_conversation_repo, mock_conversation):
+        """Test inspect_conversation in summary mode (no question provided)."""
+        mock_conversation_repo.get_by_id.return_value = mock_conversation
+
+        # Mock conversation events
+        events = [
+            TextMessage(role=MessageRole.USER, text_content="Hello", timestamp=FIXED_TS),
+            TextMessage(role=MessageRole.AGENT, text_content="Hi there!", timestamp=FIXED_TS),
+        ]
+        history = ConversationHistory(messages=events)
+        mock_history_service = AsyncMock()
+        mock_history_service.get_conversation_history.return_value = history
+
+        # Mock ClaudeClient
+        mock_claude_result = Mock()
+        mock_claude_result.text_content = "This conversation shows a basic greeting exchange."
+        mock_client = AsyncMock()
+        mock_client.run.return_value = mock_claude_result
+
+        with (
+            patch(
+                "devboard.agents.tools.conversation_tools.create_conversation_history_service",
+                return_value=mock_history_service,
+            ),
+            patch(
+                "devboard.agents.tools.conversation_tools.ClaudeClient",
+                return_value=mock_client,
+            ) as mock_claude_class,
+        ):
+            tool = create_inspect_conversation_tool(mock_conversation_repo)
+            result = await tool.function(conversation_id=42)
+
+        # Verify ClaudeClient was configured correctly
+        mock_claude_class.assert_called_once()
+        call_kwargs = mock_claude_class.call_args.kwargs
+        assert call_kwargs["model"] == "claude-haiku-4-5-20251001"
+        assert call_kwargs["cwd"] == str(Path.home() / ".devboard")
+        assert call_kwargs["load_settings"] is False
+        assert "analyzing a conversation transcript" in call_kwargs["system_prompt"]
+
+        # Verify the call to ClaudeClient.run
+        mock_client.run.assert_called_once()
+        run_args = mock_client.run.call_args[0][0]
+        assert "provide a concise summary" in run_args
+        assert "USER: Hello" in run_args
+        assert "AGENT: Hi there!" in run_args
+
+        # Verify result
+        assert result == "This conversation shows a basic greeting exchange."
+
+    @pytest.mark.asyncio
+    async def test_inspect_conversation_with_question(self, mock_conversation_repo, mock_conversation):
+        """Test inspect_conversation with specific question."""
+        mock_conversation_repo.get_by_id.return_value = mock_conversation
+
+        events = [
+            ToolCall(tool_call_id="tc1", tool_name="list_tasks", tool_args={"status": "planning"}, timestamp=FIXED_TS),
+            ToolResult(tool_call_id="tc1", result_content="Task 1, Task 2", timestamp=FIXED_TS),
+        ]
+        history = ConversationHistory(messages=events)
+        mock_history_service = AsyncMock()
+        mock_history_service.get_conversation_history.return_value = history
+
+        mock_claude_result = Mock()
+        mock_claude_result.text_content = "The agent called list_tasks and found 2 planning tasks."
+        mock_client = AsyncMock()
+        mock_client.run.return_value = mock_claude_result
+
+        with (
+            patch(
+                "devboard.agents.tools.conversation_tools.create_conversation_history_service",
+                return_value=mock_history_service,
+            ),
+            patch(
+                "devboard.agents.tools.conversation_tools.ClaudeClient",
+                return_value=mock_client,
+            ),
+        ):
+            tool = create_inspect_conversation_tool(mock_conversation_repo)
+            result = await tool.function(conversation_id=42, question="What tools were called?")
+
+        # Verify the call to ClaudeClient.run includes the question
+        mock_client.run.assert_called_once()
+        run_args = mock_client.run.call_args[0][0]
+        assert "What tools were called?" in run_args
+        assert "answer the following question" in run_args
+        assert "TOOL_CALL list_tasks" in run_args
+
+        assert result == "The agent called list_tasks and found 2 planning tasks."
+
+    @pytest.mark.asyncio
+    async def test_inspect_conversation_custom_tool_result_max_length(self, mock_conversation_repo, mock_conversation):
+        """Test inspect_conversation with custom tool_result_max_length."""
+        mock_conversation_repo.get_by_id.return_value = mock_conversation
+
+        long_result = "x" * 500
+        events = [
+            ToolResult(tool_call_id="tc1", result_content=long_result, timestamp=FIXED_TS),
+        ]
+        history = ConversationHistory(messages=events)
+        mock_history_service = AsyncMock()
+        mock_history_service.get_conversation_history.return_value = history
+
+        mock_claude_result = Mock()
+        mock_claude_result.text_content = "Analysis complete."
+        mock_client = AsyncMock()
+        mock_client.run.return_value = mock_claude_result
+
+        with (
+            patch(
+                "devboard.agents.tools.conversation_tools.create_conversation_history_service",
+                return_value=mock_history_service,
+            ),
+            patch(
+                "devboard.agents.tools.conversation_tools.ClaudeClient",
+                return_value=mock_client,
+            ),
+        ):
+            tool = create_inspect_conversation_tool(mock_conversation_repo)
+            await tool.function(conversation_id=42, tool_result_max_length=50)
+
+        # Verify that the formatted history was truncated appropriately
+        mock_client.run.assert_called_once()
+        run_args = mock_client.run.call_args[0][0]
+        assert "x" * 500 not in run_args  # Full result shouldn't be there
+        assert "x" * 50 in run_args  # Truncated version should be there
+
+    @pytest.mark.asyncio
+    async def test_inspect_conversation_excludes_thinking_events(self, mock_conversation_repo, mock_conversation):
+        """Test that thinking events are excluded from the formatted history."""
+        mock_conversation_repo.get_by_id.return_value = mock_conversation
+
+        events = [
+            ThinkingEvent(thinking_text="secret thoughts", timestamp=FIXED_TS),
+            TextMessage(role=MessageRole.AGENT, text_content="Response", timestamp=FIXED_TS),
+        ]
+        history = ConversationHistory(messages=events)
+        mock_history_service = AsyncMock()
+        mock_history_service.get_conversation_history.return_value = history
+
+        mock_claude_result = Mock()
+        mock_claude_result.text_content = "Analysis complete."
+        mock_client = AsyncMock()
+        mock_client.run.return_value = mock_claude_result
+
+        with (
+            patch(
+                "devboard.agents.tools.conversation_tools.create_conversation_history_service",
+                return_value=mock_history_service,
+            ),
+            patch(
+                "devboard.agents.tools.conversation_tools.ClaudeClient",
+                return_value=mock_client,
+            ),
+        ):
+            tool = create_inspect_conversation_tool(mock_conversation_repo)
+            await tool.function(conversation_id=42)
+
+        # Verify thinking events are excluded
+        mock_client.run.assert_called_once()
+        run_args = mock_client.run.call_args[0][0]
+        assert "THINKING" not in run_args
+        assert "secret thoughts" not in run_args
+        assert "AGENT: Response" in run_args
+
+    @pytest.mark.asyncio
+    async def test_inspect_conversation_tool_result_max_length_zero(self, mock_conversation_repo, mock_conversation):
+        """Test inspect_conversation with tool_result_max_length=0 excludes tool results."""
+        mock_conversation_repo.get_by_id.return_value = mock_conversation
+
+        events = [
+            ToolCall(tool_call_id="tc1", tool_name="test_tool", tool_args=None, timestamp=FIXED_TS),
+            ToolResult(tool_call_id="tc1", result_content="should be excluded", timestamp=FIXED_TS),
+        ]
+        history = ConversationHistory(messages=events)
+        mock_history_service = AsyncMock()
+        mock_history_service.get_conversation_history.return_value = history
+
+        mock_claude_result = Mock()
+        mock_claude_result.text_content = "Analysis complete."
+        mock_client = AsyncMock()
+        mock_client.run.return_value = mock_claude_result
+
+        with (
+            patch(
+                "devboard.agents.tools.conversation_tools.create_conversation_history_service",
+                return_value=mock_history_service,
+            ),
+            patch(
+                "devboard.agents.tools.conversation_tools.ClaudeClient",
+                return_value=mock_client,
+            ),
+        ):
+            tool = create_inspect_conversation_tool(mock_conversation_repo)
+            await tool.function(conversation_id=42, tool_result_max_length=0)
+
+        # Verify tool results are excluded when tool_result_max_length=0
+        mock_client.run.assert_called_once()
+        run_args = mock_client.run.call_args[0][0]
+        assert "TOOL_CALL test_tool" in run_args
+        assert "RESULT" not in run_args
+        assert "should be excluded" not in run_args

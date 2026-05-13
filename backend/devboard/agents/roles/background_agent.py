@@ -5,6 +5,7 @@ from pydantic_ai import Tool
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import (
+    create_inspect_conversation_tool,
     create_list_conversations_tool,
     create_list_tasks_tool,
     create_view_agent_config_tool,
@@ -48,6 +49,7 @@ class BackgroundAgentRole(AgentRole):
             create_list_conversations_tool(self.conversation_repo),
             create_view_conversation_details_tool(self.conversation_repo),
             create_view_conversation_content_tool(self.conversation_repo),
+            create_inspect_conversation_tool(self.conversation_repo),
             create_view_agent_config_tool(
                 self.conversation_repo,
                 self.document_repo,
@@ -56,7 +58,7 @@ class BackgroundAgentRole(AgentRole):
                 self.task_service,
             ),
             create_list_tasks_tool(None, self.task_service, codebase_repo=self.codebase_repo),
-            create_view_task_details_tool(None, self.task_service),
+            create_view_task_details_tool(None, self.task_service, self.conversation_repo),
         ]
 
     async def get_context_content(self) -> str:

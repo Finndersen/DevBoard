@@ -1,6 +1,7 @@
 """Tools for inspecting conversations and agent configurations."""
 
 import json
+from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException
@@ -9,6 +10,7 @@ from pydantic_ai import ModelRetry, Tool
 from devboard.agents.agent_config_assembly import assemble_agent_config
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.conversation_history import create_conversation_history_service
+from devboard.agents.engines.claude_code.client import ClaudeClient
 from devboard.agents.events import (
     AgentRunCompletedEvent,
     AgentRunStartedEvent,
@@ -54,7 +56,9 @@ def _fmt_ts(ts: Any) -> str:
     return ts.strftime("%Y-%m-%d %H:%M") if ts else "unknown"
 
 
-def _format_events(events: list[ConversationEvent], include_thinking: bool) -> str:
+def _format_events(
+    events: list[ConversationEvent], include_thinking: bool, tool_result_max_length: int = _MAX_ARG_LEN
+) -> str:
     lines = []
     for event in events:
         if isinstance(event, (ToolCallRequest, AgentRunStartedEvent, AgentRunCompletedEvent)):
@@ -70,7 +74,9 @@ def _format_events(events: list[ConversationEvent], include_thinking: bool) -> s
                 line += f": {args_str}"
             lines.append(line)
         elif isinstance(event, ToolResult):
-            result = _truncate(event.result_content, _MAX_ARG_LEN)
+            if tool_result_max_length == 0:
+                continue  # Skip tool results entirely when tool_result_max_length is 0
+            result = _truncate(event.result_content, tool_result_max_length)
             lines.append(f"  → RESULT: {result}")
         elif isinstance(event, SystemEvent):
             data_str = json.dumps(event.data) if event.data else ""
@@ -269,6 +275,80 @@ def create_view_conversation_content_tool(conversation_repo: ConversationReposit
         return _format_events(events, include_thinking)
 
     return Tool(function=view_conversation_content, name="view_conversation_content")  # ty:ignore[invalid-argument-type, invalid-return-type]
+
+
+def create_inspect_conversation_tool(conversation_repo: ConversationRepository) -> Tool:
+    """Create a tool for analyzing conversations using a Haiku sub-agent."""
+
+    async def inspect_conversation(
+        conversation_id: int,
+        question: str | None = None,
+        tool_result_max_length: int = 200,
+    ) -> str:
+        """Analyze a conversation using a Haiku sub-agent.
+
+        Uses ClaudeClient with Haiku model to analyze conversation history.
+        Can either provide a general summary or answer a specific question
+        about the conversation.
+
+        Args:
+            conversation_id: The ID of the conversation to analyze.
+            question: Optional specific question to ask about the conversation.
+                If omitted, returns a concise summary of the conversation.
+            tool_result_max_length: Maximum characters for tool result content
+                in the formatted history (default: 200). Set to 0 to exclude
+                tool results entirely.
+
+        Returns:
+            Analysis or summary from the Haiku sub-agent.
+        """
+        # Load conversation
+        conversation = conversation_repo.get_by_id(conversation_id)
+        if not conversation:
+            raise ModelRetry(f"Conversation with ID {conversation_id} not found.")
+
+        # Load conversation history
+        try:
+            history_service = create_conversation_history_service(conversation, conversation_repo)
+        except HTTPException as e:
+            raise ModelRetry(f"Cannot load conversation history: {e.detail}") from e
+
+        history = await history_service.get_conversation_history()
+        events = history.messages
+
+        # Format conversation history
+        formatted_history = _format_events(
+            events, include_thinking=False, tool_result_max_length=tool_result_max_length
+        )
+
+        # Build system prompt
+        system_prompt = (
+            "You are analyzing a conversation transcript from an AI agent interaction. "
+            "Review the provided conversation history and either answer the user's specific question "
+            "or provide a concise summary of what happened. Focus on the key actions, outcomes, "
+            "and any important context from the conversation."
+        )
+
+        # Build user message
+        if question:
+            user_message = (
+                f"Please analyze this conversation and answer the following question: {question}\n\n{formatted_history}"
+            )
+        else:
+            user_message = f"Please provide a concise summary of this conversation:\n\n{formatted_history}"
+
+        # Create ClaudeClient and analyze
+        client = ClaudeClient(
+            system_prompt=system_prompt,
+            model="claude-haiku-4-5-20251001",
+            cwd=str(Path.home() / ".devboard"),
+            load_settings=False,
+        )
+
+        result = await client.run(user_message)
+        return result.text_content
+
+    return Tool(function=inspect_conversation, name="inspect_conversation")  # ty:ignore[invalid-argument-type, invalid-return-type]
 
 
 def create_view_agent_config_tool(

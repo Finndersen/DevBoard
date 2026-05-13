@@ -6,6 +6,7 @@ from .codebase_tools import (
     create_text_search_tool,
 )
 from .conversation_tools import (
+    create_inspect_conversation_tool,
     create_list_conversations_tool,
     create_view_agent_config_tool,
     create_view_conversation_content_tool,
@@ -38,6 +39,7 @@ __all__ = [
     "create_edit_task_tool",
     "create_get_pr_feedback_tool",
     "create_get_pr_status_tool",
+    "create_inspect_conversation_tool",
     "create_list_conversations_tool",
     "create_list_tasks_tool",
     "create_merge_pr_and_complete_task_tool",

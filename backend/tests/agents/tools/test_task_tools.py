@@ -1,13 +1,15 @@
 """Tests for create_task tool functionality."""
 
 import json
+from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from pydantic_ai import ModelRetry
 
-from devboard.agents.tools.task_tools import create_create_task_tool
-from devboard.db.models import Codebase, Conversation, Project, Task, TaskStatus
+from devboard.agents.roles import AgentRoleType
+from devboard.agents.tools.task_tools import create_create_task_tool, create_view_task_details_tool
+from devboard.db.models import Codebase, Conversation, ParentEntityType, Project, Task, TaskStatus
 from devboard.db.repositories.conversation import ConversationRepository
 from devboard.services.task_service import TaskService
 
@@ -292,3 +294,140 @@ class TestCreateTaskMandatoryCustomFields:
         result_data = json.loads(result)
         assert result_data["task_id"] == 42
         mock_task_service.create_task.assert_called_once()
+
+
+class TestViewTaskDetailsTool:
+    """Tests for view_task_details tool with conversation support."""
+
+    @pytest.fixture
+    def mock_codebase_for_view(self):
+        codebase = Mock(spec=Codebase)
+        codebase.id = 10
+        codebase.name = "backend"
+        return codebase
+
+    @pytest.fixture
+    def mock_task_for_view(self, mock_codebase_for_view):
+        task = Mock(spec=Task)
+        task.id = 42
+        task.project_id = 1
+        task.title = "Test Task"
+        task.status = TaskStatus.PLANNING
+        task.branch_name = "test-task"
+        task.base_branch = "main"
+        task.github_pr_number = None
+        task.custom_fields = None
+        task.created_at = datetime(2024, 1, 1, 12, 0, 0)
+        task.codebase = mock_codebase_for_view
+        task.specification = None
+        task.implementation_plan = None
+        task.change_summary = None
+        return task
+
+    @pytest.fixture
+    def mock_task_service_for_view(self, mock_task_for_view):
+        service = Mock(spec=TaskService)
+        service.get_task_by_id.return_value = mock_task_for_view
+        service.is_task_agent_running.return_value = False
+        return service
+
+    @pytest.mark.asyncio
+    async def test_view_task_details_without_conversations(self, mock_task_service_for_view):
+        """view_task_details returns task info when conversation_repo is not provided."""
+        tool = create_view_task_details_tool(None, mock_task_service_for_view)
+        result = await tool.function(task_id=42, include_documents=None)
+
+        assert "# Task #42: Test Task" in result
+        assert "**Status:** planning" in result
+        assert "**Branch:** test-task" in result
+        assert "## Conversations" not in result
+
+    @pytest.mark.asyncio
+    async def test_view_task_details_with_no_conversations(self, mock_task_service_for_view):
+        """view_task_details does not show Conversations section when no conversations exist."""
+        conversation_repo = Mock(spec=ConversationRepository)
+        conversation_repo.get_active_conversations_for_entity.return_value = []
+
+        tool = create_view_task_details_tool(None, mock_task_service_for_view, conversation_repo)
+        result = await tool.function(task_id=42, include_documents=None)
+
+        assert "# Task #42: Test Task" in result
+        assert "## Conversations" not in result
+        conversation_repo.get_active_conversations_for_entity.assert_called_once_with(ParentEntityType.TASK, 42)
+
+    @pytest.mark.asyncio
+    async def test_view_task_details_with_conversations(self, mock_task_service_for_view):
+        """view_task_details shows Conversations section when conversations exist."""
+        conversation = Mock(spec=Conversation)
+        conversation.id = 99
+        conversation.agent_role = AgentRoleType.TASK_PLANNING
+        conversation.last_activity_at = datetime(2024, 1, 1, 13, 30, 0)
+
+        conversation_repo = Mock(spec=ConversationRepository)
+        conversation_repo.get_active_conversations_for_entity.return_value = [conversation]
+
+        with patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr:
+            mock_exec_manager = Mock()
+            mock_exec_manager.has_active_execution.return_value = False
+            mock_get_mgr.return_value = mock_exec_manager
+
+            tool = create_view_task_details_tool(None, mock_task_service_for_view, conversation_repo)
+            result = await tool.function(task_id=42, include_documents=None)
+
+            assert "# Task #42: Test Task" in result
+            assert "## Conversations" in result
+            assert "[99]" in result
+            assert "task_planning" in result
+            assert "inactive" in result
+            assert "2024-01-01T13:30:00" in result
+
+    @pytest.mark.asyncio
+    async def test_view_task_details_with_running_conversation(self, mock_task_service_for_view):
+        """view_task_details shows 'running' status for active executions."""
+        conversation = Mock(spec=Conversation)
+        conversation.id = 99
+        conversation.agent_role = AgentRoleType.TASK_PLANNING
+        conversation.last_activity_at = datetime(2024, 1, 1, 13, 30, 0)
+
+        conversation_repo = Mock(spec=ConversationRepository)
+        conversation_repo.get_active_conversations_for_entity.return_value = [conversation]
+
+        with patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr:
+            mock_exec_manager = Mock()
+            mock_exec_manager.has_active_execution.return_value = True
+            mock_get_mgr.return_value = mock_exec_manager
+
+            tool = create_view_task_details_tool(None, mock_task_service_for_view, conversation_repo)
+            result = await tool.function(task_id=42, include_documents=None)
+
+            assert "running" in result
+            assert "inactive" not in result
+
+    @pytest.mark.asyncio
+    async def test_view_task_details_with_multiple_conversations(self, mock_task_service_for_view):
+        """view_task_details shows all conversations ordered by last_activity_at."""
+        conv1 = Mock(spec=Conversation)
+        conv1.id = 99
+        conv1.agent_role = AgentRoleType.TASK_PLANNING
+        conv1.last_activity_at = datetime(2024, 1, 1, 13, 30, 0)
+
+        conv2 = Mock(spec=Conversation)
+        conv2.id = 100
+        conv2.agent_role = AgentRoleType.TASK_IMPLEMENTATION
+        conv2.last_activity_at = datetime(2024, 1, 1, 14, 0, 0)
+
+        conversation_repo = Mock(spec=ConversationRepository)
+        conversation_repo.get_active_conversations_for_entity.return_value = [conv2, conv1]
+
+        with patch("devboard.agents.tools.task_tools.get_execution_manager") as mock_get_mgr:
+            mock_exec_manager = Mock()
+            mock_exec_manager.has_active_execution.return_value = False
+            mock_get_mgr.return_value = mock_exec_manager
+
+            tool = create_view_task_details_tool(None, mock_task_service_for_view, conversation_repo)
+            result = await tool.function(task_id=42, include_documents=None)
+
+            assert "[100]" in result
+            assert "[99]" in result
+            assert "task_implementation" in result
+            assert "task_planning" in result

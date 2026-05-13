@@ -137,12 +137,17 @@ def create_list_tasks_tool(
     return Tool(function=list_tasks, name="list_tasks")  # ty:ignore[invalid-argument-type, invalid-return-type]
 
 
-def create_view_task_details_tool(project: Project | None, task_service: TaskService) -> Tool:
+def create_view_task_details_tool(
+    project: Project | None,
+    task_service: TaskService,
+    conversation_repo: ConversationRepository | None = None,
+) -> Tool:
     """Create a tool for viewing detailed information about a specific task.
 
     Args:
         project: The project context for security validation, or None for global (unrestricted) access.
         task_service: Service for task operations.
+        conversation_repo: Optional repository for accessing conversation data.
     """
 
     async def view_task_details(
@@ -220,6 +225,20 @@ def create_view_task_details_tool(project: Project | None, task_service: TaskSer
                     lines.append(f"```markdown\n{summary_content}\n```\n")
                 else:
                     lines.append("*No change summary created yet.*\n")
+
+        # Add Conversations section if conversation_repo is available
+        if conversation_repo is not None:
+            conversations = conversation_repo.get_active_conversations_for_entity(ParentEntityType.TASK, task.id)
+            if conversations:
+                lines.append("\n---\n")
+                lines.append("## Conversations\n")
+                for conv in conversations:
+                    running = get_execution_manager().has_active_execution(conv.id)
+                    last_activity = conv.last_activity_at.isoformat() if conv.last_activity_at else "N/A"
+                    running_status = "running" if running else "inactive"
+                    lines.append(
+                        f"- **[{conv.id}]** {conv.agent_role.value} ({running_status}) — last activity: {last_activity}"
+                    )
 
         return "\n".join(lines)
 

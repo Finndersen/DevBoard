@@ -93,8 +93,8 @@ class TestTaskPlanningRoleWithSpec:
 
         # Should have list_tasks, view_task_details, create_task, investigate_codebase (common),
         # plus view_codebase_details, update_codebase (codebase tools),
-        # plus edit_task (own task), edit for spec, and 6 structured plan tools
-        assert len(tools) == 14
+        # plus edit_task (own task), edit for spec, inspect_conversation, and 6 structured plan tools
+        assert len(tools) == 15
         tool_names = [tool.name for tool in tools]
 
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names
@@ -189,8 +189,8 @@ class TestTaskPlanningRoleWithPlan:
 
         # Should have: list_tasks, view_task_details, create_task, investigate_codebase (common),
         # plus view_codebase_details, update_codebase (codebase tools),
-        # plus edit_task (own task), edit for spec, and 6 structured plan tools
-        assert len(tools) == 14
+        # plus edit_task (own task), edit for spec, inspect_conversation, and 6 structured plan tools
+        assert len(tools) == 15
 
         tool_names = [tool.name for tool in tools]
         assert f"edit_{DocumentType.TASK_SPECIFICATION}" in tool_names

@@ -266,8 +266,10 @@ def create_get_implementation_plan_overview_tool(
         """Get a lightweight overview of the current implementation plan.
 
         Returns all steps with step number, title, type, status, and dependencies.
+        Includes conversation IDs for steps that have been started.
         Use this to check current plan state (e.g. which steps are complete/running/pending)
         since step statuses are not included in the initial context snapshot.
+        Conversation IDs can be used with the inspect_conversation tool to analyse step progress.
         """
         plan = task.implementation_plan_structured
         if not plan:
@@ -279,7 +281,8 @@ def create_get_implementation_plan_overview_tool(
         lines.append("Steps:")
         for step in plan.steps:
             deps = f" (depends on: {', '.join(str(d) for d in step.dependencies)})" if step.dependencies else ""
-            lines.append(f"  {step.step_number}. [{step.status}] {step.title} [{step.type}]{deps}")
+            conv_id = f" conv_id={step.conversation_id}" if step.conversation_id is not None else ""
+            lines.append(f"  {step.step_number}. [{step.status}] {step.title} [{step.type}]{deps}{conv_id}")
 
         return "\n".join(lines)
 

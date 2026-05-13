@@ -82,10 +82,10 @@ class TestBackgroundAgentRole:
         assert "list_tasks" in tool_names
         assert "view_task_details" in tool_names
 
-    def test_get_tools_returns_six_tools(self, background_role):
+    def test_get_tools_returns_seven_tools(self, background_role):
         tools = background_role.get_tools()
 
-        assert len(tools) == 6
+        assert len(tools) == 7
 
     @pytest.mark.asyncio
     async def test_get_context_content_returns_non_empty_string(self, background_role):

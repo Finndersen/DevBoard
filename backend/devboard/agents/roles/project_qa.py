@@ -7,6 +7,7 @@ from devboard.agents.execution.registry import get_execution_manager
 from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import (
     create_document_edit_tool,
+    create_inspect_conversation_tool,
     create_render_html_tool,
     create_set_document_content_tool,
 )
@@ -145,12 +146,14 @@ class ProjectQAAgentRole(AgentRole):
             create_document_edit_tool(self.project.specification, self.document_repository),
             # Task query tools
             create_list_tasks_tool(self.project, self.task_service),
-            create_view_task_details_tool(self.project, self.task_service),
+            create_view_task_details_tool(self.project, self.task_service, self.conversation_repo),
             create_create_task_tool(self.project, self.task_service, self.conversation_repo),
             create_edit_task_tool(self.project, self.task_service, self.document_repository),
             # Task agent coordination tools
             create_send_task_agent_prompt_tool(self.project, self.task_service, self.conversation_repo),
             create_get_task_agent_status_tool(self.project, self.task_service, self.conversation_repo),
+            # Conversation analysis tool
+            create_inspect_conversation_tool(self.conversation_repo),
             # HTML rendering tool
             create_render_html_tool(),
         ]
