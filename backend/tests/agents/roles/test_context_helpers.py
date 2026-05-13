@@ -190,6 +190,19 @@ class TestBuildTaskContext:
         assert "## Task Specification" in result
         assert "## Implementation Plan" in result
 
+    def test_step_execution_role_configuration(self, mock_task: MagicMock):
+        """Test configuration matching StepExecutionAgentRole needs."""
+        result = build_task_context(
+            mock_task,
+            working_dir="/tmp/worktree/test",
+            include_project_specification=False,
+            include_step_outcomes=True,
+        )
+
+        assert "## Project Specification" not in result
+        assert "## Task Specification" in result
+        assert "## Implementation Plan" in result
+
     def test_structured_plan_omits_outcomes_by_default(self, mock_task: MagicMock):
         mock_task.implementation_plan = None
 

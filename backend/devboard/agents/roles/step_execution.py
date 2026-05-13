@@ -64,7 +64,9 @@ class StepExecutionAgentRole(AgentRole):
         return []
 
     async def get_context_content(self) -> str:
-        return build_task_context(self.task, working_dir=self._working_dir, include_step_outcomes=True)
+        return build_task_context(
+            self.task, working_dir=self._working_dir, include_project_specification=False, include_step_outcomes=True
+        )
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

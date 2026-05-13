@@ -202,7 +202,9 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
             Step statuses are excluded from the plan — use get_implementation_plan_overview tool
             to check current step statuses during execution.
         """
-        return build_task_context(self.task, working_dir=self.working_dir, include_step_status=False)
+        return build_task_context(
+            self.task, working_dir=self.working_dir, include_project_specification=False, include_step_status=False
+        )
 
     @property
     def allowed_builtin_tools(self) -> list[str]:
