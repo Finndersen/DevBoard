@@ -14,7 +14,7 @@ from devboard.agents.events import (
     MessageRole,
     TextMessage,
 )
-from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError
+from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError, SubAgentRateLimitError
 from devboard.agents.execution.manager import ConversationExecutionManager
 from devboard.agents.execution.types import ConversationExecution, ExecutionStatus
 
@@ -459,3 +459,197 @@ class TestGetExecution:
 
     def test_get_execution_returns_none_for_unknown(self, manager):
         assert manager.get_execution(999) is None
+
+
+class TestRunSubAgentExecution:
+    """Tests for ConversationExecutionManager.run_sub_agent_execution() rate-limit detection."""
+
+    @pytest.mark.asyncio
+    async def test_raises_rate_limit_error_when_both_conditions_met(self, manager):
+        """Should raise SubAgentRateLimitError when model is <synthetic> and text contains 'You've hit your limit'."""
+        from unittest.mock import MagicMock
+
+        mock_conversation = MagicMock()
+        mock_conversation.id = 42
+        mock_role = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.commit = MagicMock()
+        mock_config_service = MagicMock()
+
+        # Create a text message with model="<synthetic>" and rate-limit text
+        rate_limit_message = TextMessage(
+            event_type="message",
+            role=MessageRole.AGENT,
+            text_content="You've hit your limit · resets 1:20am (Europe/London)",
+            timestamp=datetime.datetime.now(datetime.UTC),
+            model="<synthetic>",
+        )
+
+        mock_exec_service = MagicMock()
+
+        async def mock_stream():
+            yield rate_limit_message
+
+        mock_exec_service.stream_events_for_message_or_approval = MagicMock(return_value=mock_stream())
+
+        with patch("devboard.agents.execution.manager.create_agent_execution_service", return_value=mock_exec_service):
+            with pytest.raises(SubAgentRateLimitError, match="Sub-agent hit rate limit"):
+                await manager.run_sub_agent_execution(
+                    conversation=mock_conversation,
+                    role=mock_role,
+                    prompt="test prompt",
+                    conversation_repo=mock_repo,
+                    agent_config_service=mock_config_service,
+                    working_dir="/tmp",
+                )
+
+    @pytest.mark.asyncio
+    async def test_no_rate_limit_error_with_synthetic_model_but_different_text(self, manager):
+        """Should NOT raise SubAgentRateLimitError when model is <synthetic> but text doesn't mention limit."""
+        from unittest.mock import MagicMock
+
+        mock_conversation = MagicMock()
+        mock_conversation.id = 43
+        mock_role = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.commit = MagicMock()
+        mock_config_service = MagicMock()
+
+        # Create a text message with model="<synthetic>" but normal text
+        normal_message = TextMessage(
+            event_type="message",
+            role=MessageRole.AGENT,
+            text_content="Normal response from synthetic model",
+            timestamp=datetime.datetime.now(datetime.UTC),
+            model="<synthetic>",
+        )
+
+        mock_exec_service = MagicMock()
+
+        async def mock_stream():
+            yield normal_message
+
+        mock_exec_service.stream_events_for_message_or_approval = MagicMock(return_value=mock_stream())
+
+        with patch("devboard.agents.execution.manager.create_agent_execution_service", return_value=mock_exec_service):
+            result = await manager.run_sub_agent_execution(
+                conversation=mock_conversation,
+                role=mock_role,
+                prompt="test prompt",
+                conversation_repo=mock_repo,
+                agent_config_service=mock_config_service,
+                working_dir="/tmp",
+            )
+            assert result.result == "Normal response from synthetic model"
+            assert result.conversation_id == 43
+
+    @pytest.mark.asyncio
+    async def test_no_rate_limit_error_with_limit_text_but_different_model(self, manager):
+        """Should NOT raise SubAgentRateLimitError when text contains 'You've hit your limit' but model is different."""
+        from unittest.mock import MagicMock
+
+        mock_conversation = MagicMock()
+        mock_conversation.id = 44
+        mock_role = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.commit = MagicMock()
+        mock_config_service = MagicMock()
+
+        # Create a text message with limit text but different model
+        message = TextMessage(
+            event_type="message",
+            role=MessageRole.AGENT,
+            text_content="You've hit your limit · resets 1:20am (Europe/London)",
+            timestamp=datetime.datetime.now(datetime.UTC),
+            model="claude-opus",
+        )
+
+        mock_exec_service = MagicMock()
+
+        async def mock_stream():
+            yield message
+
+        mock_exec_service.stream_events_for_message_or_approval = MagicMock(return_value=mock_stream())
+
+        with patch("devboard.agents.execution.manager.create_agent_execution_service", return_value=mock_exec_service):
+            result = await manager.run_sub_agent_execution(
+                conversation=mock_conversation,
+                role=mock_role,
+                prompt="test prompt",
+                conversation_repo=mock_repo,
+                agent_config_service=mock_config_service,
+                working_dir="/tmp",
+            )
+            assert result.result == "You've hit your limit · resets 1:20am (Europe/London)"
+            assert result.conversation_id == 44
+
+    @pytest.mark.asyncio
+    async def test_normal_response_returns_sub_agent_result(self, manager):
+        """Should return SubAgentResult normally when neither condition is met."""
+        from unittest.mock import MagicMock
+
+        mock_conversation = MagicMock()
+        mock_conversation.id = 45
+        mock_role = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.commit = MagicMock()
+        mock_config_service = MagicMock()
+
+        # Create a normal text message
+        normal_message = TextMessage(
+            event_type="message",
+            role=MessageRole.AGENT,
+            text_content="Normal response from real model",
+            timestamp=datetime.datetime.now(datetime.UTC),
+            model="claude-opus",
+        )
+
+        mock_exec_service = MagicMock()
+
+        async def mock_stream():
+            yield normal_message
+
+        mock_exec_service.stream_events_for_message_or_approval = MagicMock(return_value=mock_stream())
+
+        with patch("devboard.agents.execution.manager.create_agent_execution_service", return_value=mock_exec_service):
+            result = await manager.run_sub_agent_execution(
+                conversation=mock_conversation,
+                role=mock_role,
+                prompt="test prompt",
+                conversation_repo=mock_repo,
+                agent_config_service=mock_config_service,
+                working_dir="/tmp",
+            )
+            assert result.result == "Normal response from real model"
+            assert result.conversation_id == 45
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_error_with_empty_stream(self, manager):
+        """Should handle case where stream has no messages (no rate-limit check)."""
+        from unittest.mock import MagicMock
+
+        mock_conversation = MagicMock()
+        mock_conversation.id = 46
+        mock_role = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.commit = MagicMock()
+        mock_config_service = MagicMock()
+
+        mock_exec_service = MagicMock()
+
+        async def mock_stream():
+            yield  # Empty stream, makes this an async generator
+
+        mock_exec_service.stream_events_for_message_or_approval = MagicMock(return_value=mock_stream())
+
+        with patch("devboard.agents.execution.manager.create_agent_execution_service", return_value=mock_exec_service):
+            result = await manager.run_sub_agent_execution(
+                conversation=mock_conversation,
+                role=mock_role,
+                prompt="test prompt",
+                conversation_repo=mock_repo,
+                agent_config_service=mock_config_service,
+                working_dir="/tmp",
+            )
+            assert result.result == ""
+            assert result.conversation_id == 46

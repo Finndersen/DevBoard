@@ -18,7 +18,7 @@ from devboard.agents.events import (
     SystemEventType,
     TextMessage,
 )
-from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError
+from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError, SubAgentRateLimitError
 from devboard.agents.execution.types import ConversationExecution, ExecutionStatus, SubAgentResult
 from devboard.agents.roles.base import AgentRole
 from devboard.api.dependencies.factories import create_agent_execution_service, create_agent_role_for_conversation
@@ -197,6 +197,15 @@ class ConversationExecutionManager:
                         last_text_message = event
                 conversation_repo.commit()
                 result_text = last_text_message.text_content if last_text_message else ""
+
+                # Check for rate-limit responses: both conditions must be met
+                if (
+                    last_text_message is not None
+                    and last_text_message.model == "<synthetic>"
+                    and "You've hit your limit" in result_text
+                ):
+                    raise SubAgentRateLimitError(f"Sub-agent hit rate limit: {result_text}")
+
                 logfire.info(
                     f"Sub-agent execution completed for conversation {conversation_id}",
                     conversation_id=conversation_id,
