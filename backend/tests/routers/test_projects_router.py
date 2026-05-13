@@ -7,6 +7,7 @@ import pytest
 # from devboard.api.dependencies.agents import get_project_agent  # Removed in refactor
 from devboard.agents.engines import AgentEngine
 from devboard.agents.roles import AgentRoleType
+from devboard.agents.title_generator import TaskTitleResult
 from devboard.db.models import CustomFieldType, ParentEntityType
 from devboard.db.models.codebase import Codebase
 from devboard.db.models.document import DocumentType
@@ -627,7 +628,9 @@ class TestProjectTasksRouter:
     ):
         """Test creating a task with initial_message only (generates title, starts agent)."""
         # Mock title generation
-        mock_generate_title.return_value = {"title": "Generated Task Title", "branch_name": "generated-task-title"}
+        mock_generate_title.return_value = TaskTitleResult(
+            title="Generated Task Title", branch_name="generated-task-title"
+        )
 
         # Mock execution manager
         mock_manager = Mock()
@@ -728,7 +731,7 @@ class TestProjectTasksRouter:
     ):
         """Test that task creation handles title generation failures gracefully."""
         # Mock title generation failure by returning a fallback result
-        mock_generate_title.return_value = {"title": "task-1642501234", "branch_name": "task-1642501234"}
+        mock_generate_title.return_value = TaskTitleResult(title="task-1642501234", branch_name="task-1642501234")
 
         # Create test project
         project_repo = ProjectRepository(db_session)

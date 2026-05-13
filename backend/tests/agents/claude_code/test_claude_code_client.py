@@ -10,6 +10,7 @@ from claude_agent_sdk import (
     AssistantMessage,
     ResultMessage,
     TextBlock,
+    ToolUseBlock,
     create_sdk_mcp_server,
 )
 from claude_agent_sdk import (
@@ -347,6 +348,240 @@ class TestClaudeClient:
         # Test with invalid arguments (wrong type) - should raise ValidationError
         with pytest.raises(ValidationError):
             await wrapper({"count": "not a number", "name": "test"})
+
+    def test_effort_parameter_passed_to_options(self):
+        """Test that effort parameter is passed through to ClaudeAgentOptions."""
+        client = ClaudeClient(effort="low", load_settings=False)
+        assert client.options.effort == "low"
+
+        client = ClaudeClient(effort="high", load_settings=False)
+        assert client.options.effort == "high"
+
+        client = ClaudeClient(load_settings=False)
+        assert client.options.effort is None
+
+    @pytest.mark.asyncio
+    async def test_early_termination_on_structured_output_tool(self, mock_sdk_client):
+        """Test that run() returns early when StructuredOutput tool is detected."""
+
+        class SampleOutput(BaseModel):
+            name: str
+            value: int
+
+        # Create AssistantMessage with StructuredOutput tool call
+        tool_block = ToolUseBlock(
+            id="tool-123",
+            name="StructuredOutput",
+            input={"name": "test-output", "value": 42},
+        )
+        assistant_msg = AssistantMessage(
+            content=[tool_block],
+            model="claude-haiku-4",
+            parent_tool_use_id=None,
+        )
+
+        # Create a ResultMessage that would come later (should not be processed)
+        result_msg = ResultMessage(
+            subtype="complete",
+            duration_ms=1000,
+            duration_api_ms=800,
+            is_error=False,
+            num_turns=1,
+            session_id="session-123",
+            result="This should be skipped",
+        )
+        result_msg.structured_output = {"name": "skipped", "value": 0}
+
+        async def mock_receive_response():
+            yield assistant_msg
+            yield result_msg
+
+        mock_sdk_client.receive_response = mock_receive_response
+
+        # Execute query with output_model
+        client = ClaudeClient(output_model=SampleOutput)
+        result = await client.run("Generate output")
+
+        # Verify early termination occurred
+        assert result.structured_output is not None
+        assert isinstance(result.structured_output, SampleOutput)
+        assert result.structured_output.name == "test-output"
+        assert result.structured_output.value == 42
+        assert result.text_content == ""  # Empty since early terminated
+
+    @pytest.mark.asyncio
+    async def test_early_termination_skips_result_message_processing(self, mock_sdk_client):
+        """Test that early termination does not process the ResultMessage."""
+
+        class SampleOutput(BaseModel):
+            data: str
+
+        tool_block = ToolUseBlock(
+            id="tool-456",
+            name="StructuredOutput",
+            input={"data": "early-output"},
+        )
+        assistant_msg = AssistantMessage(
+            content=[tool_block],
+            model="claude-haiku-4",
+            parent_tool_use_id=None,
+        )
+
+        # This ResultMessage should never be used
+        result_msg = ResultMessage(
+            subtype="complete",
+            duration_ms=2000,
+            duration_api_ms=1800,
+            is_error=False,
+            num_turns=2,
+            session_id="different-session",
+            result="Different result text",
+        )
+
+        async def mock_receive_response():
+            yield assistant_msg
+            yield result_msg
+
+        mock_sdk_client.receive_response = mock_receive_response
+
+        client = ClaudeClient(output_model=SampleOutput)
+        result = await client.run("Test early termination")
+
+        # Verify that we got the early output, not the ResultMessage
+        assert result.structured_output is not None
+        assert isinstance(result.structured_output, SampleOutput)
+        assert result.structured_output.data == "early-output"
+        assert result.text_content == ""
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_result_message_on_validation_error(self, mock_sdk_client):
+        """Test that if StructuredOutput validation fails, we fall back to ResultMessage."""
+
+        class SampleOutput(BaseModel):
+            name: str
+            value: int
+
+        # Create invalid StructuredOutput (missing required field)
+        tool_block = ToolUseBlock(
+            id="tool-789",
+            name="StructuredOutput",
+            input={"name": "incomplete"},  # Missing 'value'
+        )
+        assistant_msg = AssistantMessage(
+            content=[tool_block],
+            model="claude-haiku-4",
+            parent_tool_use_id=None,
+        )
+
+        # Fallback ResultMessage with valid structured_output
+        result_msg = ResultMessage(
+            subtype="complete",
+            duration_ms=1000,
+            duration_api_ms=800,
+            is_error=False,
+            num_turns=2,
+            session_id="session-fallback",
+            result="Fallback result",
+        )
+        result_msg.structured_output = {"name": "fallback", "value": 99}
+
+        async def mock_receive_response():
+            yield assistant_msg
+            yield result_msg
+
+        mock_sdk_client.receive_response = mock_receive_response
+
+        client = ClaudeClient(output_model=SampleOutput)
+        result = await client.run("Test fallback")
+
+        # Verify we used the ResultMessage fallback
+        assert result.text_content == "Fallback result"
+        assert result.structured_output is not None
+        assert result.structured_output == SampleOutput(name="fallback", value=99)
+        assert result.session_id == "session-fallback"
+
+    @pytest.mark.asyncio
+    async def test_no_early_termination_without_output_model(self, mock_sdk_client):
+        """Test that StructuredOutput tool does not trigger early termination without output_model."""
+
+        tool_block = ToolUseBlock(
+            id="tool-999",
+            name="StructuredOutput",
+            input={"data": "some-output"},
+        )
+        assistant_msg = AssistantMessage(
+            content=[tool_block],
+            model="claude-haiku-4",
+            parent_tool_use_id=None,
+        )
+
+        result_msg = ResultMessage(
+            subtype="complete",
+            duration_ms=1000,
+            duration_api_ms=800,
+            is_error=False,
+            num_turns=1,
+            session_id="session-no-model",
+            result="Normal result without structured output",
+        )
+
+        async def mock_receive_response():
+            yield assistant_msg
+            yield result_msg
+
+        mock_sdk_client.receive_response = mock_receive_response
+
+        # Run without output_model
+        client = ClaudeClient()
+        result = await client.run("Test without model")
+
+        # Verify normal processing (ResultMessage is used)
+        assert result.text_content == "Normal result without structured output"
+        assert result.structured_output is None
+        assert result.session_id == "session-no-model"
+
+    @pytest.mark.asyncio
+    async def test_ignores_non_structured_output_tools(self, mock_sdk_client):
+        """Test that non-StructuredOutput tool calls don't trigger early termination."""
+
+        class SampleOutput(BaseModel):
+            value: str
+
+        # Tool call with a different name
+        tool_block = ToolUseBlock(
+            id="tool-other",
+            name="SomeOtherTool",
+            input={"value": "should-ignore"},
+        )
+        assistant_msg = AssistantMessage(
+            content=[tool_block],
+            model="claude-haiku-4",
+            parent_tool_use_id=None,
+        )
+
+        result_msg = ResultMessage(
+            subtype="complete",
+            duration_ms=1000,
+            duration_api_ms=800,
+            is_error=False,
+            num_turns=1,
+            session_id="session-other-tool",
+            result="Normal processing",
+        )
+        result_msg.structured_output = {"value": "from-result-message"}
+
+        async def mock_receive_response():
+            yield assistant_msg
+            yield result_msg
+
+        mock_sdk_client.receive_response = mock_receive_response
+
+        client = ClaudeClient(output_model=SampleOutput)
+        result = await client.run("Test other tool")
+
+        # Verify normal processing through ResultMessage
+        assert result.text_content == "Normal processing"
+        assert result.structured_output == SampleOutput(value="from-result-message")
 
 
 class TestAdditionalWriteDirs:

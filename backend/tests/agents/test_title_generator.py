@@ -49,6 +49,7 @@ class TestGenerateTaskTitleAndBranch:
         assert call_args.kwargs["load_settings"] is False
         assert call_args.kwargs["sandbox_enabled"] is False
         assert call_args.kwargs["output_model"] is TaskTitleResult
+        assert call_args.kwargs["effort"] == "low"
         assert call_args.kwargs["cwd"] == str(get_devboard_home())
         mock_client.run.assert_called_once_with(prompt)
 
@@ -140,6 +141,7 @@ class TestGenerateConversationTitle:
         assert call_args.kwargs["load_settings"] is False
         assert call_args.kwargs["sandbox_enabled"] is False
         assert call_args.kwargs["output_model"] is ConversationTitleResult
+        assert call_args.kwargs["effort"] == "low"
         assert call_args.kwargs["cwd"] == str(get_devboard_home())
         mock_client.run.assert_called_once_with(prompt)
 

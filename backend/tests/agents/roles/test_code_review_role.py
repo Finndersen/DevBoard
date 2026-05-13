@@ -43,7 +43,7 @@ class TestCodeReviewAgentRole:
 
         assert prompt == CODE_REVIEW_ROLE_PROMPT
         assert "senior code reviewer" in prompt.lower()
-        assert "READ-ONLY" in prompt
+        assert "Read-Only" in prompt
         assert "Summary" in prompt
         assert "Critical" in prompt
 
@@ -62,10 +62,10 @@ class TestCodeReviewAgentRole:
         assert "read_file" in tool_names
 
     def test_allowed_builtin_tools(self, mock_task):
-        """Test allowed builtin tools includes Bash and read-only tools."""
+        """Test allowed builtin tools includes read-only tools only (no Bash)."""
         role = CodeReviewAgentRole(task=mock_task, working_dir=str(mock_task.codebase.local_path))
 
-        assert role.allowed_builtin_tools == ["Bash", "Skill", "Read", "Grep", "Glob"]
+        assert role.allowed_builtin_tools == ["Skill", "Read", "Grep", "Glob"]
 
     def test_uses_provided_working_dir(self, mock_task, tmp_path):
         """Test that the provided working_dir is used for codebase integration."""

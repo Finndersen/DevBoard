@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from mcp.types import TextContent
 
 from devboard.db.models import MCPServerConfig, MCPTool
 from devboard.mcp.exceptions import MCPToolExecutionError
@@ -128,11 +129,8 @@ class TestMCPToolFactoryErrorHandling:
     @pytest.mark.asyncio
     async def test_tool_wrapper_raises_error_when_is_error_true(self, mock_db_mcp_tool, mock_mcp_tool_response):
         """Test that wrapped tool raises MCPToolExecutionError when isError is True."""
-        mock_text_content = Mock()
-        mock_text_content.text = "Authentication required"
-
         mock_call_result = Mock()
-        mock_call_result.content = [mock_text_content]
+        mock_call_result.content = [TextContent(type="text", text="Authentication required")]
         mock_call_result.isError = True
 
         mock_session = AsyncMock()
@@ -178,11 +176,8 @@ class TestMCPToolFactoryErrorHandling:
     @pytest.mark.asyncio
     async def test_tool_wrapper_returns_result_when_not_error(self, mock_db_mcp_tool, mock_mcp_tool_response):
         """Test that wrapped tool returns content when isError is False."""
-        mock_text_content = Mock()
-        mock_text_content.text = "Success result"
-
         mock_call_result = Mock()
-        mock_call_result.content = [mock_text_content]
+        mock_call_result.content = [TextContent(type="text", text="Success result")]
         mock_call_result.isError = False
 
         mock_session = AsyncMock()
@@ -204,13 +199,11 @@ class TestMCPToolFactoryErrorHandling:
     @pytest.mark.asyncio
     async def test_tool_wrapper_joins_multiple_text_parts_in_error(self, mock_db_mcp_tool, mock_mcp_tool_response):
         """Test that multiple text parts are joined in error message."""
-        mock_text1 = Mock()
-        mock_text1.text = "Error line 1"
-        mock_text2 = Mock()
-        mock_text2.text = "Error line 2"
-
         mock_call_result = Mock()
-        mock_call_result.content = [mock_text1, mock_text2]
+        mock_call_result.content = [
+            TextContent(type="text", text="Error line 1"),
+            TextContent(type="text", text="Error line 2"),
+        ]
         mock_call_result.isError = True
 
         mock_session = AsyncMock()

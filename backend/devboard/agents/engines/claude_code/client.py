@@ -5,21 +5,23 @@ import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 import logfire
 from claude_agent_sdk import (
+    AssistantMessage,
     ClaudeAgentOptions,
     ClaudeSDKClient,
     Message,
     ResultMessage,
     SdkMcpTool,
+    ToolUseBlock,
     create_sdk_mcp_server,
     tool,
 )
 from claude_agent_sdk.types import McpSdkServerConfig, SandboxSettings, SystemPromptPreset
 from mcp.types import ToolAnnotations
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from pydantic_ai import Tool
 
 from .utils import BUILTIN_TOOLS_MCP_NAME, describe_message, get_message_content_details, load_env_from_settings
@@ -105,6 +107,7 @@ class ClaudeClient:
         sandbox_enabled: bool = True,
         additional_write_dirs: list[str] | None = None,
         output_model: type[BaseModel] | None = None,
+        effort: Literal["low", "medium", "high", "max"] | None = None,
     ):
         """Initialize Claude Code client.
 
@@ -122,6 +125,7 @@ class ClaudeClient:
             output_model: Optional Pydantic model class for structured output. The JSON schema is derived
                 from the model and used to request structured output from Claude. The response is validated
                 and parsed into an instance of this model, available as ClaudeCodeResult.structured_output.
+            effort: Optional effort level for thinking ("low", "medium", "high", "max")
         """
         self._output_model = output_model
         self.session_id = session_id
@@ -181,6 +185,7 @@ class ClaudeClient:
             stderr=lambda line: logfire.warning("Claude CLI stderr: {line}", line=line),
             sandbox=SandboxSettings(enabled=True, allowUnsandboxedCommands=False) if sandbox_enabled else None,  # type: ignore[misc]
             output_format=output_format,
+            effort=effort,
         )
 
     def _build_system_prompt(
@@ -291,6 +296,11 @@ class ClaudeClient:
         This method waits for the complete response and returns a consolidated
         result containing the final text content and metadata.
 
+        When output_model is set, this method detects the StructuredOutput tool call
+        in the streamed AssistantMessage, extracts and validates the output early,
+        and returns immediately (breaking the stream), skipping the redundant second
+        model turn.
+
         Args:
             user_query: The user's query/prompt to send to Claude Code
 
@@ -299,10 +309,46 @@ class ClaudeClient:
             and session ID for resuming
         """
         result_message = None
+        interrupt_event = asyncio.Event()
 
         # Collect all messages. The stream automatically terminates after ResultMessage.
-        async for message in self.stream(user_query):
-            # There may be intermediate AssistantMessages before the final ResultMessage that wont be captured
+        async for message in self.stream(user_query, interrupt_event=interrupt_event):
+            # Check for early termination on StructuredOutput tool call
+            if self._output_model is not None and isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, ToolUseBlock) and block.name == "StructuredOutput":
+                        # Extract and validate structured output from the tool call
+                        try:
+                            parsed_output = self._output_model.model_validate(block.input)
+                            logfire.info(
+                                "Early termination: StructuredOutput tool detected and validated",
+                                output_model=self._output_model.__name__,
+                            )
+                            # Interrupt the subprocess before returning so it doesn't continue
+                            # processing the second model turn unnecessarily.
+                            interrupt_event.set()
+                            return ClaudeCodeResult(
+                                text_content="",
+                                result_message=result_message
+                                or ResultMessage(
+                                    subtype="complete",
+                                    duration_ms=0,
+                                    duration_api_ms=0,
+                                    is_error=False,
+                                    num_turns=0,
+                                    session_id=self.session_id or "",
+                                ),
+                                session_id=self.session_id or "",
+                                structured_output=parsed_output,
+                            )
+                        except (ValidationError, TypeError, KeyError) as e:
+                            logfire.error(
+                                "Failed to validate StructuredOutput tool input, falling through to ResultMessage extraction",
+                                error=str(e),
+                                output_model=self._output_model.__name__,
+                            )
+                            # Fall through to existing ResultMessage logic
+
             if isinstance(message, ResultMessage):
                 result_message = message
                 # Continue to let iterator finish naturally and ensure cleanup

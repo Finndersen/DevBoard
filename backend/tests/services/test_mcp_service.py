@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from mcp.types import TextContent
 
 from devboard.api.schemas.mcp import MCPServerDetailResponse, MCPToolUpdate, OAuthStatusResponse
 from devboard.api.schemas.oauth import MCPServerConfigCreate, MCPServerConfigUpdate
@@ -541,11 +542,8 @@ class TestMCPServiceRunTool:
         mock_repository.get_by_id.return_value = sample_stdio_config
         mock_repository.get_tool_by_id.return_value = sample_mcp_tool
 
-        mock_text_content = Mock()
-        mock_text_content.text = "Tool result text"
-
         mock_call_result = Mock()
-        mock_call_result.content = [mock_text_content]
+        mock_call_result.content = [TextContent(type="text", text="Tool result text")]
         mock_call_result.isError = False
 
         mock_session = AsyncMock()
@@ -570,13 +568,11 @@ class TestMCPServiceRunTool:
         mock_repository.get_by_id.return_value = sample_stdio_config
         mock_repository.get_tool_by_id.return_value = sample_mcp_tool
 
-        mock_text_content1 = Mock()
-        mock_text_content1.text = "Part 1"
-        mock_text_content2 = Mock()
-        mock_text_content2.text = "Part 2"
-
         mock_call_result = Mock()
-        mock_call_result.content = [mock_text_content1, mock_text_content2]
+        mock_call_result.content = [
+            TextContent(type="text", text="Part 1"),
+            TextContent(type="text", text="Part 2"),
+        ]
         mock_call_result.isError = False
 
         mock_session = AsyncMock()
@@ -658,11 +654,10 @@ class TestMCPServiceRunTool:
         mock_repository.get_by_id.return_value = sample_stdio_config
         mock_repository.get_tool_by_id.return_value = sample_mcp_tool
 
-        mock_text_content = Mock()
-        mock_text_content.text = "Client must be authenticated to access this resource"
-
         mock_call_result = Mock()
-        mock_call_result.content = [mock_text_content]
+        mock_call_result.content = [
+            TextContent(type="text", text="Client must be authenticated to access this resource")
+        ]
         mock_call_result.isError = True
 
         mock_session = AsyncMock()
@@ -709,11 +704,8 @@ class TestMCPServiceRunTool:
         mock_repository.get_by_id.return_value = sample_stdio_config
         mock_repository.get_tool_by_id.return_value = sample_mcp_tool
 
-        mock_text_content = Mock()
-        mock_text_content.text = "Success result"
-
         mock_call_result = Mock()
-        mock_call_result.content = [mock_text_content]
+        mock_call_result.content = [TextContent(type="text", text="Success result")]
         mock_call_result.isError = False
 
         mock_session = AsyncMock()

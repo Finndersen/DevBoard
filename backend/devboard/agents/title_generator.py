@@ -61,7 +61,7 @@ Guidelines:
 - Focus on the main action/outcome, not implementation details
 - Keep both short but informative
 
-You must respond with valid JSON only."""
+Respond immediately using the structured output tool. Do not include any other text in your response."""
 
     try:
         client = ClaudeClient(
@@ -71,6 +71,7 @@ You must respond with valid JSON only."""
             load_settings=False,
             sandbox_enabled=False,
             output_model=TaskTitleResult,
+            effort="low",
         )
 
         result = await client.run(prompt)
@@ -119,7 +120,7 @@ Guidelines:
 - Use title case
 - Make it specific enough to distinguish from other conversations
 
-You must respond with valid JSON only."""
+Respond immediately using the structured output tool. Do not include any other text in your response."""
 
     try:
         client = ClaudeClient(
@@ -129,6 +130,7 @@ You must respond with valid JSON only."""
             load_settings=False,
             sandbox_enabled=False,
             output_model=ConversationTitleResult,
+            effort="low",
         )
 
         result = await client.run(prompt)
