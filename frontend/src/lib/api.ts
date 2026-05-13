@@ -824,6 +824,17 @@ export interface SessionSearchResult {
   text_snippet: string | null
 }
 
+// MCP Server types
+export type McpServerStatus = 'connected' | 'needs_auth' | 'failed'
+export type McpServerType = 'remote' | 'local'
+
+export interface McpServer {
+  name: string
+  url_or_command: string
+  status: McpServerStatus
+  type: McpServerType
+}
+
 // GitHub PR Status types
 export interface OpenPRItem {
   pr_number: number
@@ -1572,6 +1583,10 @@ export class ApiClient {
       params.set('project_path', projectPath)
     }
     return this.request<SessionSearchResult[]>(`/api/claude-code/sessions/search?${params.toString()}`)
+  }
+
+  async getClaudeCodeMcpServers(): Promise<McpServer[]> {
+    return this.request<McpServer[]>('/api/claude-code/mcp-servers')
   }
 
   // GitHub PR Status

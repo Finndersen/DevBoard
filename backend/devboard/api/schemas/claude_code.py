@@ -1,8 +1,33 @@
 """API schemas for the Claude Code session viewer endpoints."""
 
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel
+
+
+class McpServerStatus(StrEnum):
+    """MCP server connection status."""
+
+    connected = "connected"
+    needs_auth = "needs_auth"
+    failed = "failed"
+
+
+class McpServerType(StrEnum):
+    """MCP server type."""
+
+    remote = "remote"
+    local = "local"
+
+
+class McpServerResponse(BaseModel):
+    """Response model for MCP server status."""
+
+    name: str
+    url_or_command: str
+    status: McpServerStatus
+    type: McpServerType
 
 
 class ClaudeCodeProjectResponse(BaseModel):

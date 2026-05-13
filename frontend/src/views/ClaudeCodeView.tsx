@@ -1,16 +1,18 @@
 import { useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { CommandLineIcon, QueueListIcon } from '@heroicons/react/24/outline'
+import { CommandLineIcon, QueueListIcon, ServerStackIcon } from '@heroicons/react/24/outline'
 import type { ForwardRefExoticComponent, SVGProps, RefAttributes } from 'react'
 import SessionsTab from '../components/claude-code/SessionsTab'
+import McpServersTab from '../components/claude-code/McpServersTab'
 import ViewHeader from '../components/layout/ViewHeader'
 
-type ClaudeCodeTab = 'session-viewer'
+type ClaudeCodeTab = 'session-viewer' | 'mcp-servers'
 
-const VALID_TABS: ClaudeCodeTab[] = ['session-viewer']
+const VALID_TABS: ClaudeCodeTab[] = ['session-viewer', 'mcp-servers']
 
 const TAB_CONFIG: Record<ClaudeCodeTab, { label: string; icon: ForwardRefExoticComponent<SVGProps<SVGSVGElement> & RefAttributes<SVGSVGElement>> }> = {
   'session-viewer': { label: 'Session Viewer', icon: QueueListIcon },
+  'mcp-servers': { label: 'MCP Servers', icon: ServerStackIcon },
 }
 
 export default function ClaudeCodeView() {
@@ -51,6 +53,7 @@ export default function ClaudeCodeView() {
       </div>
       <div className="flex-1 overflow-hidden">
         {activeTab === 'session-viewer' && <SessionsTab />}
+        {activeTab === 'mcp-servers' && <McpServersTab />}
       </div>
     </div>
   )

@@ -1,5 +1,6 @@
 """Claude Code session viewer API endpoints."""
 
+import logfire
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from devboard.agents.engines.claude_code.session.manager import ClaudeSessionManager
@@ -8,6 +9,9 @@ from devboard.api.dependencies.repositories import get_claude_project_cache_repo
 from devboard.api.schemas.claude_code import (
     ClaudeCodeProjectResponse,
     ClaudeCodeSessionResponse,
+    McpServerResponse,
+    McpServerStatus,
+    McpServerType,
     SessionLocateResponse,
     SessionSearchResultResponse,
     SessionTaskInfoResponse,
@@ -15,8 +19,73 @@ from devboard.api.schemas.claude_code import (
 )
 from devboard.db.repositories.claude_project import ClaudeProjectCacheRepository
 from devboard.db.repositories.conversation import ConversationRepository
+from devboard.integrations.shell import ShellCommandError, execute_shell_command
 
 router = APIRouter()
+
+
+def _parse_mcp_servers(output: str) -> list[McpServerResponse]:
+    """Parse `claude mcp list` output into structured server data.
+
+    Args:
+        output: Raw output from `claude mcp list` command
+
+    Returns:
+        List of parsed MCP server responses
+
+    Raises:
+        ValueError: If output format is invalid
+    """
+    servers: list[McpServerResponse] = []
+
+    for line in output.strip().split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+
+        # Split on first ": " to get name and remainder
+        if ": " not in line:
+            continue
+
+        name, remainder = line.split(": ", 1)
+
+        # Split on last " - " to get url_or_command and status
+        if " - " not in remainder:
+            continue
+
+        # Find the last occurrence of " - "
+        last_dash_idx = remainder.rfind(" - ")
+        url_or_command = remainder[:last_dash_idx]
+        status_text = remainder[last_dash_idx + 3 :]  # Skip " - "
+
+        # Map status text to enum
+        if "Connected" in status_text:
+            status = McpServerStatus.connected
+        elif "Needs authentication" in status_text:
+            status = McpServerStatus.needs_auth
+        elif "Failed" in status_text:
+            status = McpServerStatus.failed
+        else:
+            logfire.warning("Unknown MCP server status in output", status_text=status_text, line=line)
+            continue
+
+        # Detect type: remote if URL, local if command
+        server_type = (
+            McpServerType.remote
+            if url_or_command.startswith("http://") or url_or_command.startswith("https://")
+            else McpServerType.local
+        )
+
+        servers.append(
+            McpServerResponse(
+                name=name,
+                url_or_command=url_or_command,
+                status=status,
+                type=server_type,
+            )
+        )
+
+    return servers
 
 
 def _get_manager(
@@ -125,3 +194,30 @@ async def search_sessions(
     """Search session JSONL files using ripgrep."""
     results = await manager.search_sessions(query, project_path)
     return [SessionSearchResultResponse.model_validate(r.__dict__) for r in results]
+
+
+@router.get("/mcp-servers", response_model=list[McpServerResponse])
+async def get_mcp_servers() -> list[McpServerResponse]:
+    """Get status of configured MCP servers.
+
+    Executes `claude mcp list` command and parses the output to return
+    structured MCP server status information.
+
+    Returns:
+        List of MCP server status responses
+
+    Raises:
+        HTTPException: 502 if claude CLI is not found or command fails
+    """
+    try:
+        result = await execute_shell_command(["claude", "mcp", "list"], raise_on_error=False)
+    except ShellCommandError as e:
+        raise HTTPException(status_code=502, detail=f"Failed to list MCP servers: {str(e)}") from e
+
+    if not result.success:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to list MCP servers: {result.stderr or 'Unknown error'}",
+        )
+
+    return _parse_mcp_servers(result.stdout)
