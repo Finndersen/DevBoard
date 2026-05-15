@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -172,3 +172,275 @@ class TestCodebasesRouter:
         response = client.delete(f"/api/codebases/{created_codebase.id}")
         assert response.status_code == 200
         assert response.json()["message"] == "Codebase deleted successfully"
+
+
+class TestCloneCodebase:
+    """Tests for POST /api/codebases/clone."""
+
+    @pytest.fixture
+    def mock_clone_git(self):
+        """Mock GitRepoIntegration.clone_repo returning a valid git instance."""
+        with patch("devboard.api.routers.codebases.GitRepoIntegration") as mock_cls:
+            mock_instance = Mock()
+            mock_instance.detect_git_remote_url = AsyncMock(return_value="https://github.com/org/my-repo.git")
+            mock_instance.get_default_branch = AsyncMock(return_value="main")
+            mock_cls.clone_repo = AsyncMock(return_value=mock_instance)
+            yield mock_cls, mock_instance
+
+    def test_clone_codebase_success(self, client, temp_dir, mock_clone_git):
+        """Test successful clone registers the codebase with auto-detected values."""
+        data = {
+            "repository_url": "https://github.com/org/my-repo.git",
+            "parent_directory": temp_dir,
+        }
+        response = client.post("/api/codebases/clone", json=data)
+        assert response.status_code == 200
+        result = response.json()
+        assert result["name"] == "my-repo"
+        assert result["repository_url"] == "https://github.com/org/my-repo.git"
+        assert result["branch_handling"] == "github_pr"
+        assert result["default_branch"] == "main"
+        assert "id" in result
+
+    def test_clone_codebase_name_auto_derived_from_url(self, client, temp_dir, mock_clone_git):
+        """Name is derived from the last URL segment, stripping .git."""
+        mock_cls, _ = mock_clone_git
+        data = {
+            "repository_url": "https://github.com/org/some-project.git",
+            "parent_directory": temp_dir,
+        }
+        response = client.post("/api/codebases/clone", json=data)
+        assert response.status_code == 200
+        call_args = mock_cls.clone_repo.call_args[0]
+        assert call_args[1].name == "some-project"
+
+    def test_clone_codebase_explicit_name_overrides_url(self, client, temp_dir, mock_clone_git):
+        """Explicit name field takes precedence over auto-derived name."""
+        data = {
+            "repository_url": "https://github.com/org/my-repo.git",
+            "parent_directory": temp_dir,
+            "name": "custom-name",
+        }
+        response = client.post("/api/codebases/clone", json=data)
+        assert response.status_code == 200
+        assert response.json()["name"] == "custom-name"
+
+    def test_clone_codebase_creates_main_repo_slot(self, client, db_session, temp_dir, mock_clone_git):
+        """Clone endpoint should bootstrap a main worktree slot."""
+        data = {
+            "repository_url": "https://github.com/org/my-repo.git",
+            "parent_directory": temp_dir,
+        }
+        response = client.post("/api/codebases/clone", json=data)
+        assert response.status_code == 200
+        codebase_id = response.json()["id"]
+
+        worktree_slot_repo = WorktreeSlotRepository(db_session)
+        slots = worktree_slot_repo.get_by_codebase(codebase_id, include_main=True)
+        assert len(slots) == 1
+        assert slots[0].is_main_repo is True
+        assert slots[0].codebase_id == codebase_id
+
+    def test_clone_codebase_parent_not_exist(self, client):
+        """Return 400 when the parent directory does not exist."""
+        data = {
+            "repository_url": "https://github.com/org/my-repo.git",
+            "parent_directory": "/nonexistent/path",
+        }
+        response = client.post("/api/codebases/clone", json=data)
+        assert response.status_code == 400
+        assert "Parent directory does not exist" in response.json()["detail"]
+
+    def test_clone_codebase_target_exists(self, client, temp_dir, mock_clone_git):
+        """Return 400 when the target directory already exists."""
+        target = Path(temp_dir) / "my-repo"
+        target.mkdir()
+
+        data = {
+            "repository_url": "https://github.com/org/my-repo.git",
+            "parent_directory": temp_dir,
+        }
+        response = client.post("/api/codebases/clone", json=data)
+        assert response.status_code == 400
+        assert "Target directory already exists" in response.json()["detail"]
+
+    def test_clone_name_derived_from_url_variants(self, client, temp_dir, mock_clone_git):
+        """Name auto-derivation handles HTTPS, no-suffix, and SSH-style URLs."""
+        mock_cls, _ = mock_clone_git
+        for url, expected_name in [
+            ("https://github.com/org/my-repo.git", "my-repo"),
+            ("https://github.com/org/no-suffix", "no-suffix"),
+            ("git@github.com:org/ssh-repo.git", "ssh-repo"),
+        ]:
+            payload = {"repository_url": url, "parent_directory": temp_dir}
+            response = client.post("/api/codebases/clone", json=payload)
+            assert response.status_code == 200
+            assert response.json()["name"] == expected_name
+
+    def test_clone_git_failure_returns_400(self, client, temp_dir):
+        """A git clone failure surfaces as a 400, not a 500."""
+        from devboard.integrations.shell import ShellCommandExecutionError
+
+        with patch("devboard.api.routers.codebases.GitRepoIntegration") as mock_cls:
+            mock_cls.clone_repo = AsyncMock(side_effect=ShellCommandExecutionError("clone failed"))
+
+            payload = {
+                "repository_url": "https://github.com/org/bad-repo.git",
+                "parent_directory": temp_dir,
+            }
+            response = client.post("/api/codebases/clone", json=payload)
+            assert response.status_code == 400
+            assert "Git clone failed" in response.json()["detail"]
+
+    def test_clone_git_failure_cleans_up_directory(self, client, temp_dir):
+        """Orphaned directory is removed when clone fails after partial creation."""
+        from devboard.integrations.shell import ShellCommandExecutionError
+
+        target = Path(temp_dir) / "bad-repo"
+
+        async def clone_and_create(url, path):
+            Path(path).mkdir(parents=True, exist_ok=True)
+            raise ShellCommandExecutionError("clone failed")
+
+        with patch("devboard.api.routers.codebases.GitRepoIntegration") as mock_cls:
+            mock_cls.clone_repo = AsyncMock(side_effect=clone_and_create)
+            payload = {
+                "repository_url": "https://github.com/org/bad-repo.git",
+                "parent_directory": temp_dir,
+            }
+            client.post("/api/codebases/clone", json=payload)
+
+        assert not target.exists()
+
+
+class TestInitCodebase:
+    """Tests for POST /api/codebases/init."""
+
+    @pytest.fixture
+    def mock_init_git(self):
+        """Mock GitRepoIntegration.init_repo; creates the directory as the real impl would."""
+        with patch("devboard.api.routers.codebases.GitRepoIntegration") as mock_cls:
+            mock_instance = Mock()
+            mock_instance.detect_git_remote_url = AsyncMock(return_value=None)
+            mock_instance.get_default_branch = AsyncMock(return_value="main")
+            mock_instance.add_and_commit = AsyncMock(return_value=None)
+            mock_instance.write_initial_project_files = Mock(return_value=None)
+
+            async def fake_init_repo(path: Path) -> Mock:
+                path.mkdir(parents=True, exist_ok=True)
+                return mock_instance
+
+            mock_cls.init_repo = fake_init_repo
+            yield mock_cls, mock_instance
+
+    def test_init_codebase_success(self, client, temp_dir, mock_init_git):
+        """Test successful init creates codebase with direct_merge branch handling."""
+        _, mock_instance = mock_init_git
+        data = {
+            "name": "MyProject",
+            "parent_directory": temp_dir,
+            "description": "A new project",
+        }
+        response = client.post("/api/codebases/init", json=data)
+        assert response.status_code == 200
+        result = response.json()
+        assert result["name"] == "MyProject"
+        assert result["description"] == "A new project"
+        assert result["branch_handling"] == "direct_merge"
+        assert result["repository_url"] is None
+        assert "id" in result
+        mock_instance.add_and_commit.assert_called_once_with("Initial commit")
+
+    def test_init_codebase_calls_write_initial_project_files(self, client, temp_dir, mock_init_git):
+        """Init endpoint delegates file creation to write_initial_project_files."""
+        _, mock_instance = mock_init_git
+        data = {
+            "name": "MyProject",
+            "parent_directory": temp_dir,
+            "description": "My description",
+        }
+        response = client.post("/api/codebases/init", json=data)
+        assert response.status_code == 200
+        mock_instance.write_initial_project_files.assert_called_once_with("MyProject", "My description")
+
+    def test_init_codebase_write_initial_project_files_no_description(self, client, temp_dir, mock_init_git):
+        """write_initial_project_files is called with None when no description is given."""
+        _, mock_instance = mock_init_git
+        data = {
+            "name": "MyProject",
+            "parent_directory": temp_dir,
+        }
+        response = client.post("/api/codebases/init", json=data)
+        assert response.status_code == 200
+        mock_instance.write_initial_project_files.assert_called_once_with("MyProject", None)
+
+    def test_init_codebase_creates_main_repo_slot(self, client, db_session, temp_dir, mock_init_git):
+        """Init endpoint should bootstrap a main worktree slot."""
+        data = {
+            "name": "MyProject",
+            "parent_directory": temp_dir,
+        }
+        response = client.post("/api/codebases/init", json=data)
+        assert response.status_code == 200
+        codebase_id = response.json()["id"]
+
+        worktree_slot_repo = WorktreeSlotRepository(db_session)
+        slots = worktree_slot_repo.get_by_codebase(codebase_id, include_main=True)
+        assert len(slots) == 1
+        assert slots[0].is_main_repo is True
+        assert slots[0].codebase_id == codebase_id
+
+    def test_init_codebase_parent_not_exist(self, client):
+        """Return 400 when the parent directory does not exist."""
+        data = {
+            "name": "MyProject",
+            "parent_directory": "/nonexistent/path",
+        }
+        response = client.post("/api/codebases/init", json=data)
+        assert response.status_code == 400
+        assert "Parent directory does not exist" in response.json()["detail"]
+
+    def test_init_codebase_target_exists(self, client, temp_dir, mock_init_git):
+        """Return 400 when the target directory already exists."""
+        target = Path(temp_dir) / "MyProject"
+        target.mkdir()
+
+        data = {
+            "name": "MyProject",
+            "parent_directory": temp_dir,
+        }
+        response = client.post("/api/codebases/init", json=data)
+        assert response.status_code == 400
+        assert "Target directory already exists" in response.json()["detail"]
+
+    def test_init_git_failure_returns_400(self, client, temp_dir):
+        """A git failure during init surfaces as a 400, not a 500."""
+        from devboard.integrations.shell import ShellCommandExecutionError
+
+        with patch("devboard.api.routers.codebases.GitRepoIntegration") as mock_cls:
+            mock_cls.init_repo = AsyncMock(side_effect=ShellCommandExecutionError("init failed"))
+            payload = {"name": "MyProject", "parent_directory": temp_dir}
+            response = client.post("/api/codebases/init", json=payload)
+            assert response.status_code == 400
+            assert "Git operation failed" in response.json()["detail"]
+
+    def test_init_git_failure_cleans_up_directory(self, client, temp_dir):
+        """Orphaned directory is removed when git commit fails after init."""
+        from devboard.integrations.shell import ShellCommandExecutionError
+
+        target = Path(temp_dir) / "MyProject"
+
+        with patch("devboard.api.routers.codebases.GitRepoIntegration") as mock_cls:
+            mock_instance = Mock()
+            mock_instance.write_initial_project_files = Mock(return_value=None)
+            mock_instance.add_and_commit = AsyncMock(side_effect=ShellCommandExecutionError("commit failed"))
+
+            async def fake_init(path):
+                Path(path).mkdir(parents=True, exist_ok=True)
+                return mock_instance
+
+            mock_cls.init_repo = AsyncMock(side_effect=fake_init)
+            payload = {"name": "MyProject", "parent_directory": temp_dir}
+            client.post("/api/codebases/init", json=payload)
+
+        assert not target.exists()

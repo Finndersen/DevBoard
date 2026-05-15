@@ -8,7 +8,10 @@ from .agents import (
 )
 from .codebase import (
     CodebaseBase,
+    CodebaseClone,
+    CodebaseCommonOptions,
     CodebaseCreate,
+    CodebaseInit,
     CodebaseResponse,
     CodebaseUpdate,
 )
@@ -101,7 +104,10 @@ __all__ = [
     "UpdateAgentConfigurationRequestFull",
     # Codebase
     "CodebaseBase",
+    "CodebaseClone",
+    "CodebaseCommonOptions",
     "CodebaseCreate",
+    "CodebaseInit",
     "CodebaseResponse",
     "CodebaseUpdate",
     # Common

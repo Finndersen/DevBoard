@@ -17,6 +17,22 @@ from .types import (
     WorktreeInfo,
 )
 
+GITIGNORE_CONTENT = """\
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+"""
+
 # Environment variables to prevent git from prompting for input
 GIT_ENV = {
     "GIT_EDITOR": "true",  # Prevents editor prompts (e.g., during rebase --continue)
@@ -899,3 +915,62 @@ class GitRepoIntegration:
                 raise RebaseConflictError(f"Rebase onto {onto} encountered conflicts") from e
             raise
         return await self.run_git_command(["rev-parse", "HEAD"])
+
+    @classmethod
+    async def clone_repo(cls, url: str, target_path: str | Path) -> "GitRepoIntegration":
+        """Clone a remote repository to target_path and return a GitRepoIntegration instance.
+
+        Raises ShellCommandExecutionError on failure (e.g., invalid URL, network error, target exists).
+        """
+        target_path = Path(target_path)
+        await execute_shell_command(
+            ["git", "clone", url, str(target_path)],
+            timeout=300.0,
+            raise_on_error=True,
+            env=GIT_ENV,
+        )
+        logfire.info("Cloned repository", url=url, target_path=str(target_path))
+        return cls(target_path)
+
+    @classmethod
+    async def init_repo(cls, path: str | Path) -> "GitRepoIntegration":
+        """Initialize a new git repository at path (creating the directory if needed).
+
+        Raises ShellCommandExecutionError on failure.
+        """
+        path = Path(path)
+        path.mkdir(parents=True, exist_ok=True)
+
+        await execute_shell_command(
+            ["git", "init"],
+            working_dir=path,
+            timeout=30.0,
+            raise_on_error=True,
+            env=GIT_ENV,
+        )
+
+        instance = cls(path)
+        # Configure local user identity so commits work without a global git config
+        await instance.run_git_command(["config", "user.email", "devboard@local"])
+        await instance.run_git_command(["config", "user.name", "DevBoard"])
+        logfire.info("Initialized git repository", path=str(path))
+        return instance
+
+    async def add_and_commit(self, message: str) -> None:
+        """Stage all changes and commit with the given message.
+
+        Raises ShellCommandExecutionError on failure.
+        """
+        await self.run_git_command(["add", "-A"])
+        await self.run_git_command(["commit", "-m", message])
+        logfire.info("Committed changes", path=str(self._repo_path), message=message)
+
+    def write_initial_project_files(self, name: str, description: str | None) -> None:
+        """Write .gitignore and README.md for a newly initialised project."""
+        (self._repo_path / ".gitignore").write_text(GITIGNORE_CONTENT)
+        readme_lines = [f"# {name}"]
+        if description:
+            readme_lines.append("")
+            readme_lines.append(description)
+        readme_lines.append("")
+        (self._repo_path / "README.md").write_text("\n".join(readme_lines))

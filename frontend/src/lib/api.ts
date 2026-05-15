@@ -395,6 +395,31 @@ export interface CodebaseCreate {
   developer_context?: string | null
 }
 
+export interface CodebaseClone {
+  repository_url: string
+  parent_directory: string
+  name?: string | null
+  description?: string | null
+  default_branch?: string | null
+  merge_method?: MergeMethod | null
+  branch_handling?: BranchHandling | null
+  max_worktrees?: number | null
+  setup_command?: string | null
+  developer_context?: string | null
+}
+
+export interface CodebaseInit {
+  name: string
+  parent_directory: string
+  description?: string | null
+  default_branch?: string | null
+  merge_method?: MergeMethod | null
+  branch_handling?: BranchHandling | null
+  max_worktrees?: number | null
+  setup_command?: string | null
+  developer_context?: string | null
+}
+
 // Git and Worktree Management
 export interface TaskGitStatus {
   branch_name: string
@@ -1391,6 +1416,20 @@ export class ApiClient {
     return this.request<Codebase>('/api/codebases', {
       method: 'POST',
       body: JSON.stringify(codebase),
+    })
+  }
+
+  async cloneCodebase(data: CodebaseClone): Promise<Codebase> {
+    return this.request<Codebase>('/api/codebases/clone', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async initCodebase(data: CodebaseInit): Promise<Codebase> {
+    return this.request<Codebase>('/api/codebases/init', {
+      method: 'POST',
+      body: JSON.stringify(data),
     })
   }
 

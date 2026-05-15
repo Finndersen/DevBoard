@@ -1,5 +1,6 @@
 """Codebase API endpoints."""
 
+import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,7 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from devboard.api.dependencies.entities import get_verified_codebase
 from devboard.api.dependencies.repositories import get_codebase_repository, get_worktree_slot_repository
 from devboard.api.schemas import (
+    CodebaseClone,
+    CodebaseCommonOptions,
     CodebaseCreate,
+    CodebaseInit,
     CodebaseResponse,
     CodebaseUpdate,
     DeleteResponse,
@@ -16,8 +20,73 @@ from devboard.db.models import BranchHandling, Codebase, MergeMethod
 from devboard.db.repositories import CodebaseRepository
 from devboard.db.repositories.worktree_slot import WorktreeSlotRepository
 from devboard.integrations.git import GitRepoIntegration
+from devboard.integrations.shell import ShellCommandExecutionError
 
 router = APIRouter()
+
+
+async def _finalize_codebase_creation(
+    *,
+    local_path: str,
+    name: str,
+    options: CodebaseCommonOptions,
+    validate_commits: bool = True,
+    git: GitRepoIntegration,
+    codebase_repo: CodebaseRepository,
+    worktree_slot_repo: WorktreeSlotRepository,
+) -> Codebase:
+    """Shared post-creation logic: detect remote, validate, resolve defaults, persist."""
+    repository_url = await git.detect_git_remote_url()
+
+    if validate_commits and not await git.has_commits():
+        raise HTTPException(
+            status_code=400,
+            detail="Repository has no commits. Please make at least one commit before adding as a codebase.",
+        )
+
+    default_branch = options.default_branch or await git.get_default_branch()
+    merge_method = options.merge_method or MergeMethod.SQUASH
+    branch_handling = options.branch_handling or (
+        BranchHandling.GITHUB_PR if repository_url else BranchHandling.DIRECT_MERGE
+    )
+
+    if branch_handling == BranchHandling.GITHUB_PR and not repository_url:
+        raise HTTPException(
+            status_code=400,
+            detail="GitHub PR branch handling requires a repository with a remote URL configured",
+        )
+
+    db_codebase = Codebase(
+        name=name,
+        description=options.description or "",
+        local_path=local_path,
+        repository_url=repository_url,
+        default_branch=default_branch,
+        merge_method=merge_method.value,
+        branch_handling=branch_handling.value,
+        max_worktrees=options.max_worktrees,
+        setup_command=options.setup_command,
+        developer_context=options.developer_context,
+    )
+    created_codebase = codebase_repo.create(db_codebase)
+    codebase_repo.db.commit()
+    codebase_repo.db.refresh(created_codebase)
+
+    worktree_slot_repo.create(
+        codebase_id=created_codebase.id,
+        path=created_codebase.local_path,
+        is_main_repo=True,
+    )
+
+    return created_codebase
+
+
+def _derive_name_from_url(url: str) -> str:
+    """Extract a codebase name from a git URL (last path segment, strip .git suffix)."""
+    name = url.rstrip("/").split("/")[-1]
+    if name.endswith(".git"):
+        name = name[:-4]
+    return name
 
 
 @router.get("/", response_model=list[CodebaseResponse])
@@ -35,8 +104,7 @@ async def create_codebase(
     codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
     worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
 ):
-    """Create a new codebase."""
-    # Validate that the local path exists and is a directory
+    """Create a new codebase from an existing local directory."""
     path = Path(codebase.local_path).resolve()
     if not path.exists():
         raise HTTPException(status_code=400, detail=f"Local path does not exist: {codebase.local_path}")
@@ -47,60 +115,89 @@ async def create_codebase(
             detail=f"Local path is not a directory: {codebase.local_path}",
         )
 
-    # Auto-detect git remote URL if the directory is a git repository
     git = GitRepoIntegration(codebase.local_path)
-    repository_url = await git.detect_git_remote_url()
-
-    # Validate repository has at least one commit
-    if not await git.has_commits():
-        raise HTTPException(
-            status_code=400,
-            detail="Repository has no commits. Please make at least one commit before adding as a codebase.",
-        )
-
-    # Auto-detect default branch if not provided
-    default_branch = codebase.default_branch
-    if not default_branch:
-        default_branch = await git.get_default_branch()
-
-    # Determine merge_method: use provided value, or default to SQUASH
-    merge_method = codebase.merge_method
-    if merge_method is None:
-        merge_method = MergeMethod.SQUASH
-
-    # Determine branch_handling: use provided value, or auto-detect based on remote URL
-    branch_handling = codebase.branch_handling
-    if branch_handling is None:
-        # Default to GITHUB_PR if remote URL exists, otherwise LOCAL_MERGE
-        branch_handling = BranchHandling.GITHUB_PR if repository_url else BranchHandling.DIRECT_MERGE
-
-    # Validate github_pr branch handling requires a remote URL
-    if branch_handling == BranchHandling.GITHUB_PR and not repository_url:
-        raise HTTPException(
-            status_code=400,
-            detail="GitHub PR branch handling requires a repository with a remote URL configured",
-        )
-
-    # Create the codebase with auto-detected values
-    codebase_data = codebase.model_dump()
-    codebase_data["repository_url"] = repository_url
-    codebase_data["default_branch"] = default_branch
-    codebase_data["merge_method"] = merge_method.value
-    codebase_data["branch_handling"] = branch_handling.value
-
-    db_codebase = Codebase(**codebase_data)
-    created_codebase = codebase_repo.create(db_codebase)
-    codebase_repo.db.commit()
-    codebase_repo.db.refresh(created_codebase)
-
-    # Bootstrap main repo slot for this codebase
-    worktree_slot_repo.create(
-        codebase_id=created_codebase.id,
-        path=created_codebase.local_path,
-        is_main_repo=True,
+    return await _finalize_codebase_creation(
+        local_path=codebase.local_path,
+        name=codebase.name,
+        options=codebase,
+        validate_commits=True,
+        git=git,
+        codebase_repo=codebase_repo,
+        worktree_slot_repo=worktree_slot_repo,
     )
 
-    return created_codebase
+
+@router.post("/clone", response_model=CodebaseResponse)
+async def clone_codebase(
+    codebase: CodebaseClone,
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+    worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
+):
+    """Clone a remote git repository and register it as a codebase."""
+    parent_dir = Path(codebase.parent_directory).resolve()
+    if not parent_dir.exists():
+        raise HTTPException(status_code=400, detail=f"Parent directory does not exist: {codebase.parent_directory}")
+
+    name = codebase.name or _derive_name_from_url(codebase.repository_url)
+    if not name:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not derive a name from the repository URL — please provide one explicitly.",
+        )
+
+    target_path = parent_dir / name
+
+    if target_path.exists():
+        raise HTTPException(status_code=400, detail=f"Target directory already exists: {target_path}")
+
+    try:
+        git = await GitRepoIntegration.clone_repo(codebase.repository_url, target_path)
+        return await _finalize_codebase_creation(
+            local_path=str(target_path),
+            name=name,
+            options=codebase,
+            validate_commits=False,
+            git=git,
+            codebase_repo=codebase_repo,
+            worktree_slot_repo=worktree_slot_repo,
+        )
+    except ShellCommandExecutionError as e:
+        shutil.rmtree(target_path, ignore_errors=True)
+        raise HTTPException(status_code=400, detail=f"Git clone failed: {e}") from e
+
+
+@router.post("/init", response_model=CodebaseResponse)
+async def init_codebase(
+    codebase: CodebaseInit,
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+    worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
+):
+    """Initialise a new git project directory and register it as a codebase."""
+    parent_dir = Path(codebase.parent_directory).resolve()
+    if not parent_dir.exists():
+        raise HTTPException(status_code=400, detail=f"Parent directory does not exist: {codebase.parent_directory}")
+
+    target_path = parent_dir / codebase.name
+
+    if target_path.exists():
+        raise HTTPException(status_code=400, detail=f"Target directory already exists: {target_path}")
+
+    try:
+        git = await GitRepoIntegration.init_repo(target_path)
+        git.write_initial_project_files(codebase.name, codebase.description)
+        await git.add_and_commit("Initial commit")
+        return await _finalize_codebase_creation(
+            local_path=str(target_path),
+            name=codebase.name,
+            options=codebase,
+            validate_commits=False,
+            git=git,
+            codebase_repo=codebase_repo,
+            worktree_slot_repo=worktree_slot_repo,
+        )
+    except ShellCommandExecutionError as e:
+        shutil.rmtree(target_path, ignore_errors=True)
+        raise HTTPException(status_code=400, detail=f"Git operation failed: {e}") from e
 
 
 @router.get("/{codebase_id}", response_model=CodebaseResponse)

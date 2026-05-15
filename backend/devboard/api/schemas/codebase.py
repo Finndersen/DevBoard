@@ -20,18 +20,39 @@ class CodebaseBase(BaseModel):
     developer_context: str | None = None
 
 
-class CodebaseCreate(BaseModel):
-    """Schema for creating a new codebase."""
+class CodebaseCommonOptions(BaseModel):
+    """Common optional settings shared across all codebase creation modes."""
+
+    description: str | None = None
+    default_branch: str | None = None
+    merge_method: MergeMethod | None = None  # Defaults to SQUASH
+    branch_handling: BranchHandling | None = None  # Auto-determined from remote URL if not provided
+    max_worktrees: int | None = None
+    setup_command: str | None = None
+    developer_context: str | None = None
+
+
+class CodebaseCreate(CodebaseCommonOptions):
+    """Schema for creating a new codebase from an existing local directory."""
 
     name: str
     description: str
     local_path: str
-    default_branch: str | None = None
-    merge_method: MergeMethod | None = None  # Defaults to SQUASH
-    branch_handling: BranchHandling | None = None  # Auto-determined based on repository_url if not provided
-    max_worktrees: int | None = None
-    setup_command: str | None = None
-    developer_context: str | None = None
+
+
+class CodebaseClone(CodebaseCommonOptions):
+    """Schema for cloning a remote repository as a new codebase."""
+
+    repository_url: str
+    parent_directory: str
+    name: str | None = None
+
+
+class CodebaseInit(CodebaseCommonOptions):
+    """Schema for initialising a new git project as a codebase."""
+
+    name: str
+    parent_directory: str
 
 
 class CodebaseUpdate(BaseModel):

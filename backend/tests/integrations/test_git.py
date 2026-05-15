@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from devboard.integrations.git import GitRepoIntegration, parse_remote_branch
-from devboard.integrations.shell import ShellCommandResult
+from devboard.integrations.shell import ShellCommandExecutionError, ShellCommandResult
 from devboard.integrations.types import BranchReleaseResult
 
 
@@ -1155,3 +1155,235 @@ class TestGetInProgressOperationBranch:
             result = await git.get_in_progress_operation_branch()
 
         assert result == "merge-branch"
+
+
+class TestCloneRepo:
+    """Tests for clone_repo classmethod."""
+
+    @pytest.mark.asyncio
+    async def test_clone_repo_success(self, tmp_path):
+        """Test successful cloning of a repository."""
+        source_repo = tmp_path / "source_repo"
+        source_repo.mkdir()
+        # Initialize source repo with a commit
+        await GitRepoIntegration.init_repo(source_repo)
+        source_git = GitRepoIntegration(source_repo)
+        (source_repo / "test.txt").write_text("test content")
+        await source_git.add_and_commit("Initial commit")
+
+        target_path = tmp_path / "target_repo"
+
+        # Clone the repo
+        cloned_git = await GitRepoIntegration.clone_repo(str(source_repo), target_path)
+
+        # Verify clone was successful
+        assert cloned_git.repo_path == target_path
+        assert target_path.exists()
+        assert (target_path / ".git").exists()
+        # Verify content was cloned
+        assert (target_path / "test.txt").read_text() == "test content"
+        # Verify it has commits
+        assert await cloned_git.has_commits()
+
+    @pytest.mark.asyncio
+    async def test_clone_repo_returns_git_integration_instance(self, tmp_path):
+        """Test that clone_repo returns a GitRepoIntegration instance."""
+        source_repo = tmp_path / "source"
+        source_repo.mkdir()
+        await GitRepoIntegration.init_repo(source_repo)
+        source_git = GitRepoIntegration(source_repo)
+        (source_repo / "file.txt").write_text("content")
+        await source_git.add_and_commit("Initial")
+
+        target_path = tmp_path / "target"
+        result = await GitRepoIntegration.clone_repo(str(source_repo), target_path)
+
+        assert isinstance(result, GitRepoIntegration)
+        assert result.repo_path == target_path
+
+    @pytest.mark.asyncio
+    async def test_clone_repo_fails_with_invalid_url(self, tmp_path):
+        """Test that clone_repo raises error for invalid repository URL."""
+        target_path = tmp_path / "target"
+
+        with pytest.raises(ShellCommandExecutionError):
+            await GitRepoIntegration.clone_repo("https://invalid.url/nonexistent.git", target_path)
+
+    @pytest.mark.asyncio
+    async def test_clone_repo_fails_when_target_exists_nonempty(self, tmp_path):
+        """Test that clone_repo fails if target directory already exists and is not empty."""
+        source_repo = tmp_path / "source"
+        source_repo.mkdir()
+        await GitRepoIntegration.init_repo(source_repo)
+        source_git = GitRepoIntegration(source_repo)
+        (source_repo / "file.txt").write_text("content")
+        await source_git.add_and_commit("Initial")
+
+        target_path = tmp_path / "target"
+        target_path.mkdir()  # Create target directory first
+        (target_path / "existing.txt").write_text("existing content")  # Add content so directory is not empty
+
+        with pytest.raises(ShellCommandExecutionError):
+            await GitRepoIntegration.clone_repo(str(source_repo), target_path)
+
+
+class TestInitRepo:
+    """Tests for init_repo classmethod."""
+
+    @pytest.mark.asyncio
+    async def test_init_repo_success(self, tmp_path):
+        """Test successful initialization of a new git repository."""
+        repo_path = tmp_path / "new_repo"
+
+        git = await GitRepoIntegration.init_repo(repo_path)
+
+        # Verify repo was initialized
+        assert git.repo_path == repo_path
+        assert repo_path.exists()
+        assert (repo_path / ".git").exists()
+        # Verify it's a valid git repo (even if empty)
+        validation = await git.validate()
+        assert validation.success
+
+    @pytest.mark.asyncio
+    async def test_init_repo_creates_parent_directories(self, tmp_path):
+        """Test that init_repo creates parent directories if they don't exist."""
+        repo_path = tmp_path / "parent" / "subdir" / "new_repo"
+
+        await GitRepoIntegration.init_repo(repo_path)
+
+        assert repo_path.exists()
+        assert (repo_path / ".git").exists()
+
+    @pytest.mark.asyncio
+    async def test_init_repo_returns_git_integration_instance(self, tmp_path):
+        """Test that init_repo returns a GitRepoIntegration instance."""
+        repo_path = tmp_path / "repo"
+        result = await GitRepoIntegration.init_repo(repo_path)
+
+        assert isinstance(result, GitRepoIntegration)
+        assert result.repo_path == repo_path
+
+    @pytest.mark.asyncio
+    async def test_init_repo_with_existing_directory(self, tmp_path):
+        """Test that init_repo works when directory already exists."""
+        repo_path = tmp_path / "existing"
+        repo_path.mkdir()
+
+        git = await GitRepoIntegration.init_repo(repo_path)
+
+        assert (repo_path / ".git").exists()
+        validation = await git.validate()
+        assert validation.success
+
+
+class TestAddAndCommit:
+    """Tests for add_and_commit instance method."""
+
+    @pytest.mark.asyncio
+    async def test_add_and_commit_success(self, tmp_path):
+        """Test successful add and commit operation."""
+        repo_path = tmp_path / "repo"
+        git = await GitRepoIntegration.init_repo(repo_path)
+
+        # Add a test file
+        (repo_path / "test.txt").write_text("test content")
+
+        # Add and commit
+        await git.add_and_commit("Add test file")
+
+        # Verify commit was created
+        assert await git.has_commits()
+        # Get the log to verify the commit message
+        log = await git.get_git_log(max_count=1)
+        assert len(log) == 1
+        assert log[0].subject == "Add test file"
+
+    @pytest.mark.asyncio
+    async def test_add_and_commit_stages_all_changes(self, tmp_path):
+        """Test that add_and_commit stages all changes (git add -A)."""
+        repo_path = tmp_path / "repo"
+        git = await GitRepoIntegration.init_repo(repo_path)
+
+        # Create initial commit
+        (repo_path / "file1.txt").write_text("content1")
+        await git.add_and_commit("Initial commit")
+
+        # Modify existing file and add new file
+        (repo_path / "file1.txt").write_text("modified content")
+        (repo_path / "file2.txt").write_text("new file")
+
+        # Add and commit
+        await git.add_and_commit("Update files")
+
+        # Get diff from initial commit
+        log = await git.get_git_log(max_count=2)
+        assert len(log) == 2
+        assert log[0].subject == "Update files"
+
+        # Verify both files are in the working directory
+        assert (repo_path / "file1.txt").read_text() == "modified content"
+        assert (repo_path / "file2.txt").read_text() == "new file"
+
+    @pytest.mark.asyncio
+    async def test_add_and_commit_with_special_characters_in_message(self, tmp_path):
+        """Test that add_and_commit handles special characters in message."""
+        repo_path = tmp_path / "repo"
+        git = await GitRepoIntegration.init_repo(repo_path)
+
+        (repo_path / "file.txt").write_text("content")
+        message = "Fix: update (feature) & <improve> 'quotes' \"double\""
+        await git.add_and_commit(message)
+
+        log = await git.get_git_log(max_count=1)
+        assert len(log) == 1
+        assert log[0].subject == message
+
+    @pytest.mark.asyncio
+    async def test_add_and_commit_with_multiline_message(self, tmp_path):
+        """Test that add_and_commit handles single-line messages (no body)."""
+        repo_path = tmp_path / "repo"
+        git = await GitRepoIntegration.init_repo(repo_path)
+
+        (repo_path / "file.txt").write_text("content")
+        message = "Add feature"
+        await git.add_and_commit(message)
+
+        log = await git.get_git_log(max_count=1)
+        assert len(log) == 1
+        assert log[0].subject == message
+
+    @pytest.mark.asyncio
+    async def test_add_and_commit_includes_deleted_files(self, tmp_path):
+        """Test that add_and_commit stages deleted files (git add -A includes deletions)."""
+        repo_path = tmp_path / "repo"
+        git = await GitRepoIntegration.init_repo(repo_path)
+
+        # Create initial commit with two files
+        (repo_path / "file1.txt").write_text("content1")
+        (repo_path / "file2.txt").write_text("content2")
+        await git.add_and_commit("Initial commit")
+
+        # Delete one file
+        (repo_path / "file2.txt").unlink()
+
+        # Add and commit
+        await git.add_and_commit("Delete file2")
+
+        # Verify file is gone in the repo
+        assert not (repo_path / "file2.txt").exists()
+        assert (repo_path / "file1.txt").exists()
+
+    @pytest.mark.asyncio
+    async def test_add_and_commit_requires_files_to_stage(self, tmp_path):
+        """Test that add_and_commit on a repo with no changes fails."""
+        repo_path = tmp_path / "repo"
+        git = await GitRepoIntegration.init_repo(repo_path)
+
+        # Create initial commit
+        (repo_path / "file.txt").write_text("content")
+        await git.add_and_commit("Initial commit")
+
+        # Try to commit with no changes
+        with pytest.raises(ShellCommandExecutionError):
+            await git.add_and_commit("Nothing to commit")
