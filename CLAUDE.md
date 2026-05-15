@@ -33,8 +33,9 @@ We are working to develop an application as described in @docs/INDEX.md
 - If failure output is truncated, pipe to a temp file and read from the start: `uv run --frozen --active pytest -q --tb=short > /tmp/pytest.txt 2>&1; head -100 /tmp/pytest.txt`
 
 ## Development Process
+- `make install` — install dev dependencies (`uv sync --extra dev`); run this in a fresh checkout or after pulling changes that modify `pyproject.toml`/`uv.lock`
 - `make lint` — auto-fix formatting and lint issues with ruff (~1-2s, run frequently during iteration)
-- `make typecheck` — type-check with pyright (~40s)
+- `make typecheck` — type-check with ty (~10s)
 - `make validate` — run lint + typecheck together; use as a final gate before marking work complete, not on every iteration
 
 ## Patterns
