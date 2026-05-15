@@ -53,7 +53,6 @@ export function TaskArtifactStepper({
   changeCount,
   hasPR,
   prStatus,
-  hasSummary,
 }: TaskArtifactStepperProps) {
 
   // Normalize status to lowercase for comparison with TaskStatus enum values
@@ -78,6 +77,10 @@ export function TaskArtifactStepper({
       case 'changes':
         if ([TaskStatus.PR_OPEN, TaskStatus.COMPLETE].includes(status)) return 'complete'
         if (status === TaskStatus.IMPLEMENTING) return 'active'
+        return 'pending'
+
+      case 'summary':
+        if (status === TaskStatus.COMPLETE) return 'complete'
         return 'pending'
 
       case 'pullrequest':
@@ -125,6 +128,13 @@ export function TaskArtifactStepper({
     )
   }
 
+  // For complete tasks, show summary step instead of changes (with empty state if no summary available)
+  const isComplete = status === TaskStatus.COMPLETE
+  const changesStepId = isComplete ? 'summary' : 'changes'
+  const changesStepName = isComplete ? 'Summary' : 'Changes'
+  const changesStepIcon = isComplete ? DocumentTextIcon : CodeBracketIcon
+  const changesStepClickable = isComplete ? true : hasChanges
+
   const allSteps: Step[] = [
     {
       id: 'specification',
@@ -145,12 +155,12 @@ export function TaskArtifactStepper({
       statusIcon: getPlanStatusIcon(),
     },
     {
-      id: 'changes',
-      name: 'Changes',
-      icon: CodeBracketIcon,
-      state: getStepState('changes'),
-      isClickable: hasChanges,
-      badge: getChangesBadge(),
+      id: changesStepId,
+      name: changesStepName,
+      icon: changesStepIcon,
+      state: getStepState(changesStepId),
+      isClickable: changesStepClickable,
+      badge: !isComplete ? getChangesBadge() : undefined,
       statusIcon: undefined,
     },
     {
@@ -195,53 +205,42 @@ export function TaskArtifactStepper({
 
   return (
     <div className={`border-b ${borderColors.default} px-4 py-2`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          {steps.map((step, index) => {
-            const nextStep = steps[index + 1]
-            const StepIcon = step.icon
+      <div className="flex items-center gap-1">
+        {steps.map((step, index) => {
+          const nextStep = steps[index + 1]
+          const StepIcon = step.icon
 
-            return (
-              <div key={step.id} className="flex items-center">
-                <button
-                  className={getStepClasses(step)}
-                  onClick={() => handleStepClick(step)}
-                  disabled={!step.isClickable || step.state === 'pending'}
-                  title={!step.isClickable ? `${step.name} not available yet` : undefined}
-                >
-                  {getStepStatusIndicator(step)}
-                  <StepIcon className="w-4 h-4 flex-shrink-0" />
-                  <span className="whitespace-nowrap">{step.name}</span>
+          return (
+            <div key={step.id} className="flex items-center">
+              <button
+                className={getStepClasses(step)}
+                onClick={() => handleStepClick(step)}
+                disabled={!step.isClickable || step.state === 'pending'}
+                title={!step.isClickable ? `${step.name} not available yet` : undefined}
+              >
+                {getStepStatusIndicator(step)}
+                <StepIcon className="w-4 h-4 flex-shrink-0" />
+                <span className="whitespace-nowrap">{step.name}</span>
 
-                  {step.statusIcon && (
-                    <div className="ml-0.5 flex items-center">
-                      {step.statusIcon}
-                    </div>
-                  )}
-
-                  {step.badge && (
-                    <div className="ml-0.5">
-                      {step.badge}
-                    </div>
-                  )}
-                </button>
-
-                {nextStep && (
-                  <span className="text-sm text-gray-600 mx-0.5">→</span>
+                {step.statusIcon && (
+                  <div className="ml-0.5 flex items-center">
+                    {step.statusIcon}
+                  </div>
                 )}
-              </div>
-            )
-          })}
-        </div>
 
-        {hasSummary && (
-          <button
-            className={`text-sm ${activeStep === 'summary' ? 'text-blue-400' : 'text-gray-500 hover:text-gray-300'} transition-colors`}
-            onClick={() => onStepClick('summary')}
-          >
-            Summary
-          </button>
-        )}
+                {step.badge && (
+                  <div className="ml-0.5">
+                    {step.badge}
+                  </div>
+                )}
+              </button>
+
+              {nextStep && (
+                <span className="text-sm text-gray-600 mx-0.5">→</span>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )

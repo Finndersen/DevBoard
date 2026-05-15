@@ -237,58 +237,66 @@ describe('TaskArtifactStepper', () => {
       expect(onStepClick).toHaveBeenCalledWith('specification')
     })
 
-    it('calls onStepClick for summary when present', () => {
+    it('calls onStepClick for summary step in COMPLETE tasks', () => {
       render(
         <TaskArtifactStepper
           {...defaultProps}
           onStepClick={onStepClick}
+          taskStatus={TaskStatus.COMPLETE}
+          hasSpecification={true}
           hasSummary={true}
         />
       )
 
-      const summaryButton = screen.getByRole('button', { name: /summary/i })
-      fireEvent.click(summaryButton)
+      const summaryStep = screen.getByRole('button', { name: /summary/i })
+      fireEvent.click(summaryStep)
 
       expect(onStepClick).toHaveBeenCalledWith('summary')
     })
   })
 
   describe('summary handling', () => {
-    it('shows summary button when hasSummary is true', () => {
+    it('shows summary step for COMPLETE tasks with hasSummary', () => {
       render(
         <TaskArtifactStepper
           {...defaultProps}
+          taskStatus={TaskStatus.COMPLETE}
+          hasSpecification={true}
           hasSummary={true}
         />
       )
 
-      const summaryButton = screen.getByRole('button', { name: /summary/i })
-      expect(summaryButton).toBeInTheDocument()
+      const summaryStep = screen.getByRole('button', { name: /summary/i })
+      expect(summaryStep).toBeInTheDocument()
     })
 
-    it('does not show summary button when hasSummary is false', () => {
+    it('does not show summary step for non-COMPLETE tasks', () => {
       render(
         <TaskArtifactStepper
           {...defaultProps}
-          hasSummary={false}
+          taskStatus={TaskStatus.IMPLEMENTING}
+          hasSpecification={true}
+          hasSummary={true}
         />
       )
 
-      const summaryButton = screen.queryByRole('button', { name: /summary/i })
-      expect(summaryButton).not.toBeInTheDocument()
+      const summaryStep = screen.queryByRole('button', { name: /summary/i })
+      expect(summaryStep).not.toBeInTheDocument()
     })
 
-    it('highlights summary button when activeStep is summary', () => {
+    it('highlights summary step when activeStep is summary', () => {
       render(
         <TaskArtifactStepper
           {...defaultProps}
           activeStep="summary"
+          taskStatus={TaskStatus.COMPLETE}
+          hasSpecification={true}
           hasSummary={true}
         />
       )
 
-      const summaryButton = screen.getByRole('button', { name: /summary/i })
-      expect(summaryButton).toHaveClass('text-blue-400')
+      const summaryStep = screen.getByRole('button', { name: /summary/i })
+      expect(summaryStep).toHaveClass('text-blue-400')
     })
   })
 })

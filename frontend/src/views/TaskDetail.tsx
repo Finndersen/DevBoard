@@ -525,11 +525,12 @@ function TaskDetail({ id }: TaskDetailProps) {
   }
 
   const handleStepClick = useCallback((stepId: string) => {
-    // Map stepper step IDs to tab names (stepper uses: specification, plan, changes, pullrequest)
+    // Map stepper step IDs to tab names (stepper uses: specification, plan, changes, summary, pullrequest)
     const stepToTab: Record<string, typeof activeTab> = {
       'specification': 'specification',
       'plan': 'plan',
       'changes': 'changes',
+      'summary': 'summary',
       'pullrequest': 'pullrequest'
     }
     const tab = stepToTab[stepId]
@@ -704,7 +705,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                 />
               )}
 
-              {activeTab === 'changes' && (
+              {activeTab === 'changes' && task.status !== TaskStatus.COMPLETE && (
                 <ChangesTab
                   branchInfo={branchInfo}
                   diffData={diffData}
@@ -719,6 +720,10 @@ function TaskDetail({ id }: TaskDetailProps) {
                     onAutoReview: handleAutoReview,
                   })}
                 />
+              )}
+
+              {activeTab === 'changes' && task.status === TaskStatus.COMPLETE && (
+                <SummaryTab changeSummaryDoc={changeSummaryDoc} />
               )}
 
               {activeTab === 'pullrequest' && (
