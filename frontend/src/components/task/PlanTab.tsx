@@ -7,7 +7,7 @@ import { Button, Markdown, StatusBadge, Textarea } from '../ui'
 import { textColors, borderColors, surfaces, hoverColors, statusColors } from '../../styles/designSystem'
 import { apiClient, TaskStatus } from '../../lib/api'
 import { useNotificationStore } from '../../stores/notificationStore'
-import type { DocumentResponse, ImplementationPlanResponse, ImplementationStepResponse, ImplementationStepStatus, ImplementationStepType } from '../../lib/api'
+import type { DocumentResponse, ImplementationPlanResponse, ImplementationStepResponse, ImplementationStepStatus, ImplementationStepType, ModelType } from '../../lib/api'
 import SubAgentConversationModal from '../claude-code/SubAgentConversationModal'
 
 function formatDuration(seconds: number): string {
@@ -134,6 +134,18 @@ const StepCard = memo(function StepCard({ step, taskId, onStepUpdated }: StepCar
     setExpanded(true)
   }, [step.details])
 
+  const handleModelChange = useCallback(async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (!e.target.value) return
+    const model_type = e.target.value as ModelType
+    try {
+      await apiClient.updateImplementationStep(taskId, step.step_number, { model_type })
+      onStepUpdated()
+    } catch (error) {
+      console.error('Failed to update model type:', error)
+      addNotification({ type: 'system_error', message: 'Failed to update model type' })
+    }
+  }, [taskId, step.step_number, onStepUpdated, addNotification])
+
   return (
     <div className={`border ${borderColors.default} rounded-lg`}>
       {/* Step Header */}
@@ -182,7 +194,19 @@ const StepCard = memo(function StepCard({ step, taskId, onStepUpdated }: StepCar
               <typeConfig.icon className="w-3 h-3 mr-1" />
               {typeConfig.label}
             </StatusBadge>
-            {step.model_display_name && (
+            {step.status === 'pending' ? (
+              <select
+                value={step.model_type ?? ''}
+                onChange={handleModelChange}
+                onClick={e => e.stopPropagation()}
+                className="text-[10px] text-gray-300 dark:text-gray-300 bg-white/5 dark:bg-white/5 border border-white/15 dark:border-white/15 rounded px-1 py-px cursor-pointer outline-none hover:border-blue-500/50 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
+              >
+                {!step.model_type && <option value="" disabled>select model</option>}
+                <option value="fast">fast</option>
+                <option value="standard">standard</option>
+                <option value="advanced">advanced</option>
+              </select>
+            ) : step.model_display_name && (
               <span className="text-[10px] text-gray-500 dark:text-gray-500">{step.model_display_name}</span>
             )}
           </div>
@@ -295,6 +319,7 @@ const StructuredPlanView = memo(function StructuredPlanView({ plan, taskId, task
         title: 'Code review',
         type: 'code_review',
         details: 'Review the git diff for correctness, quality, and alignment with the spec.',
+        model_type: 'standard',
         dependencies: plan.steps.map((s) => s.step_number),
       })
       onPlanUpdated()

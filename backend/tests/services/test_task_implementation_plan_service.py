@@ -7,6 +7,52 @@ from devboard.db.repositories.implementation_plan import TaskImplementationPlanR
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 
 
+class TestUpdateStepModelType:
+    @pytest.fixture
+    def plan_repo(self, db_session):
+        return TaskImplementationPlanRepository(db_session)
+
+    @pytest.fixture
+    def plan_service(self, plan_repo):
+        return TaskImplementationPlanService(plan_repo)
+
+    @pytest.fixture
+    def plan_with_step(self, test_task, plan_repo, db_session):
+        plan = plan_repo.create(task_id=test_task.id, overview=None)
+        plan_repo.create_steps(
+            plan.id,
+            [{"title": "Step 1", "type": "code_change", "dependencies": [], "details": "Do the thing"}],
+        )
+        db_session.flush()
+        return plan
+
+    def test_update_model_type_on_pending_step_succeeds(self, plan_service, plan_with_step):
+        step = plan_service.update_step(plan_with_step, 1, model_type="fast")
+        assert step.model_type is not None
+        assert str(step.model_type) == "fast"
+
+    def test_update_model_type_on_running_step_raises(self, plan_service, plan_with_step):
+        step = plan_with_step.steps[0]
+        step.status = ImplementationStepStatus.RUNNING
+
+        with pytest.raises(ValueError, match="pending"):
+            plan_service.update_step(plan_with_step, 1, model_type="fast")
+
+    def test_update_model_type_on_complete_step_raises(self, plan_service, plan_with_step):
+        step = plan_with_step.steps[0]
+        step.status = ImplementationStepStatus.COMPLETE
+
+        with pytest.raises(ValueError, match="pending"):
+            plan_service.update_step(plan_with_step, 1, model_type="standard")
+
+    def test_update_other_fields_on_non_pending_step_allowed(self, plan_service, plan_with_step):
+        step = plan_with_step.steps[0]
+        step.status = ImplementationStepStatus.RUNNING
+
+        updated = plan_service.update_step(plan_with_step, 1, title="New title")
+        assert updated.title == "New title"
+
+
 class TestAddStepNumbering:
     """Regression tests for duplicate step number bug.
 

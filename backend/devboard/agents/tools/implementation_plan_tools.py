@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 class StepInput(BaseModel):
     title: str
     type: Literal["code_change", "documentation", "validation", "code_review"]
-    model_type: Literal["fast", "standard", "advanced"] | None = None
+    model_type: Literal["fast", "standard", "advanced"]
     dependencies: list[int] = []
     details: str
 
@@ -97,6 +97,7 @@ def create_add_implementation_step_tool(
     def add_implementation_step(
         title: str,
         type: Literal["code_change", "documentation", "validation", "code_review"],
+        model_type: Literal["fast", "standard", "advanced"],
         details: str,
         dependencies: list[int] | None = None,
     ) -> str:
@@ -107,6 +108,7 @@ def create_add_implementation_step_tool(
         Args:
             title: Short summary of the step
             type: One of 'code_change', 'documentation', 'validation', 'code_review'
+            model_type: Model tier to use — 'fast' (Haiku), 'standard' (Sonnet), or 'advanced' (Opus).
             details: Detailed markdown instructions for execution
             dependencies: List of step numbers this step depends on (default: none)
         """
@@ -115,7 +117,9 @@ def create_add_implementation_step_tool(
             raise ModelRetry("No implementation plan exists. Use set_implementation_plan_steps first.")
 
         try:
-            step = plan_service.add_step(plan, title=title, type=type, details=details, dependencies=dependencies)
+            step = plan_service.add_step(
+                plan, title=title, type=type, details=details, dependencies=dependencies, model_type=model_type
+            )
         except ValueError as e:
             raise ModelRetry(str(e)) from e
         plan_service.commit()

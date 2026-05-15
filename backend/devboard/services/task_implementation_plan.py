@@ -110,6 +110,8 @@ class TaskImplementationPlanService:
         if details is not None:
             step.details = details
         if model_type is not None:
+            if step.status != ImplementationStepStatus.PENDING:
+                raise ValueError(f"Cannot update model_type on a non-pending step (current status: '{step.status}')")
             step.model_type = ModelType(model_type)
 
         self.plan_repo.update_step(step)

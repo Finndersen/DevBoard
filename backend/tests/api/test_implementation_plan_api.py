@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from devboard.db.models.implementation_plan import ImplementationStepStatus
 from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
 
 
@@ -113,7 +114,13 @@ class TestImplementationPlanAPI:
     def test_create_implementation_step(self, client: TestClient, task_with_plan):
         response = client.post(
             f"/api/tasks/{task_with_plan.id}/implementation-plan/steps",
-            json={"title": "Code review", "type": "code_review", "details": "Review the git diff.", "dependencies": []},
+            json={
+                "title": "Code review",
+                "type": "code_review",
+                "details": "Review the git diff.",
+                "dependencies": [],
+                "model_type": "standard",
+            },
         )
         assert response.status_code == 201
 
@@ -133,6 +140,7 @@ class TestImplementationPlanAPI:
                 "type": "code_review",
                 "details": "Review the git diff.",
                 "dependencies": [1, 2],
+                "model_type": "standard",
             },
         )
         assert response.status_code == 201
@@ -144,16 +152,50 @@ class TestImplementationPlanAPI:
     def test_create_implementation_step_no_plan(self, client: TestClient, test_task):
         response = client.post(
             f"/api/tasks/{test_task.id}/implementation-plan/steps",
-            json={"title": "Code review", "type": "code_review", "details": "Review the git diff."},
+            json={
+                "title": "Code review",
+                "type": "code_review",
+                "details": "Review the git diff.",
+                "model_type": "fast",
+            },
         )
         assert response.status_code == 404
 
     def test_create_implementation_step_invalid_dependency(self, client: TestClient, task_with_plan):
         response = client.post(
             f"/api/tasks/{task_with_plan.id}/implementation-plan/steps",
-            json={"title": "Code review", "type": "code_review", "details": "Review.", "dependencies": [99]},
+            json={
+                "title": "Code review",
+                "type": "code_review",
+                "details": "Review.",
+                "dependencies": [99],
+                "model_type": "fast",
+            },
         )
         assert response.status_code == 400
+
+    def test_create_implementation_step_missing_model_type(self, client: TestClient, task_with_plan):
+        response = client.post(
+            f"/api/tasks/{task_with_plan.id}/implementation-plan/steps",
+            json={"title": "Code review", "type": "code_review", "details": "Review the git diff."},
+        )
+        assert response.status_code == 422
+
+    def test_update_model_type_on_non_pending_step_rejected(
+        self, client: TestClient, task_with_plan, plan_repo, db_session
+    ):
+        # Set step 1 to running status directly via repo
+        plan = plan_repo.get_by_task_id(task_with_plan.id)
+        step = next(s for s in plan.steps if s.step_number == 1)
+        step.status = ImplementationStepStatus.RUNNING
+        db_session.flush()
+
+        response = client.patch(
+            f"/api/tasks/{task_with_plan.id}/implementation-plan/steps/1",
+            json={"model_type": "advanced"},
+        )
+        assert response.status_code == 400
+        assert "model_type" in response.json()["detail"].lower() or "pending" in response.json()["detail"].lower()
 
     def test_get_implementation_plan_includes_model_fields(self, client: TestClient, task_with_plan):
         response = client.get(f"/api/tasks/{task_with_plan.id}/implementation-plan")
@@ -230,11 +272,11 @@ class TestImplementationPlanAPI:
             f"/api/tasks/{task_with_plan.id}/implementation-plan/steps",
             json={"title": "Some step", "type": "validation", "details": "Do it.", "model_type": "invalid"},
         )
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_update_implementation_step_invalid_model_type(self, client: TestClient, task_with_plan):
         response = client.patch(
             f"/api/tasks/{task_with_plan.id}/implementation-plan/steps/1",
             json={"model_type": "invalid"},
         )
-        assert response.status_code == 400
+        assert response.status_code == 422

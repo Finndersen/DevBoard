@@ -54,27 +54,43 @@ beforeEach(() => {
 })
 
 describe('PlanTab — StepCard model display name', () => {
-  it('shows model_display_name when present', () => {
-    const plan = makePlan([makeStep({ model_display_name: 'Haiku' })])
+  it('shows model_display_name as static text for non-pending steps', () => {
+    const plan = makePlan([makeStep({ status: 'complete', model_display_name: 'Haiku' })])
     render(<PlanTab {...defaultProps} implementationPlan={plan} />)
     expect(screen.getByText('Haiku')).toBeInTheDocument()
   })
 
-  it('does not render model display name when model_display_name is null', () => {
-    const plan = makePlan([makeStep({ model_display_name: null })])
+  it('does not render model display name when model_display_name is null on non-pending step', () => {
+    const plan = makePlan([makeStep({ status: 'complete', model_display_name: null })])
     render(<PlanTab {...defaultProps} implementationPlan={plan} />)
     expect(screen.queryByText('Haiku')).not.toBeInTheDocument()
     expect(screen.queryByText('Sonnet')).not.toBeInTheDocument()
     expect(screen.queryByText('Opus')).not.toBeInTheDocument()
   })
 
-  it('shows different model names for different steps', () => {
+  it('shows different model names for different non-pending steps', () => {
     const plan = makePlan([
-      makeStep({ id: 1, step_number: 1, title: 'Step one', model_display_name: 'Haiku' }),
-      makeStep({ id: 2, step_number: 2, title: 'Step two', type: 'code_review', model_display_name: 'Sonnet' }),
+      makeStep({ id: 1, step_number: 1, title: 'Step one', status: 'complete', model_display_name: 'Haiku' }),
+      makeStep({ id: 2, step_number: 2, title: 'Step two', type: 'code_review', status: 'complete', model_display_name: 'Sonnet' }),
     ])
     render(<PlanTab {...defaultProps} implementationPlan={plan} />)
     expect(screen.getByText('Haiku')).toBeInTheDocument()
     expect(screen.getByText('Sonnet')).toBeInTheDocument()
+  })
+
+  it('shows model select dropdown for pending steps', () => {
+    const plan = makePlan([makeStep({ status: 'pending', model_type: 'fast' })])
+    render(<PlanTab {...defaultProps} implementationPlan={plan} />)
+    const select = screen.getByRole('combobox') as HTMLSelectElement
+    expect(select).toBeInTheDocument()
+    expect(select.value).toBe('fast')
+  })
+
+  it('shows disabled placeholder option for pending step with no model_type', () => {
+    const plan = makePlan([makeStep({ status: 'pending', model_type: null })])
+    render(<PlanTab {...defaultProps} implementationPlan={plan} />)
+    const select = screen.getByRole('combobox') as HTMLSelectElement
+    expect(select).toBeInTheDocument()
+    expect(screen.getByText('select model')).toBeInTheDocument()
   })
 })

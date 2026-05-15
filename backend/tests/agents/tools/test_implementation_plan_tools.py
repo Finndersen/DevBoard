@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from pydantic import ValidationError
 from pydantic_ai import ModelRetry
 
 from devboard.agents.events import SystemEventType
@@ -517,9 +518,9 @@ class TestStepInputModelType:
         step = StepInput(title="Test", type="code_review", details="Review it", model_type="advanced")
         assert step.model_type == "advanced"
 
-    def test_step_input_model_type_defaults_to_none(self):
-        step = StepInput(title="Test", type="validation", details="Run tests")
-        assert step.model_type is None
+    def test_step_input_model_type_required(self):
+        with pytest.raises(ValidationError):
+            StepInput(title="Test", type="validation", details="Run tests")  # type: ignore[call-arg]
 
     def test_step_input_model_dump_includes_model_type(self):
         step = StepInput(title="Test", type="code_change", details="Do it", model_type="fast")

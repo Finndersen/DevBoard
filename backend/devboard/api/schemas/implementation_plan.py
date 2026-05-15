@@ -1,6 +1,7 @@
 """Implementation plan API schemas."""
 
 import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -38,7 +39,7 @@ class ImplementationStepUpdate(BaseModel):
     type: str | None = None
     dependencies: list[int] | None = None
     details: str | None = None
-    model_type: str | None = None
+    model_type: Literal["fast", "standard", "advanced"] | None = None
 
 
 class ImplementationStepCreate(BaseModel):
@@ -46,4 +47,4 @@ class ImplementationStepCreate(BaseModel):
     type: str
     details: str
     dependencies: list[int] = []
-    model_type: str | None = None
+    model_type: Literal["fast", "standard", "advanced"]

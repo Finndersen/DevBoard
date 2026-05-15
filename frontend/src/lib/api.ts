@@ -38,6 +38,7 @@ export interface Task {
 
 export type ImplementationStepType = 'code_change' | 'documentation' | 'validation' | 'code_review'
 export type ImplementationStepStatus = 'pending' | 'running' | 'complete' | 'failed' | 'skipped' | 'interrupted'
+export type ModelType = 'fast' | 'standard' | 'advanced'
 export interface ImplementationStepResponse {
   id: number
   step_number: number
@@ -67,12 +68,14 @@ export interface ImplementationStepUpdate {
   type?: ImplementationStepType
   dependencies?: number[]
   details?: string
+  model_type?: ModelType
 }
 
 export interface ImplementationStepCreate {
   title: string
   type: ImplementationStepType
   details: string
+  model_type: ModelType
   dependencies?: number[]
 }
 
