@@ -60,6 +60,16 @@ def get_message_content_details(message: Message) -> list[dict[str, str | dict[s
             elif isinstance(block, ToolUseBlock):
                 blocks.append({"type": "tool_use", "name": block.name, "input": block.input})
         return blocks or None
+    if isinstance(message, UserMessage):
+        if isinstance(message.content, str):
+            return [{"type": "text", "text": message.content}]
+        blocks = []
+        for block in message.content:
+            if isinstance(block, TextBlock):
+                blocks.append({"type": "text", "text": block.text})
+            elif isinstance(block, ToolResultBlock):
+                blocks.append({"type": "tool_result", "tool_use_id": block.tool_use_id})
+        return blocks or None
     return None
 
 
