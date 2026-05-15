@@ -244,7 +244,7 @@ class TestDocumentEditTool:
         assert tool.name == f"edit_{mock_document.document_type}"
 
         # Verify tool description
-        assert "Apply edits to the virtual document." in tool.description
+        assert "Apply targeted find-replace edits" in tool.description
         assert "DOCUMENT EDITING RULES" in tool.description
 
         # Verify tool requires approval

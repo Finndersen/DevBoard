@@ -5,7 +5,7 @@ import datetime
 import time
 from collections.abc import AsyncIterator, Coroutine
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import logfire
 from opentelemetry import context as otel_context
@@ -143,6 +143,7 @@ class ConversationExecutionManager:
         conversation_repo: ConversationRepository,
         agent_config_service: AgentConfigService,
         working_dir: str,
+        effort: Literal["low", "medium", "high"] | None = None,
     ) -> SubAgentResult:
         """Run a sub-agent inline in the calling task, registered for interrupt routing.
 
@@ -188,6 +189,7 @@ class ConversationExecutionManager:
                     agent_config_service=agent_config_service,
                     working_dir=working_dir,
                     interrupt_event=interrupt_event,
+                    effort=effort,
                 )
                 last_text_message: TextMessage | None = None
                 async for event in execution_service.stream_events_for_message_or_approval(prompt):

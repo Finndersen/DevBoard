@@ -963,7 +963,7 @@ class TestCreateInspectConversationTool:
         # Verify ClaudeClient was configured correctly
         mock_claude_class.assert_called_once()
         call_kwargs = mock_claude_class.call_args.kwargs
-        assert call_kwargs["model"] == "claude-haiku-4-5-20251001"
+        assert call_kwargs["model"] == "haiku"
         assert call_kwargs["cwd"] == str(Path.home() / ".devboard")
         assert call_kwargs["load_settings"] is False
         assert "analyzing a conversation transcript" in call_kwargs["system_prompt"]
@@ -1130,3 +1130,76 @@ class TestCreateInspectConversationTool:
         assert "TOOL_CALL test_tool" in run_args
         assert "RESULT" not in run_args
         assert "should be excluded" not in run_args
+
+    @pytest.mark.asyncio
+    async def test_effort_parameter_passed_to_claude_client(self, mock_conversation_repo, mock_conversation):
+        """Test that effort parameter is passed through to ClaudeClient."""
+        mock_conversation_repo.get_by_id.return_value = mock_conversation
+
+        # Mock conversation events
+        events = [
+            TextMessage(role=MessageRole.USER, text_content="Question?", timestamp=FIXED_TS),
+            TextMessage(role=MessageRole.AGENT, text_content="Answer.", timestamp=FIXED_TS),
+        ]
+        history = ConversationHistory(messages=events)
+        mock_history_service = AsyncMock()
+        mock_history_service.get_conversation_history.return_value = history
+
+        # Mock ClaudeClient
+        mock_claude_result = Mock()
+        mock_claude_result.text_content = "Analysis result"
+        mock_client = AsyncMock()
+        mock_client.run.return_value = mock_claude_result
+
+        with (
+            patch(
+                "devboard.agents.tools.conversation_tools.create_conversation_history_service",
+                return_value=mock_history_service,
+            ),
+            patch(
+                "devboard.agents.tools.conversation_tools.ClaudeClient",
+                return_value=mock_client,
+            ) as mock_claude_class,
+        ):
+            tool = create_inspect_conversation_tool(mock_conversation_repo)
+            await tool.function(conversation_id=42, question="What happened?", effort="high")
+
+        # Verify ClaudeClient was called with effort parameter
+        mock_claude_class.assert_called_once()
+        call_kwargs = mock_claude_class.call_args.kwargs
+        assert call_kwargs.get("effort") == "high"
+
+    @pytest.mark.asyncio
+    async def test_effort_parameter_none_by_default(self, mock_conversation_repo, mock_conversation):
+        """Test that effort parameter defaults to None when not provided."""
+        mock_conversation_repo.get_by_id.return_value = mock_conversation
+
+        # Mock conversation events
+        events = [TextMessage(role=MessageRole.USER, text_content="Test", timestamp=FIXED_TS)]
+        history = ConversationHistory(messages=events)
+        mock_history_service = AsyncMock()
+        mock_history_service.get_conversation_history.return_value = history
+
+        # Mock ClaudeClient
+        mock_claude_result = Mock()
+        mock_claude_result.text_content = "Summary"
+        mock_client = AsyncMock()
+        mock_client.run.return_value = mock_claude_result
+
+        with (
+            patch(
+                "devboard.agents.tools.conversation_tools.create_conversation_history_service",
+                return_value=mock_history_service,
+            ),
+            patch(
+                "devboard.agents.tools.conversation_tools.ClaudeClient",
+                return_value=mock_client,
+            ) as mock_claude_class,
+        ):
+            tool = create_inspect_conversation_tool(mock_conversation_repo)
+            await tool.function(conversation_id=42)
+
+        # Verify effort defaults to None
+        mock_claude_class.assert_called_once()
+        call_kwargs = mock_claude_class.call_args.kwargs
+        assert call_kwargs.get("effort") is None

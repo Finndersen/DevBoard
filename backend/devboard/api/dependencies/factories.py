@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Literal
 
 from fastapi import HTTPException
 from pydantic_ai import Tool
@@ -141,6 +142,7 @@ def create_agent_execution_service(
     oauth_service: OAuthService | None = None,
     interrupt_event: asyncio.Event | None = None,
     additional_write_dirs: list[str] | None = None,
+    effort: Literal["low", "medium", "high"] | None = None,
 ) -> AgentExecutionService:
     """Create the appropriate execution service based on engine type.
 
@@ -155,6 +157,7 @@ def create_agent_execution_service(
         additional_tools: Optional extra tools beyond those defined by the role
         oauth_service: Optional OAuthService for OAuth-authenticated MCP servers
         interrupt_event: Optional asyncio.Event for graceful interrupt signaling
+        effort: Optional effort level for Claude Code engine ("low", "medium", "high")
 
     Returns:
         AgentExecutionService instance (PydanticAI or ClaudeCode)
@@ -188,6 +191,7 @@ def create_agent_execution_service(
             oauth_service=oauth_service,
             interrupt_event=interrupt_event,
             additional_write_dirs=additional_write_dirs,
+            effort=effort,
         )
     else:
         raise HTTPException(

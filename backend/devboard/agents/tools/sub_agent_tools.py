@@ -90,6 +90,7 @@ async def run_sub_agent(
     execution_manager: ConversationExecutionManager,
     parent_conversation_id: int | None = None,
     conversation_id: int | None = None,
+    effort: Literal["low", "medium", "high"] | None = None,
 ) -> SubAgentResult:
     """Execute a sub-agent with the given role and prompt.
 
@@ -119,6 +120,7 @@ async def run_sub_agent(
             conversation_repo=conversation_repo,
             agent_config_service=agent_config_service,
             working_dir=working_dir,
+            effort=effort,
         )
     except ConversationBusyError as err:
         raise ModelRetry(
@@ -169,7 +171,12 @@ def create_multi_codebase_investigation_tool(
         cb_config.codebase.name: cb_config for cb_config in codebases
     }
 
-    async def investigate_codebase(codebase_name: str, query: str, conversation_id: int | None = None) -> str:
+    async def investigate_codebase(
+        codebase_name: str,
+        query: str,
+        conversation_id: int | None = None,
+        effort: Literal["low", "medium", "high"] | None = None,
+    ) -> str:
         """Investigate a specific codebase to answer questions about implementation details, architecture, and code organization.
 
         Use this tool when you need detailed information about:
@@ -197,6 +204,11 @@ def create_multi_codebase_investigation_tool(
             codebase_name: Name of the codebase to investigate. Choose from the available codebases.
             conversation_id: Optional conversation ID from a prior call to this tool. Provide it when continuing a previous
                 investigation where the prior conversation already has relevant context, to resume rather than starting fresh.
+            effort: Optional reasoning effort level for the investigation. Use to calibrate analysis depth based on query complexity:
+                - `low`: Simple/targeted lookups, straightforward questions about specific functions or files
+                - `medium`: Moderate complexity, questions requiring multiple file analysis or pattern discovery
+                - `high`: Complex multi-file analysis, architectural reasoning, understanding cross-component interactions
+                - `None` (default): Uses the agent's configured default effort level
 
         Returns:
             A JSON string with two keys:
@@ -219,6 +231,7 @@ def create_multi_codebase_investigation_tool(
             execution_manager=execution_manager,
             parent_conversation_id=parent_conversation_id,
             conversation_id=conversation_id,
+            effort=effort,
         )
         return json.dumps({"result": sub_agent_result.result, "conversation_id": sub_agent_result.conversation_id})
 
@@ -294,7 +307,9 @@ def create_code_review_tool(
         execution_manager: Manager for registering and running sub-agent executions
     """
 
-    async def review_code_changes(context: str | None = None) -> str:
+    async def review_code_changes(
+        context: str | None = None, effort: Literal["low", "medium", "high"] | None = None
+    ) -> str:
         """Perform a comprehensive code review of all changes made so far in this task.
 
         ONLY use this tool when explicitly asked to perform a code review. Do NOT use it proactively
@@ -313,6 +328,11 @@ def create_code_review_tool(
             context: Optional additional context for the reviewer. Use this to explain why changes
                 diverge from the specification or implementation plan, describe known limitations,
                 or highlight specific areas you want the reviewer to focus on.
+            effort: Optional reasoning effort level for the code review. Use to calibrate review depth based on change complexity:
+                - `low`: Simple changes (few files, straightforward logic, minimal architectural impact)
+                - `medium`: Moderate complexity (several files, some interdependencies, standard patterns)
+                - `high`: Complex changes (many files, significant architectural decisions, cross-cutting concerns)
+                - `None` (default): Uses the agent's configured default effort level
 
         Returns:
             A JSON string with:
@@ -337,6 +357,7 @@ def create_code_review_tool(
             working_dir=working_dir,
             execution_manager=execution_manager,
             parent_conversation_id=parent_conversation_id,
+            effort=effort,
         )
         return json.dumps({"result": sub_agent_result.result, "conversation_id": sub_agent_result.conversation_id})
 

@@ -24,6 +24,7 @@ from devboard.agents.tools.sub_agent_tools import (
     _MAX_TOTAL_DIFF_CHARS,
     CodebaseInvestigationContext,
     build_code_review_prompt,
+    create_code_review_tool,
     create_multi_codebase_investigation_tool,
     create_sub_agent_conversation,
     create_task_codebase_investigation_tool,
@@ -191,6 +192,7 @@ class TestCreateCodebaseInvestigationTool:
         assert "query" in params
         assert "codebase_name" in params
         assert "conversation_id" in params
+        assert "effort" in params
 
         # Annotations may be strings due to from __future__ import annotations
         query_annotation = params["query"].annotation
@@ -199,6 +201,7 @@ class TestCreateCodebaseInvestigationTool:
         conv_id_annotation = params["conversation_id"].annotation
         assert conv_id_annotation == int | None or conv_id_annotation == "int | None"
         assert params["conversation_id"].default is None
+        assert params["effort"].default is None
 
     @pytest.mark.asyncio
     async def test_investigate_creates_conversation_and_returns_json_with_conversation_id(
@@ -273,6 +276,30 @@ class TestCreateCodebaseInvestigationTool:
 
         with pytest.raises(ModelRetry):
             await tool.function(codebase_name="backend", query="How does X work?", conversation_id=55)
+
+    @pytest.mark.asyncio
+    async def test_effort_parameter_passed_to_run_sub_agent(
+        self, mock_codebases, mock_agent_config_service, mock_conversation_repo, mock_execution_manager
+    ):
+        """Test that effort parameter is passed through to run_sub_agent."""
+        mock_config = Mock(spec=AgentEngineModelConfig)
+        mock_config.engine = AgentEngine.INTERNAL
+        mock_config.model = Mock()
+        mock_config.model_id = "test-model"
+        mock_agent_config_service.get_effective_config.return_value = mock_config
+
+        mock_sub_agent_result = SubAgentResult(result="Investigation result", conversation_id=42)
+        mock_execution_manager.run_sub_agent_execution = AsyncMock(return_value=mock_sub_agent_result)
+
+        tool = make_investigation_tool(
+            mock_codebases, mock_agent_config_service, mock_conversation_repo, mock_execution_manager
+        )
+
+        await tool.function(codebase_name="backend", query="How does X work?", effort="high")
+
+        # Verify that run_sub_agent_execution was called with effort parameter
+        call_kwargs = mock_execution_manager.run_sub_agent_execution.call_args[1]
+        assert call_kwargs.get("effort") == "high"
 
 
 class TestCreateTaskCodebaseInvestigationTool:
@@ -957,3 +984,101 @@ class TestBuildCodeReviewPrompt:
         file = _make_file("src/foo.py", "+x\n", additions=1)
         prompt = build_code_review_prompt(_make_diff(file), additional_context="Pay attention to security.")
         assert "Pay attention to security." in prompt
+
+
+class TestCreateCodeReviewTool:
+    """Tests for create_code_review_tool."""
+
+    @pytest.fixture
+    def mock_conv_repo(self):
+        """Create a mock ConversationRepository."""
+        repo = Mock(spec=ConversationRepository)
+        mock_conversation = Mock()
+        mock_conversation.id = 42
+        mock_conversation.parent_conversation_id = None
+        repo.create.return_value = mock_conversation
+        repo.get_by_id.return_value = mock_conversation
+        return repo
+
+    @pytest.fixture
+    def mock_exec_manager(self):
+        return Mock(spec=ConversationExecutionManager)
+
+    @pytest.fixture
+    def mock_task(self):
+        """Create a mock Task."""
+        task = Mock(spec=Task)
+        task.id = 1
+        task.entity_type = EntityType.TASK
+        return task
+
+    def test_tool_creation(self, mock_task, mock_agent_config_service, mock_conv_repo, mock_exec_manager):
+        """Test that code review tool is created correctly."""
+        tool = create_code_review_tool(
+            task=mock_task,
+            agent_config_service=mock_agent_config_service,
+            conversation_repo=mock_conv_repo,
+            parent_conversation_id=None,
+            working_dir="/test/dir",
+            execution_manager=mock_exec_manager,
+        )
+
+        assert isinstance(tool, Tool)
+        assert tool.name == "review_code_changes"
+        assert tool.function is not None
+
+    def test_function_signature_has_effort_parameter(
+        self, mock_task, mock_agent_config_service, mock_conv_repo, mock_exec_manager
+    ):
+        """Test that review_code_changes function has effort parameter."""
+        tool = create_code_review_tool(
+            task=mock_task,
+            agent_config_service=mock_agent_config_service,
+            conversation_repo=mock_conv_repo,
+            parent_conversation_id=None,
+            working_dir="/test/dir",
+            execution_manager=mock_exec_manager,
+        )
+
+        sig = inspect.signature(tool.function)
+        params = sig.parameters
+
+        assert "context" in params
+        assert "effort" in params
+        assert params["context"].default is None
+        assert params["effort"].default is None
+
+    @pytest.mark.asyncio
+    async def test_effort_parameter_passed_to_run_sub_agent(
+        self, mock_task, mock_agent_config_service, mock_conv_repo, mock_exec_manager
+    ):
+        """Test that effort parameter is passed through to run_sub_agent."""
+        mock_config = Mock(spec=AgentEngineModelConfig)
+        mock_config.engine = AgentEngine.INTERNAL
+        mock_config.model = Mock()
+        mock_config.model_id = "test-model"
+        mock_agent_config_service.get_effective_config.return_value = mock_config
+
+        mock_sub_agent_result = SubAgentResult(result="Review complete", conversation_id=42)
+        mock_exec_manager.run_sub_agent_execution = AsyncMock(return_value=mock_sub_agent_result)
+
+        # Mock TaskGitService.get_task_all_changes
+        with patch("devboard.agents.tools.sub_agent_tools.TaskGitService") as mock_git_service:
+            mock_git_service.get_task_all_changes = AsyncMock(
+                return_value=_make_diff(_make_file("src/test.py", "+test\n", additions=1))
+            )
+
+            tool = create_code_review_tool(
+                task=mock_task,
+                agent_config_service=mock_agent_config_service,
+                conversation_repo=mock_conv_repo,
+                parent_conversation_id=None,
+                working_dir="/test/dir",
+                execution_manager=mock_exec_manager,
+            )
+
+            await tool.function(effort="medium")
+
+            # Verify that run_sub_agent_execution was called with effort parameter
+            call_kwargs = mock_exec_manager.run_sub_agent_execution.call_args[1]
+            assert call_kwargs.get("effort") == "medium"

@@ -5,6 +5,7 @@ import datetime
 import difflib
 import time
 from collections.abc import AsyncGenerator, AsyncIterator
+from typing import Literal
 
 import logfire
 from claude_agent_sdk import (
@@ -121,6 +122,7 @@ class ClaudeCodeAgent(BaseAgent):
         additional_tools: list[Tool] | None = None,
         custom_instructions: str | None = None,
         additional_write_dirs: list[str] | None = None,
+        effort: Literal["low", "medium", "high"] | None = None,
     ):
         """Initialize Claude Code agent with role.
 
@@ -132,6 +134,7 @@ class ClaudeCodeAgent(BaseAgent):
             additional_tools: Extra tools to add beyond those defined by the role
             custom_instructions: User-defined instructions to append to the base system prompt
             additional_write_dirs: Optional list of additional directories to grant write access via Edit tool rules
+            effort: Optional effort level for thinking ("low", "medium", "high")
         """
         if model is not None and model.provider != LLMProvider.ANTHROPIC:
             raise ValueError(f"Unsupported model provider for Claude Code: {model.provider}")
@@ -142,6 +145,7 @@ class ClaudeCodeAgent(BaseAgent):
         self.working_dir = working_dir
         self.last_result_message: ResultMessage | None = None
         self._additional_write_dirs = additional_write_dirs
+        self._effort = effort
         # Convert PydanticAI tools to virtual tools and function tools
         self._virtual_tools, self._function_tools = self._partition_tools()
 
@@ -187,6 +191,7 @@ class ClaudeCodeAgent(BaseAgent):
             include_builtin_system_prompt=self.role.include_builtin_system_prompt,
             load_settings=self.role.include_claude_md,
             additional_write_dirs=self._additional_write_dirs,
+            effort=self._effort,
         )
 
     def _build_system_prompt(self) -> str:

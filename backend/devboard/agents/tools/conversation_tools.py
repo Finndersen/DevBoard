@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import HTTPException
 from pydantic_ai import ModelRetry, Tool
@@ -284,6 +284,7 @@ def create_inspect_conversation_tool(conversation_repo: ConversationRepository) 
         conversation_id: int,
         question: str | None = None,
         tool_result_max_length: int = 200,
+        effort: Literal["low", "medium", "high"] | None = None,
     ) -> str:
         """Analyze a conversation using a Haiku sub-agent.
 
@@ -298,6 +299,11 @@ def create_inspect_conversation_tool(conversation_repo: ConversationRepository) 
             tool_result_max_length: Maximum characters for tool result content
                 in the formatted history (default: 200). Set to 0 to exclude
                 tool results entirely.
+            effort: Optional reasoning effort level for the analysis. Use to calibrate analysis depth based on question complexity:
+                - `low`: Simple questions, straightforward summaries of conversation flow
+                - `medium`: Moderate complexity, questions requiring understanding multiple interactions
+                - `high`: Complex analysis, questions requiring synthesis across entire conversation or deep reasoning
+                - `None` (default): Uses the `ClaudeClient`'s own default effort level
 
         Returns:
             Analysis or summary from the Haiku sub-agent.
@@ -343,6 +349,7 @@ def create_inspect_conversation_tool(conversation_repo: ConversationRepository) 
             model="haiku",
             cwd=str(Path.home() / ".devboard"),
             load_settings=False,
+            effort=effort,
         )
 
         result = await client.run(user_message)

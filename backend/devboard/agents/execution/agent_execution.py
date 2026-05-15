@@ -56,6 +56,7 @@ class AgentExecutionService(ABC):
         oauth_service: OAuthService | None = None,
         interrupt_event: asyncio.Event | None = None,
         additional_write_dirs: list[str] | None = None,
+        effort: Literal["low", "medium", "high"] | None = None,
     ):
         """Initialize the agent execution service.
 
@@ -71,6 +72,7 @@ class AgentExecutionService(ABC):
             oauth_service: Optional OAuthService for OAuth-authenticated MCP servers.
             interrupt_event: Optional asyncio.Event that signals graceful interrupt when set.
             additional_write_dirs: Optional list of additional directories to grant write access via Edit tool rules.
+            effort: Optional effort level for Claude Code engine ("low", "medium", "high")
         """
         self.conversation = conversation
         self.role = role
@@ -82,6 +84,7 @@ class AgentExecutionService(ABC):
         self._oauth_service = oauth_service
         self._interrupt_event = interrupt_event
         self.additional_write_dirs = additional_write_dirs
+        self._effort = effort
 
     async def _build_context_message(self, user_message: str) -> str:
         """Wrap context snapshot into the user message for the first run.
