@@ -52,7 +52,7 @@ class CodebaseInit(CodebaseCommonOptions):
     """Schema for initialising a new git project as a codebase."""
 
     name: str
-    parent_directory: str
+    directory: str
 
 
 class CodebaseUpdate(BaseModel):

@@ -1,13 +1,19 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useCallback } from 'react'
 import type { ReactNode } from 'react'
 import ConversationModelSelector from '../chat/ConversationModelSelector'
 import ConversationInput from '../chat/ConversationInput'
 import { surfaces, borderColors, textColors } from '../../styles/designSystem'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
+import { useSendConversationMessage } from '../../hooks/useSendConversationMessage'
+import { useViewContext } from '../../contexts/ViewContext'
+import { useApprovals } from '../../stores/approvalsStore'
+import { createConversationApprovalKey } from '../../utils/approvalKeys'
+import { useMessageQueueing } from '../chat/hooks/useMessageQueueing'
 
 interface AgentActionBarProps {
   conversationId: number | null
-  onSendMessage: (text: string) => void
+  onAfterSend?: () => void
+  isRunningAction?: boolean
   isStreaming: boolean
   onStopStream: () => void
   isDisabled: boolean
@@ -19,7 +25,8 @@ interface AgentActionBarProps {
 
 export default function AgentActionBar({
   conversationId,
-  onSendMessage,
+  onAfterSend,
+  isRunningAction = false,
   isStreaming,
   onStopStream,
   isDisabled,
@@ -28,39 +35,37 @@ export default function AgentActionBar({
   workflowActions,
   onModelChange
 }: AgentActionBarProps) {
-  const [inputMessage, setInputMessage] = useState('')
-
   const isQueued = useConversationStreamStore(
     state => conversationId ? (state.activeStreams.get(conversationId)?.isQueued ?? false) : false
   )
   const setQueued = useConversationStreamStore(state => state.setQueued)
 
-  // Clear input when queued message is auto-sent (isQueued transitions true → false)
-  const prevQueuedRef = useRef(false)
-  useEffect(() => {
-    if (prevQueuedRef.current && !isQueued) {
-      setInputMessage('')
-    }
-    prevQueuedRef.current = isQueued
-  }, [isQueued])
+  const { sendMessage: sendMessageViaHook } = useSendConversationMessage({
+    conversationId: conversationId ?? 0
+  })
 
-  // Unqueue when user edits input while queued
-  const handleInputChange = useCallback((text: string) => {
-    setInputMessage(text)
-    if (isQueued && conversationId) {
-      setQueued(conversationId, false)
-    }
-  }, [isQueued, conversationId, setQueued])
+  const { viewType, entityId } = useViewContext()
+
+  const pendingApprovals = useApprovals(
+    conversationId ? createConversationApprovalKey(conversationId) : ''
+  )
+
+  const { inputMessage, setInputMessage, handleSendMessage } = useMessageQueueing(
+    conversationId ?? 0,
+    isStreaming,
+    pendingApprovals,
+    isRunningAction,
+    isQueued,
+    setQueued,
+    sendMessageViaHook,
+    viewType,
+    entityId
+  )
 
   const handleSend = useCallback(() => {
-    const text = inputMessage.trim()
-    if (!text) return
-    onSendMessage(text)
-    // Clear input immediately for non-queued sends; keep text visible when queued
-    if (!isStreaming) {
-      setInputMessage('')
-    }
-  }, [inputMessage, onSendMessage, isStreaming])
+    handleSendMessage()
+    onAfterSend?.()
+  }, [handleSendMessage, onAfterSend])
 
   if (isDisabled) {
     return (
@@ -98,7 +103,7 @@ export default function AgentActionBar({
         <div className="flex-1 min-w-0">
           <ConversationInput
             value={inputMessage}
-            onChange={handleInputChange}
+            onChange={setInputMessage}
             onSendMessage={handleSend}
             placeholder={placeholder}
             isStreaming={isStreaming}

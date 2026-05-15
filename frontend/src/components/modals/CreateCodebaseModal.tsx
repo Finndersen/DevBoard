@@ -10,7 +10,7 @@ type Mode = 'existing' | 'clone' | 'new'
 const TABS = [
   { id: 'existing', label: 'Existing Path' },
   { id: 'clone', label: 'Clone Repo' },
-  { id: 'new', label: 'New Project' },
+  { id: 'new', label: 'New Repo' },
 ]
 
 const SUBMIT_LABELS: Record<Mode, string> = {
@@ -43,7 +43,7 @@ interface CloneFields {
 
 interface NewFields {
   name: string
-  parent_directory: string
+  directory: string
   description: string
 }
 
@@ -71,7 +71,7 @@ const EMPTY_CLONE: CloneFields = {
 
 const EMPTY_NEW: NewFields = {
   name: '',
-  parent_directory: '',
+  directory: '',
   description: '',
 }
 
@@ -195,7 +195,7 @@ export default function CreateCodebaseModal({ isOpen, onClose, onSuccess }: Crea
         } else {
           created = await initCodebase({
             name: newFields.name,
-            parent_directory: newFields.parent_directory,
+            directory: newFields.directory,
             description: newFields.description || null,
             ...buildCommonOptional(),
           })
@@ -218,7 +218,7 @@ export default function CreateCodebaseModal({ isOpen, onClose, onSuccess }: Crea
     if (isLoading) return true
     if (mode === 'existing') return !existingFields.name.trim() || !existingFields.local_path.trim()
     if (mode === 'clone') return !cloneFields.repository_url.trim() || !cloneFields.parent_directory.trim()
-    return !newFields.name.trim() || !newFields.parent_directory.trim()
+    return !newFields.name.trim() || !newFields.directory.trim()
   })()
 
   return (
@@ -321,14 +321,15 @@ export default function CreateCodebaseModal({ isOpen, onClose, onSuccess }: Crea
                 />
               </div>
               <div>
-                <label className={LABEL_CLASS}>Parent Directory</label>
+                <label className={LABEL_CLASS}>Directory</label>
                 <Input
                   type="text"
-                  value={newFields.parent_directory}
-                  onChange={e => setNewFields(prev => ({ ...prev, parent_directory: e.target.value }))}
-                  placeholder="/path/to/parent"
+                  value={newFields.directory}
+                  onChange={e => setNewFields(prev => ({ ...prev, directory: e.target.value }))}
+                  placeholder="/path/to/new-repo"
                   required
                 />
+                <p className={HINT_CLASS}>Full path where the new repository will be initialized</p>
               </div>
               <div>
                 <label className={LABEL_CLASS}>Description</label>

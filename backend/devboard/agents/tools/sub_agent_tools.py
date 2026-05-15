@@ -204,10 +204,13 @@ def create_multi_codebase_investigation_tool(
             codebase_name: Name of the codebase to investigate. Choose from the available codebases.
             conversation_id: Optional conversation ID from a prior call to this tool. Provide it when continuing a previous
                 investigation where the prior conversation already has relevant context, to resume rather than starting fresh.
-            effort: Optional reasoning effort level for the investigation. Use to calibrate analysis depth based on query complexity:
-                - `low`: Simple/targeted lookups, straightforward questions about specific functions or files
-                - `medium`: Moderate complexity, questions requiring multiple file analysis or pattern discovery
-                - `high`: Complex multi-file analysis, architectural reasoning, understanding cross-component interactions
+            effort: Optional reasoning effort level for the investigation. Prefer lower effort levels — only escalate when the
+                query genuinely requires it:
+                - `low` (prefer this): Simple/targeted lookups, straightforward questions about a specific function, class, or file.
+                  Use this for most queries.
+                - `medium`: Questions requiring analysis across multiple files or discovery of cross-cutting patterns.
+                - `high`: Complex architectural reasoning or understanding deep cross-component interactions. Reserve for the most
+                  demanding investigations.
                 - `None` (default): Uses the agent's configured default effort level
 
         Returns:

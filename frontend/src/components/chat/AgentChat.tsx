@@ -58,18 +58,6 @@ const AgentChat = forwardRef<AgentChatHandle, AgentChatProps>(({
     sendMessage: (message: string) => {
       conversationChatRef.current?.sendMessage(message)
     },
-    get inputMessage() {
-      return conversationChatRef.current?.inputMessage ?? ''
-    },
-    setInputMessage: (text: string) => {
-      conversationChatRef.current?.setInputMessage(text)
-    },
-    handleSendMessage: () => {
-      conversationChatRef.current?.handleSendMessage()
-    },
-    get isQueued() {
-      return conversationChatRef.current?.isQueued ?? false
-    },
     stopStream: () => {
       conversationChatRef.current?.stopStream()
     },

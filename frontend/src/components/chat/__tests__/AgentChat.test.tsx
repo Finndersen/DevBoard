@@ -160,7 +160,7 @@ describe('AgentChat', () => {
     expect(screen.queryByTitle('View session ID')).not.toBeInTheDocument()
   })
 
-  it('exposes ref handle with input state and sessionExpired', async () => {
+  it('exposes ref handle with sendMessage, stopStream, and sessionExpired', async () => {
     const ref = { current: null as AgentChatHandle | null }
 
     render(<AgentChat ref={ref} conversationId={mockConversationId} />)
@@ -173,21 +173,10 @@ describe('AgentChat', () => {
       expect(ref.current).toBeTruthy()
     })
 
-    // Test that ref exposes the expected interface
-    expect(ref.current.inputMessage).toBe('')
-    expect(typeof ref.current.setInputMessage).toBe('function')
-    expect(typeof ref.current.handleSendMessage).toBe('function')
+    // Ref exposes sendMessage, stopStream, and sessionExpired
     expect(typeof ref.current.sendMessage).toBe('function')
-    expect(typeof ref.current.isQueued).toBe('boolean')
     expect(typeof ref.current.stopStream).toBe('function')
     expect(typeof ref.current.sessionExpired).toBe('boolean')
-
-    // Test setting input message via ref
-    ref.current.setInputMessage('Test message')
-
-    await waitFor(() => {
-      expect(ref.current.inputMessage).toBe('Test message')
-    })
 
     // Session should not be expired initially
     expect(ref.current.sessionExpired).toBe(false)

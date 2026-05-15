@@ -556,10 +556,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
           actionBar={
             <AgentActionBar
               conversationId={activeConversationId}
-              onSendMessage={(text) => {
-                agentChatRef.current?.sendMessage(text)
-                handleSendMessage()
-              }}
+              onAfterSend={handleSendMessage}
               isStreaming={isStreaming}
               onStopStream={() => agentChatRef.current?.stopStream()}
               isDisabled={agentChatRef.current?.sessionExpired ?? false}

@@ -1,5 +1,4 @@
 import { useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react'
-import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { useSendConversationMessage } from '../../hooks/useSendConversationMessage'
 import PendingApprovalsList from '../approvals/common/PendingApprovalsList'
 import { usePendingMessages } from '../../contexts/PendingMessagesContext'
@@ -10,26 +9,12 @@ import { useStreamSubscription } from './hooks/useStreamSubscription'
 import { useToolApprovalLogic } from './hooks/useToolApprovalLogic'
 import { useConversationHistory } from './hooks/useConversationHistory'
 import { useAutoScroll } from './hooks/useAutoScroll'
-import { useMessageQueueing } from './hooks/useMessageQueueing'
-import { useViewContext } from '../../contexts/ViewContext'
 import Alert from '../ui/Alert'
 import { surfaces, statusColors } from '../../styles/designSystem'
 
-/**
- * Handle exposed by ConversationChat ref for external message submission and input state management.
- * Allows external components to send messages and control input state.
- */
 export interface ConversationChatHandle {
-  /** Send a message as if it was typed into the input and submitted */
+  /** Send a message directly (bypasses queuing — for programmatic/workflow sends) */
   sendMessage: (message: string) => void
-  /** Current input message text */
-  inputMessage: string
-  /** Set the input message text */
-  setInputMessage: (text: string) => void
-  /** Handle sending the current input message */
-  handleSendMessage: () => void
-  /** Whether a message is queued for sending */
-  isQueued: boolean
   /** Stop the current stream */
   stopStream: () => void
 }
@@ -68,11 +53,9 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
     historyLoaded,
     isStreaming,
     pendingToolRequests,
-    isQueued,
     stopStream,
     approveTools,
     clearPendingToolRequests,
-    setQueued,
     setStoreMessages,
   } = useStreamSubscription(conversationId)
 
@@ -104,12 +87,6 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
     messages, pendingMessage, isRunningAction
   )
 
-  const { viewType, entityId } = useViewContext()
-
-  const { inputMessage, setInputMessage, setQueuedText, handleSendMessage } = useMessageQueueing(
-    conversationId, isStreaming, pendingApprovals, isRunningAction, isQueued, setQueued, sendMessageViaHook, viewType, entityId
-  )
-
   // Retry handler - bypasses guards, reuses existing pending message
   const handleRetryMessage = useCallback(async (messageId: string) => {
     const pendingMsg = pendingMessages.find(msg => msg.id === messageId)
@@ -120,39 +97,14 @@ const ConversationChat = forwardRef<ConversationChatHandle, ConversationChatProp
     await sendMessageViaHook(pendingMsg.text_content, pendingMsg.id)
   }, [pendingMessages, sendMessageViaHook])
 
-  // Expose input state and methods via ref for external ActionBar
   useImperativeHandle(ref, () => ({
     sendMessage: (message: string) => {
       const messageText = message.trim()
       if (!messageText) return
-
-      // Check current busy state from store (not stale closure)
-      const currentStreamState = useConversationStreamStore.getState().activeStreams.get(conversationId)
-      const currentIsStreaming = currentStreamState?.isStreaming ?? false
-      const currentIsQueued = currentStreamState?.isQueued ?? false
-
-      // If agent is busy or already has a queued message, queue this one
-      if (currentIsStreaming || pendingApprovals.length > 0 || isRunningAction || currentIsQueued) {
-        // Write text directly to ref only — avoids triggering "unqueue on user edit"
-        // effect in useMessageQueueing, which fires on any inputMessage state change.
-        setQueuedText(messageText)
-        setQueued(conversationId, true)
-        return
-      }
-
-      // Not busy - send immediately
       sendMessageViaHook(messageText)
     },
-    get inputMessage() {
-      return inputMessage
-    },
-    setInputMessage,
-    handleSendMessage,
-    get isQueued() {
-      return isQueued
-    },
     stopStream: () => stopStream(conversationId)
-  }), [conversationId, pendingApprovals.length, isRunningAction, setQueued, sendMessageViaHook, inputMessage, setInputMessage, setQueuedText, handleSendMessage, isQueued, stopStream])
+  }), [conversationId, sendMessageViaHook, stopStream])
 
 
   // Cleanup: stop stream if component unmounts while streaming

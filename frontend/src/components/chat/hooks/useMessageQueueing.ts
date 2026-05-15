@@ -42,10 +42,6 @@ export function useMessageQueueing(
     }, DRAFT_SAVE_DELAY_MS)
   }, [conversationId, viewType, entityId])
 
-  const setQueuedText = useCallback((text: string) => {
-    inputMessageRef.current = text
-  }, [])
-
   // Save draft text on unmount
   useEffect(() => {
     return () => {
@@ -55,14 +51,18 @@ export function useMessageQueueing(
       // Flush current input to store on unmount (use ref to get latest value, not stale closure)
       useUIStore.getState().saveDraftText(conversationId, inputMessageRef.current)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally capture initial refs only; flushed via ref
   }, [conversationId, viewType, entityId])
 
   const handleSendMessage = useCallback(async () => {
     const messageText = inputMessage.trim()
     if (!messageText) return
 
-    if (isStreaming || pendingApprovals.length > 0 || isRunningAction) {
+    // Read isStreaming directly from the store so we never act on a stale React prop value.
+    // Store state is always current; the React prop can lag by one render cycle (e.g. when a
+    // new stream starts via a WebSocket event that hasn't triggered a re-render yet).
+    const storeIsStreaming = useConversationStreamStore.getState().activeStreams.get(conversationId)?.isStreaming ?? false
+
+    if (storeIsStreaming || pendingApprovals.length > 0 || isRunningAction) {
       setQueued(conversationId, true)
       return
     }
@@ -73,7 +73,7 @@ export function useMessageQueueing(
     if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current)
     useUIStore.getState().clearDraftMessage(conversationId, viewType, entityId)
     await sendMessageViaHook(messageText)
-  }, [inputMessage, isStreaming, pendingApprovals.length, isRunningAction, conversationId, setQueued, sendMessageViaHook, viewType, entityId])
+  }, [inputMessage, pendingApprovals.length, isRunningAction, conversationId, setQueued, sendMessageViaHook, viewType, entityId])
 
   // Unqueue when user edits the input text
   const lastInputRef = useRef(inputMessage)
@@ -108,5 +108,5 @@ export function useMessageQueueing(
     }
   }, [conversationId, setQueued, sendMessageViaHook, viewType, entityId]))
 
-  return { inputMessage, setInputMessage, setQueuedText, handleSendMessage }
+  return { inputMessage, setInputMessage, handleSendMessage }
 }

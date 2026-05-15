@@ -12,10 +12,6 @@ import type { ConversationEvent } from '../../lib/api'
 
 enableMapSet()
 
-vi.mock('../../contexts/ViewContext', () => ({
-  useViewContext: () => ({ viewId: 'test-view', viewType: 'task', entityId: '1' })
-}))
-
 // Inject events into the store's push handler, simulating WebSocket messages
 function injectWsEvents(conversationId: number, events: ConversationEvent[]): void {
   const store = useConversationStreamStore.getState()
@@ -131,7 +127,7 @@ describe('ConversationChat', () => {
     expect(assistantMessageText).toBeInTheDocument()
   })
 
-  it('exposes input state and methods via ref handle', async () => {
+  it('exposes sendMessage and stopStream via ref handle', async () => {
     const ref = { current: null as ConversationChatHandle | null }
 
     server.use(
@@ -154,25 +150,13 @@ describe('ConversationChat', () => {
       expect(ref.current).toBeTruthy()
     })
 
-    // Test that ref exposes the expected interface
-    expect(ref.current.inputMessage).toBe('')
-    expect(typeof ref.current.setInputMessage).toBe('function')
-    expect(typeof ref.current.handleSendMessage).toBe('function')
+    // Ref exposes only sendMessage and stopStream
     expect(typeof ref.current.sendMessage).toBe('function')
-    expect(typeof ref.current.isQueued).toBe('boolean')
     expect(typeof ref.current.stopStream).toBe('function')
 
-    // Test setting input message
-    ref.current.setInputMessage('Test message')
-
-    await waitFor(() => {
-      expect(ref.current.inputMessage).toBe('Test message')
-    })
-
     // Test sending message via ref
-    ref.current.handleSendMessage()
+    ref.current.sendMessage('New question')
 
-    // Check that the message appears
     await waitFor(() => {
       expect(screen.getByText('AI response to: New question')).toBeInTheDocument()
     }, { timeout: 3000 })
@@ -209,7 +193,7 @@ describe('ConversationChat', () => {
     })
   })
 
-  it('handles multi-line messages via ref interface', async () => {
+  it('handles multi-line messages via ref sendMessage', async () => {
     const ref = { current: null as ConversationChatHandle | null }
 
     server.use(
@@ -232,21 +216,8 @@ describe('ConversationChat', () => {
       expect(ref.current).toBeTruthy()
     })
 
-    // Set multi-line message via ref
-    const multilineMessage = 'Line 1\nLine 2\nLine 3'
-    ref.current.setInputMessage(multilineMessage)
-
-    await waitFor(() => {
-      expect(ref.current.inputMessage).toBe(multilineMessage)
-    })
-
-    // Send message via ref
-    ref.current.handleSendMessage()
-
-    // Should clear the input after sending
-    await waitFor(() => {
-      expect(ref.current.inputMessage).toBe('')
-    })
+    // Send multi-line message directly via ref
+    ref.current.sendMessage('Line 1\nLine 2\nLine 3')
 
     // Should receive response
     await waitFor(() => {
@@ -535,7 +506,7 @@ describe('ConversationChat', () => {
     })
   })
 
-  it('queues messages while tool approval is pending via ref', async () => {
+  it('sends messages directly via ref even when tool approval is pending', async () => {
     const ref = { current: null as ConversationChatHandle | null }
 
     server.use(
@@ -565,19 +536,12 @@ describe('ConversationChat', () => {
       expect(screen.getByText(/Tool.*Awaiting Approval/i)).toBeInTheDocument()
     })
 
-    // Send a follow-up message while approval is pending
-    ref.current.sendMessage('Queued follow-up')
+    // Programmatic sendMessage bypasses queuing — isQueued should NOT be set
+    ref.current.sendMessage('Direct follow-up')
 
-    // The queued text is held in the internal ref; verify via isQueued store flag
-    await waitFor(() => {
-      const streamState = useConversationStreamStore.getState().activeStreams.get(mockConversationId)
-      expect(streamState?.isQueued).toBe(true)
-    })
-
-    // Verify that the message was queued rather than sent immediately
-    // (the message should be in the input field, not displayed as a new message)
-    const messages = screen.queryAllByText(/Queued follow-up/)
-    expect(messages).toHaveLength(0) // Message should not appear as sent
+    // Store should NOT have isQueued set — programmatic sends bypass the queue
+    const streamState = useConversationStreamStore.getState().activeStreams.get(mockConversationId)
+    expect(streamState?.isQueued).toBeFalsy()
   })
 
   it('handles empty chat history gracefully', async () => {

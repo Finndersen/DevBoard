@@ -105,7 +105,7 @@ async def create_codebase(
     worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
 ):
     """Create a new codebase from an existing local directory."""
-    path = Path(codebase.local_path).resolve()
+    path = Path(codebase.local_path).expanduser().resolve()
     if not path.exists():
         raise HTTPException(status_code=400, detail=f"Local path does not exist: {codebase.local_path}")
 
@@ -134,7 +134,7 @@ async def clone_codebase(
     worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
 ):
     """Clone a remote git repository and register it as a codebase."""
-    parent_dir = Path(codebase.parent_directory).resolve()
+    parent_dir = Path(codebase.parent_directory).expanduser().resolve()
     if not parent_dir.exists():
         raise HTTPException(status_code=400, detail=f"Parent directory does not exist: {codebase.parent_directory}")
 
@@ -173,11 +173,7 @@ async def init_codebase(
     worktree_slot_repo: WorktreeSlotRepository = Depends(get_worktree_slot_repository),
 ):
     """Initialise a new git project directory and register it as a codebase."""
-    parent_dir = Path(codebase.parent_directory).resolve()
-    if not parent_dir.exists():
-        raise HTTPException(status_code=400, detail=f"Parent directory does not exist: {codebase.parent_directory}")
-
-    target_path = parent_dir / codebase.name
+    target_path = Path(codebase.directory).expanduser().resolve()
 
     if target_path.exists():
         raise HTTPException(status_code=400, detail=f"Target directory already exists: {target_path}")

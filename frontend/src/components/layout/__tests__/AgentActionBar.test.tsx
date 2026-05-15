@@ -1,11 +1,44 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import AgentActionBar from '../AgentActionBar'
+import { useConversationStreamStore } from '../../../stores/conversationStreamStore'
+
+// Mock useMessageQueueing to control input state
+const mockSetInputMessage = vi.fn()
+const mockHandleSendMessage = vi.fn()
+let mockInputMessage = ''
+
+vi.mock('../../chat/hooks/useMessageQueueing', () => ({
+  useMessageQueueing: vi.fn(() => ({
+    inputMessage: mockInputMessage,
+    setInputMessage: mockSetInputMessage,
+    handleSendMessage: mockHandleSendMessage,
+  })),
+}))
+
+// Mock useSendConversationMessage
+vi.mock('../../../hooks/useSendConversationMessage', () => ({
+  useSendConversationMessage: vi.fn(() => ({ sendMessage: vi.fn() })),
+}))
+
+// Mock useViewContext
+vi.mock('../../../contexts/ViewContext', () => ({
+  useViewContext: vi.fn(() => ({ viewId: 'test-view', viewType: 'task', entityId: '1' })),
+}))
+
+// Mock useApprovals
+vi.mock('../../../stores/approvalsStore', () => ({
+  useApprovals: vi.fn(() => []),
+}))
+
+// Mock approvalKeys utility
+vi.mock('../../../utils/approvalKeys', () => ({
+  createConversationApprovalKey: vi.fn((id: number) => `conversation:${id}`),
+}))
 
 // Mock the stream store for isQueued
 vi.mock('../../../stores/conversationStreamStore', () => ({
   useConversationStreamStore: vi.fn((selector) => {
-    // Default: isQueued = false, setQueued = noop
     if (typeof selector === 'function') {
       const mockState = {
         activeStreams: new Map(),
@@ -75,7 +108,7 @@ vi.mock('../../chat/ConversationInput', () => ({
 describe('AgentActionBar', () => {
   const defaultProps = {
     conversationId: 123 as number | null,
-    onSendMessage: vi.fn(),
+    onAfterSend: vi.fn(),
     isStreaming: false,
     onStopStream: vi.fn(),
     isDisabled: false,
@@ -85,6 +118,7 @@ describe('AgentActionBar', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockInputMessage = ''
   })
 
   it('renders all components when not disabled', () => {
@@ -159,7 +193,8 @@ describe('AgentActionBar', () => {
     expect(screen.getByTestId('conversation-input')).toBeInTheDocument()
   })
 
-  it('renders input with placeholder and empty initial value', () => {
+  it('renders input with placeholder and value from useMessageQueueing', () => {
+    mockInputMessage = ''
     render(<AgentActionBar {...defaultProps} placeholder="custom placeholder" />)
 
     const input = screen.getByTestId('input-field')
@@ -167,26 +202,36 @@ describe('AgentActionBar', () => {
     expect(input).toHaveAttribute('placeholder', 'custom placeholder')
   })
 
-  it('updates internal input state when typing', () => {
+  it('calls setInputMessage from hook when typing', () => {
     render(<AgentActionBar {...defaultProps} />)
 
     const input = screen.getByTestId('input-field')
     fireEvent.change(input, { target: { value: 'new message' } })
 
-    expect(input).toHaveValue('new message')
+    expect(mockSetInputMessage).toHaveBeenCalledWith('new message')
   })
 
-  it('calls onSendMessage with text and clears input when send button clicked', () => {
+  it('calls handleSendMessage from hook and onAfterSend when send button clicked', () => {
+    mockInputMessage = 'test message'
     render(<AgentActionBar {...defaultProps} />)
-
-    const input = screen.getByTestId('input-field')
-    fireEvent.change(input, { target: { value: 'test message' } })
 
     const sendButton = screen.getByTestId('send-button')
     fireEvent.click(sendButton)
 
-    expect(defaultProps.onSendMessage).toHaveBeenCalledWith('test message')
-    expect(input).toHaveValue('')
+    expect(mockHandleSendMessage).toHaveBeenCalled()
+    expect(defaultProps.onAfterSend).toHaveBeenCalled()
+  })
+
+  it('calls onAfterSend alongside handleSendMessage on send', () => {
+    mockInputMessage = 'hello'
+    render(<AgentActionBar {...defaultProps} />)
+
+    const sendButton = screen.getByTestId('send-button')
+    fireEvent.click(sendButton)
+
+    // Both are called — onAfterSend is for UI side effects (e.g. switch panel)
+    expect(mockHandleSendMessage).toHaveBeenCalledTimes(1)
+    expect(defaultProps.onAfterSend).toHaveBeenCalledTimes(1)
   })
 
   it('renders stop button during streaming', () => {
@@ -241,5 +286,31 @@ describe('AgentActionBar', () => {
     const { container } = render(<AgentActionBar {...defaultProps} isDisabled={true} />)
 
     expect(container.querySelector('.text-center')).toBeInTheDocument()
+  })
+
+  it('shows queued indicator when isQueued is true from store', () => {
+    const queuedMap = new Map()
+    queuedMap.set(123, { isQueued: true })
+    vi.mocked(useConversationStreamStore).mockImplementation((selector: (state: object) => unknown) => {
+      if (typeof selector === 'function') {
+        return selector({ activeStreams: queuedMap, setQueued: vi.fn() })
+      }
+      return false
+    })
+
+    render(<AgentActionBar {...defaultProps} />)
+
+    expect(screen.getByTestId('queued-indicator')).toBeInTheDocument()
+  })
+
+  it('works without onAfterSend (optional prop)', () => {
+    mockInputMessage = 'test'
+    const propsWithoutAfterSend = { ...defaultProps, onAfterSend: undefined }
+    render(<AgentActionBar {...propsWithoutAfterSend} />)
+
+    const sendButton = screen.getByTestId('send-button')
+    // Should not throw when onAfterSend is not provided
+    expect(() => fireEvent.click(sendButton)).not.toThrow()
+    expect(mockHandleSendMessage).toHaveBeenCalled()
   })
 })

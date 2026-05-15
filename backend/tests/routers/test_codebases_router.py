@@ -173,6 +173,17 @@ class TestCodebasesRouter:
         assert response.status_code == 200
         assert response.json()["message"] == "Codebase deleted successfully"
 
+    def test_create_codebase_tilde_path_expanded(self, client):
+        """Tilde in local_path is expanded; a nonexistent ~ path returns a path-not-found 400."""
+        data = {
+            "name": "TildeTest",
+            "local_path": "~/devboard_nonexistent_test_xyz",
+            "description": "",
+        }
+        response = client.post("/api/codebases/", json=data)
+        assert response.status_code == 400
+        assert "Local path does not exist" in response.json()["detail"]
+
 
 class TestCloneCodebase:
     """Tests for POST /api/codebases/clone."""
@@ -312,6 +323,16 @@ class TestCloneCodebase:
 
         assert not target.exists()
 
+    def test_clone_tilde_parent_directory_expanded(self, client):
+        """Tilde in parent_directory is expanded; a nonexistent ~ path returns a 400."""
+        data = {
+            "repository_url": "https://github.com/org/my-repo.git",
+            "parent_directory": "~/devboard_nonexistent_test_xyz",
+        }
+        response = client.post("/api/codebases/clone", json=data)
+        assert response.status_code == 400
+        assert "Parent directory does not exist" in response.json()["detail"]
+
 
 class TestInitCodebase:
     """Tests for POST /api/codebases/init."""
@@ -338,7 +359,7 @@ class TestInitCodebase:
         _, mock_instance = mock_init_git
         data = {
             "name": "MyProject",
-            "parent_directory": temp_dir,
+            "directory": str(Path(temp_dir) / "MyProject"),
             "description": "A new project",
         }
         response = client.post("/api/codebases/init", json=data)
@@ -356,7 +377,7 @@ class TestInitCodebase:
         _, mock_instance = mock_init_git
         data = {
             "name": "MyProject",
-            "parent_directory": temp_dir,
+            "directory": str(Path(temp_dir) / "MyProject"),
             "description": "My description",
         }
         response = client.post("/api/codebases/init", json=data)
@@ -368,7 +389,7 @@ class TestInitCodebase:
         _, mock_instance = mock_init_git
         data = {
             "name": "MyProject",
-            "parent_directory": temp_dir,
+            "directory": str(Path(temp_dir) / "MyProject"),
         }
         response = client.post("/api/codebases/init", json=data)
         assert response.status_code == 200
@@ -378,7 +399,7 @@ class TestInitCodebase:
         """Init endpoint should bootstrap a main worktree slot."""
         data = {
             "name": "MyProject",
-            "parent_directory": temp_dir,
+            "directory": str(Path(temp_dir) / "MyProject"),
         }
         response = client.post("/api/codebases/init", json=data)
         assert response.status_code == 200
@@ -390,16 +411,6 @@ class TestInitCodebase:
         assert slots[0].is_main_repo is True
         assert slots[0].codebase_id == codebase_id
 
-    def test_init_codebase_parent_not_exist(self, client):
-        """Return 400 when the parent directory does not exist."""
-        data = {
-            "name": "MyProject",
-            "parent_directory": "/nonexistent/path",
-        }
-        response = client.post("/api/codebases/init", json=data)
-        assert response.status_code == 400
-        assert "Parent directory does not exist" in response.json()["detail"]
-
     def test_init_codebase_target_exists(self, client, temp_dir, mock_init_git):
         """Return 400 when the target directory already exists."""
         target = Path(temp_dir) / "MyProject"
@@ -407,7 +418,7 @@ class TestInitCodebase:
 
         data = {
             "name": "MyProject",
-            "parent_directory": temp_dir,
+            "directory": str(target),
         }
         response = client.post("/api/codebases/init", json=data)
         assert response.status_code == 400
@@ -419,7 +430,7 @@ class TestInitCodebase:
 
         with patch("devboard.api.routers.codebases.GitRepoIntegration") as mock_cls:
             mock_cls.init_repo = AsyncMock(side_effect=ShellCommandExecutionError("init failed"))
-            payload = {"name": "MyProject", "parent_directory": temp_dir}
+            payload = {"name": "MyProject", "directory": str(Path(temp_dir) / "MyProject")}
             response = client.post("/api/codebases/init", json=payload)
             assert response.status_code == 400
             assert "Git operation failed" in response.json()["detail"]
@@ -440,7 +451,29 @@ class TestInitCodebase:
                 return mock_instance
 
             mock_cls.init_repo = AsyncMock(side_effect=fake_init)
-            payload = {"name": "MyProject", "parent_directory": temp_dir}
+            payload = {"name": "MyProject", "directory": str(Path(temp_dir) / "MyProject")}
             client.post("/api/codebases/init", json=payload)
 
         assert not target.exists()
+
+    def test_init_tilde_directory_expanded(self, client):
+        """Tilde in directory is expanded to the absolute home directory path before init."""
+        from devboard.integrations.shell import ShellCommandExecutionError
+
+        received_paths: list[Path] = []
+
+        with patch("devboard.api.routers.codebases.GitRepoIntegration") as mock_cls:
+
+            async def fake_init(path: Path) -> Mock:
+                received_paths.append(path)
+                raise ShellCommandExecutionError("captured")
+
+            mock_cls.init_repo = fake_init
+
+            expected = Path.home() / "devboard_tilde_init_test_xyz"
+            data = {"name": "TildeProject", "directory": "~/devboard_tilde_init_test_xyz"}
+            response = client.post("/api/codebases/init", json=data)
+            assert response.status_code == 400
+            assert "Git operation failed" in response.json()["detail"]
+            assert len(received_paths) == 1
+            assert received_paths[0] == expected

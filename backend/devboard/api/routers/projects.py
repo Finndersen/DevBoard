@@ -44,7 +44,6 @@ from devboard.db.repositories import (
     ProjectRepository,
     TaskRepository,
 )
-from devboard.db.repositories.conversation import NoActiveConversationError
 from devboard.services.conversation_service import ConversationService
 from devboard.services.project_service import ProjectService
 from devboard.services.system_event_emitter import SystemEventEmitter
@@ -266,13 +265,20 @@ async def list_project_tasks(
 
     tasks = task_repo.get_for_project(project_id)
 
-    # Get conversations for all tasks
+    conversations = conversation_repo.get_active_conversations_for_entities(
+        entity_type=ParentEntityType.TASK,
+        entity_ids=[task.id for task in tasks],
+    )
+    task_conv_map: dict[int, int] = {}
+    for conv in conversations:
+        if conv.parent_entity_id not in task_conv_map:
+            task_conv_map[conv.parent_entity_id] = conv.id
+
     task_responses: list[TaskResponse] = []
     for task in tasks:
         # TODO: Make SimpleTaskResponse model with limited fields for list view
-        try:
-            conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, task.id)
-        except NoActiveConversationError:
+        conversation_id = task_conv_map.get(task.id)
+        if conversation_id is None:
             # Skip tasks without conversations (legacy data)
             continue
 
@@ -283,10 +289,10 @@ async def list_project_tasks(
                 project_id=task.project_id,
                 codebase_id=task.codebase_id,
                 status=task.status,
-                conversation_id=conversation.id,
+                conversation_id=conversation_id,
                 created_at=task.created_at,
-                specification_document_id=task.specification.id,
-                implementation_plan_document_id=task.implementation_plan.id if task.implementation_plan else None,
+                specification_document_id=task.specification_id,
+                implementation_plan_document_id=task.implementation_plan_id,
                 custom_fields=task.custom_fields,
             )
         )

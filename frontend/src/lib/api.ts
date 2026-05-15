@@ -410,7 +410,7 @@ export interface CodebaseClone {
 
 export interface CodebaseInit {
   name: string
-  parent_directory: string
+  directory: string
   description?: string | null
   default_branch?: string | null
   merge_method?: MergeMethod | null

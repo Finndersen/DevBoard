@@ -750,10 +750,8 @@ function TaskDetail({ id }: TaskDetailProps) {
         actionBar={
           <AgentActionBar
             conversationId={task.conversation_id}
-            onSendMessage={(text) => {
-              agentChatRef.current?.sendMessage(text)
-              handleSendMessage()
-            }}
+            onAfterSend={handleSendMessage}
+            isRunningAction={isConversationStreaming}
             isStreaming={isConversationStreaming}
             onStopStream={() => agentChatRef.current?.stopStream()}
             isDisabled={task.status === TaskStatus.COMPLETE || (agentChatRef.current?.sessionExpired ?? false)}
