@@ -10,7 +10,7 @@ from pydantic_ai import ModelRetry, Tool
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.exceptions import ConversationBusyError
 from devboard.agents.execution.types import SubAgentResult
-from devboard.agents.language_models import ModelType
+from devboard.agents.language_models import RECOMMENDED_AGENT_MODEL_TYPES, ModelType
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.agents.roles.code_review import CodeReviewAgentRole
 from devboard.agents.roles.codebase_investigation import CodebaseInvestigationAgentRole
@@ -58,8 +58,13 @@ def create_sub_agent_conversation(
     config = agent_config_service.get_effective_config(role_type)
     if model_type is not None:
         model_id = agent_config_service.get_model_id_for_type(model_type, config.engine)
-    else:
+    elif config.model_id is not None:
         model_id = config.model_id
+    else:
+        recommended_type = RECOMMENDED_AGENT_MODEL_TYPES.get(role_type)
+        model_id = (
+            agent_config_service.get_model_id_for_type(recommended_type, config.engine) if recommended_type else None
+        )
     conversation = conversation_repo.create(
         parent_entity_type=parent_entity.entity_type,
         parent_entity_id=parent_entity.id,
