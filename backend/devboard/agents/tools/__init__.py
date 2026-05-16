@@ -14,6 +14,12 @@ from .conversation_tools import (
 )
 from .document_editing import create_document_edit_tool, create_set_document_content_tool
 from .github_tools import create_get_pr_feedback_tool, create_get_pr_status_tool, create_github_pr_tool
+from .project_tools import (
+    create_edit_project_specification_tool,
+    create_list_projects_tool,
+    create_set_project_specification_content_tool,
+    create_view_project_details_tool,
+)
 from .rebase_tools import create_rebase_task_branch_tool
 from .render_html import create_render_html_tool
 from .sub_agent_tools import (
@@ -47,7 +53,11 @@ __all__ = [
     "create_multi_codebase_investigation_tool",
     "create_directory_tree_tool",
     "create_document_edit_tool",
+    "create_edit_project_specification_tool",
     "create_file_search_tool",
+    "create_list_projects_tool",
+    "create_set_project_specification_content_tool",
+    "create_view_project_details_tool",
     "create_rebase_task_branch_tool",
     "create_render_html_tool",
     "create_set_document_content_tool",

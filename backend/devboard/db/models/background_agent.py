@@ -1,7 +1,7 @@
 """Background agent database models."""
 
 import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from sqlalchemy import JSON, Column, Enum, ForeignKey, Integer, String, Table, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from devboard.agents.engines import AgentEngine
 
 from .base import Base
+from .enums import EntityType
 
 if TYPE_CHECKING:
     from .background_agent_run import BackgroundAgentRun
@@ -29,6 +30,7 @@ class BackgroundAgent(Base):
     """User-defined autonomous background agent configuration."""
 
     __tablename__ = "background_agents"
+    entity_type: ClassVar[EntityType] = EntityType.BACKGROUND_AGENT
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255))

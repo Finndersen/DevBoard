@@ -42,7 +42,7 @@ from .project import Project
 from .task import Task, TaskStatus
 from .worktree_slot import WorktreeSlot
 
-ParentEntity = Task | Project | Codebase
+ParentEntity = Task | Project | Codebase | BackgroundAgent
 
 __all__ = [
     "AgentRoleConfig",
