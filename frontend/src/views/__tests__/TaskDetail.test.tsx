@@ -804,4 +804,5 @@ describe('TaskDetail', () => {
       expect(screen.getByText('Implementing Task')).toBeInTheDocument()
     })
   })
+
 })

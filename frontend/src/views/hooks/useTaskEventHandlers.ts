@@ -185,7 +185,7 @@ export function useTaskEventHandlers({
 
   useSystemEventHandler(systemEventHandler)
 
-  const streamCompleteHandler = useCallback(() => {
+  const streamCompleteHandler = useCallback(async () => {
     if (task?.status === TaskStatus.IMPLEMENTING && task?.codebase_id) {
       if (diffRefreshTimeoutRef.current) {
         clearTimeout(diffRefreshTimeoutRef.current)
@@ -193,7 +193,16 @@ export function useTaskEventHandlers({
       }
       handleDiffRefresh('all')
     }
-  }, [task?.status, task?.codebase_id, handleDiffRefresh, diffRefreshTimeoutRef])
+
+    // Refresh git status after agent stream completes to show final state
+    if (task?.codebase_id) {
+      try {
+        await refreshGitStatus()
+      } catch (error) {
+        console.error('Failed to refresh git status after stream completion:', error)
+      }
+    }
+  }, [task?.status, task?.codebase_id, handleDiffRefresh, diffRefreshTimeoutRef, refreshGitStatus])
 
   useStreamCompleteHandler(streamCompleteHandler)
 }

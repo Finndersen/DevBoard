@@ -473,6 +473,11 @@ function TaskDetail({ id }: TaskDetailProps) {
       // Refetch task details first — conversation_id may have changed (e.g. new agent role).
       await refetch()
 
+      // Refresh git status for rebase actions, regardless of whether an agent was started
+      if (actionKey === 'task.rebase_branch') {
+        await refreshGitStatus()
+      }
+
       if (result.conversation_id) {
         if (result.prompt) {
           addEvent(result.conversation_id, {
@@ -577,9 +582,9 @@ function TaskDetail({ id }: TaskDetailProps) {
     return configs[actionKey] || { loadingMessage: 'Processing...' }
   }
 
-  const handleTriggerRebase = useCallback(() => {
+  const handleTriggerRebase = () => {
     executeWorkflowAction('task.rebase_branch', 'Rebasing branch...')
-  }, [task?.id, task?.conversation_id])
+  }
 
 
   // Only show loading spinner on initial load (when task data doesn't exist yet)
