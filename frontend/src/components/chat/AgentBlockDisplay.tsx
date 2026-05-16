@@ -10,17 +10,21 @@ const MAX_COLLAPSED_HEIGHT = 400
 export default function AgentBlockDisplay({ children, isLatest }: AgentBlockDisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [needsExpansion, setNeedsExpansion] = useState(false)
+  const [scrollHeight, setScrollHeight] = useState(0)
   const contentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (isLatest || !contentRef.current) {
       setNeedsExpansion(false)
+      setScrollHeight(0)
       return
     }
 
     const observer = new ResizeObserver(() => {
       if (contentRef.current) {
-        setNeedsExpansion(contentRef.current.scrollHeight > MAX_COLLAPSED_HEIGHT)
+        const height = contentRef.current.scrollHeight
+        setScrollHeight(height)
+        setNeedsExpansion(height > MAX_COLLAPSED_HEIGHT)
       }
     })
 
@@ -35,13 +39,14 @@ export default function AgentBlockDisplay({ children, isLatest }: AgentBlockDisp
           ref={contentRef}
           className="overflow-hidden transition-all duration-300"
           style={{
-            maxHeight: !isExpanded && needsExpansion ? `${MAX_COLLAPSED_HEIGHT}px` : undefined
+            maxHeight: !isExpanded && needsExpansion ? `${MAX_COLLAPSED_HEIGHT}px` : undefined,
+            marginTop: !isExpanded && needsExpansion ? `${-(scrollHeight - MAX_COLLAPSED_HEIGHT)}px` : undefined
           }}
         >
           {children}
         </div>
         {needsExpansion && !isExpanded && (
-          <div className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none bg-gradient-to-t from-white dark:from-gray-900 to-transparent" />
+          <div className="absolute top-0 left-0 right-0 h-16 pointer-events-none bg-gradient-to-b from-white dark:from-gray-900 to-transparent" />
         )}
       </div>
       {needsExpansion && (
