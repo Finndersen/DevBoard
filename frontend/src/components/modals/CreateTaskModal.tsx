@@ -3,10 +3,11 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Modal, Button, Input, Textarea } from '../ui'
 import Alert from '../ui/Alert'
 import { apiClient } from '../../lib/api'
-import type { Codebase, CustomFieldDefinition } from '../../lib/api'
+import type { Codebase, CustomFieldDefinition, ConversationEvent } from '../../lib/api'
 import { useProjects, useProjectCodebases } from '../../hooks'
 import { useDataStore } from '../../stores/dataStore'
 import { useUIStore } from '../../stores/uiStore'
+import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { CustomFieldInputs } from '../common/CustomFieldInputs'
 
 interface CreateTaskModalProps {
@@ -20,6 +21,7 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
   const { data: projects } = useProjects()
   const { setTask, fetchProjectTasks } = useDataStore()
   const { modalDrafts, openModalDraft, saveModalDraft, removeModalDraft, setOpenModalDraft } = useUIStore()
+  const { setMessages } = useConversationStreamStore()
 
   const isOpen = openModalDraft === draftId
   const currentDraft = modalDrafts[draftId]
@@ -229,11 +231,22 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
       setTask(createdTask)
       await fetchProjectTasks(effectiveProjectId)
 
+      // Seed initial user message into stream store if provided
+      if (formData.initial_message?.trim() && createdTask.conversation_id) {
+        const userMessage: ConversationEvent = {
+          event_type: 'message',
+          role: 'user',
+          text_content: formData.initial_message.trim(),
+          timestamp: new Date().toISOString(),
+        }
+        setMessages(createdTask.conversation_id, [userMessage])
+      }
+
       // Remove the draft and close modal on success
       removeModalDraft(draftId)
       onClose()
 
-      // Navigate directly without initial message state (backend handles it)
+      // Navigate to task details
       navigate(`/tasks/${createdTask.id}`)
     } catch (error) {
       console.error('Failed to create task:', error)
@@ -241,7 +254,7 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
     } finally {
       setIsCreating(false)
     }
-  }, [formData, effectiveProjectId, navigate, onClose, setTask, fetchProjectTasks, draftId, removeModalDraft])
+  }, [formData, effectiveProjectId, navigate, onClose, setTask, fetchProjectTasks, draftId, removeModalDraft, setMessages])
 
   return (
     <Modal

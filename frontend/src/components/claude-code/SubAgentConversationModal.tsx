@@ -111,6 +111,9 @@ export default function SubAgentConversationModal({
             {conversationMeta.external_session_id && (
               <span className={`text-xs font-mono ${textColors.muted}`}>Session: {conversationMeta.external_session_id}</span>
             )}
+            {conversationMeta.model_id && (
+              <span className={`text-xs font-mono ${textColors.muted}`}>Model: {conversationMeta.model_id}</span>
+            )}
           </>
         )}
         {contextUsage && <ContextUsageBadge contextUsage={contextUsage} />}
