@@ -10,20 +10,17 @@ const MAX_COLLAPSED_HEIGHT = 400
 export default function AgentBlockDisplay({ children, isLatest }: AgentBlockDisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [needsExpansion, setNeedsExpansion] = useState(false)
-  const [scrollHeight, setScrollHeight] = useState(0)
   const contentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (isLatest || !contentRef.current) {
       setNeedsExpansion(false)
-      setScrollHeight(0)
       return
     }
 
     const observer = new ResizeObserver(() => {
       if (contentRef.current) {
         const height = contentRef.current.scrollHeight
-        setScrollHeight(height)
         setNeedsExpansion(height > MAX_COLLAPSED_HEIGHT)
       }
     })

@@ -65,7 +65,6 @@ export default function ConversationModelSelector({
   const computePosition = useCallback(() => {
     if (!triggerRef.current) return null
     const rect = triggerRef.current.getBoundingClientRect()
-    const spaceAbove = rect.top
     const spaceBelow = window.innerHeight - rect.bottom
     const openUpward = dropUp || spaceBelow < 200
     return {

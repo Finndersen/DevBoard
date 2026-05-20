@@ -456,12 +456,13 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   // Cleanup diff refresh timeout on unmount
   useEffect(() => {
+    const timeoutId = diffRefreshTimeoutRef.current
     return () => {
-      if (diffRefreshTimeoutRef.current) {
-        clearTimeout(diffRefreshTimeoutRef.current)
+      if (timeoutId) {
+        clearTimeout(timeoutId)
       }
     }
-  }, [])
+  }, [diffRefreshTimeoutRef])
 
   const executeWorkflowAction = async (actionKey: string, message: string) => {
     if (!task?.id) return
@@ -516,11 +517,6 @@ function TaskDetail({ id }: TaskDetailProps) {
   }
 
   // Panel switching callbacks
-  const handleSendMessage = useCallback(() => {
-    // Auto-switch to chat panel when user sends a message (narrow mode only handled by ChatDetailLayout)
-    setExpandedPanel('chat')
-  }, [setExpandedPanel])
-
   const handleWorkflowAction = (actionKey: string) => {
     const config = getButtonConfigForAction(actionKey)
     executeWorkflowAction(actionKey, config.loadingMessage)
@@ -755,7 +751,6 @@ function TaskDetail({ id }: TaskDetailProps) {
         actionBar={
           <AgentActionBar
             conversationId={task.conversation_id}
-            onAfterSend={handleSendMessage}
             isRunningAction={isConversationStreaming}
             isStreaming={isConversationStreaming}
             onStopStream={() => agentChatRef.current?.stopStream()}

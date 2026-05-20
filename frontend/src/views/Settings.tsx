@@ -292,29 +292,6 @@ export default function Settings() {
 
       {activeTab === 'agents' && (
         <div className="space-y-6">
-          {/* Claude Code Engine Configuration */}
-          <Card padding="none">
-            <div className={`px-6 py-4 border-b ${borderColors.default}`}>
-              <h3 className={`text-lg font-medium ${textColors.primary}`}>Claude Code Engine</h3>
-              <p className={`text-sm ${textColors.secondary} mt-1`}>
-                Configure the Claude Code agent client mode
-              </p>
-            </div>
-            {loadingClaudeCodeEngine ? (
-              <div className="p-6 animate-pulse">
-                <div className="h-10 bg-gray-200 dark:bg-white/[0.06] rounded"></div>
-              </div>
-            ) : claudeCodeEngineConfig ? (
-              <ConfigurationForm
-                config={claudeCodeEngineConfig}
-                title=""
-                onSave={(config) => setClaudeCodeEngineConfig(config)}
-              />
-            ) : (
-              <div className="p-6 text-sm text-gray-500 dark:text-gray-400">Failed to load configuration.</div>
-            )}
-          </Card>
-
           {/* Agent Role List and Configuration */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             {/* Agent Role List */}
@@ -353,6 +330,47 @@ export default function Settings() {
               </Card>
             </div>
           </div>
+
+          {/* Claude Code Engine Configuration */}
+          <Card className="p-6">
+            <div className="mb-4">
+              <h3 className={`text-base font-medium ${textColors.primary}`}>Claude Code Engine</h3>
+            </div>
+            {loadingClaudeCodeEngine ? (
+              <div className="animate-pulse">
+                <div className="h-10 bg-gray-200 dark:bg-white/[0.06] rounded"></div>
+              </div>
+            ) : claudeCodeEngineConfig && claudeCodeEngineConfig.fields.length > 0 ? (
+              <div className="flex items-center space-x-4">
+                <label className={`text-sm font-medium ${textColors.primary}`}>
+                  Client Mode
+                </label>
+                <select
+                  value={claudeCodeEngineConfig.fields[0]?.effective_value || ''}
+                  onChange={async (e) => {
+                    const newValue = e.target.value
+                    try {
+                      const updated = await apiClient.updateConfigurationFields('agents.claude_code', {
+                        client_mode: newValue
+                      })
+                      setClaudeCodeEngineConfig(updated)
+                    } catch (error) {
+                      console.error('Failed to update Claude Code Engine config:', error)
+                    }
+                  }}
+                  className={`px-3 py-2 border ${borderColors.input} rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-white/[0.06] dark:text-white`}
+                >
+                  {claudeCodeEngineConfig.fields[0]?.enum_values?.map((value) => (
+                    <option key={value} value={value}>
+                      {value.charAt(0).toUpperCase() + value.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className={`text-sm ${textColors.secondary}`}>Failed to load configuration.</div>
+            )}
+          </Card>
         </div>
       )}
 

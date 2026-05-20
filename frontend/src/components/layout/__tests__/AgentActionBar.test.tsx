@@ -108,7 +108,6 @@ vi.mock('../../chat/ConversationInput', () => ({
 describe('AgentActionBar', () => {
   const defaultProps = {
     conversationId: 123 as number | null,
-    onAfterSend: vi.fn(),
     isStreaming: false,
     onStopStream: vi.fn(),
     isDisabled: false,
@@ -211,7 +210,7 @@ describe('AgentActionBar', () => {
     expect(mockSetInputMessage).toHaveBeenCalledWith('new message')
   })
 
-  it('calls handleSendMessage from hook and onAfterSend when send button clicked', () => {
+  it('calls handleSendMessage from hook when send button clicked', () => {
     mockInputMessage = 'test message'
     render(<AgentActionBar {...defaultProps} />)
 
@@ -219,19 +218,6 @@ describe('AgentActionBar', () => {
     fireEvent.click(sendButton)
 
     expect(mockHandleSendMessage).toHaveBeenCalled()
-    expect(defaultProps.onAfterSend).toHaveBeenCalled()
-  })
-
-  it('calls onAfterSend alongside handleSendMessage on send', () => {
-    mockInputMessage = 'hello'
-    render(<AgentActionBar {...defaultProps} />)
-
-    const sendButton = screen.getByTestId('send-button')
-    fireEvent.click(sendButton)
-
-    // Both are called — onAfterSend is for UI side effects (e.g. switch panel)
-    expect(mockHandleSendMessage).toHaveBeenCalledTimes(1)
-    expect(defaultProps.onAfterSend).toHaveBeenCalledTimes(1)
   })
 
   it('renders stop button during streaming', () => {
@@ -303,14 +289,4 @@ describe('AgentActionBar', () => {
     expect(screen.getByTestId('queued-indicator')).toBeInTheDocument()
   })
 
-  it('works without onAfterSend (optional prop)', () => {
-    mockInputMessage = 'test'
-    const propsWithoutAfterSend = { ...defaultProps, onAfterSend: undefined }
-    render(<AgentActionBar {...propsWithoutAfterSend} />)
-
-    const sendButton = screen.getByTestId('send-button')
-    // Should not throw when onAfterSend is not provided
-    expect(() => fireEvent.click(sendButton)).not.toThrow()
-    expect(mockHandleSendMessage).toHaveBeenCalled()
-  })
 })

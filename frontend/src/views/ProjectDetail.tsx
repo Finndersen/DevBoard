@@ -361,10 +361,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   }, [id, linkCodebase, refetchProjectCodebases, refetchAllCodebases, addNotification, project])
 
   // Panel switching callbacks
-  const handleSendMessage = useCallback(() => {
-    // Auto-switch to chat panel when user sends a message (narrow mode only handled by ChatDetailLayout)
-    setExpandedPanel('chat')
-  }, [setExpandedPanel])
+  // (removed handleSendMessage - chat no longer auto-expands on message send)
 
   // Only show loading spinner on initial load (when project data doesn't exist yet)
   // Don't show during refetches to avoid UI flash
@@ -556,7 +553,6 @@ function ProjectDetail({ id }: ProjectDetailProps) {
           actionBar={
             <AgentActionBar
               conversationId={activeConversationId}
-              onAfterSend={handleSendMessage}
               isStreaming={isStreaming}
               onStopStream={() => agentChatRef.current?.stopStream()}
               isDisabled={agentChatRef.current?.sessionExpired ?? false}

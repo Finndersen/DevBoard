@@ -12,7 +12,6 @@ import { useMessageQueueing } from '../chat/hooks/useMessageQueueing'
 
 interface AgentActionBarProps {
   conversationId: number | null
-  onAfterSend?: () => void
   isRunningAction?: boolean
   isStreaming: boolean
   onStopStream: () => void
@@ -25,7 +24,6 @@ interface AgentActionBarProps {
 
 export default function AgentActionBar({
   conversationId,
-  onAfterSend,
   isRunningAction = false,
   isStreaming,
   onStopStream,
@@ -67,8 +65,7 @@ export default function AgentActionBar({
 
   const handleSend = useCallback(() => {
     handleSendMessage()
-    onAfterSend?.()
-  }, [handleSendMessage, onAfterSend])
+  }, [handleSendMessage])
 
   if (isDisabled) {
     return (

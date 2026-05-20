@@ -108,11 +108,11 @@ describe('Settings', () => {
     const agentsTab = screen.getByText('Agents')
     await user.click(agentsTab)
 
-    // Should display Claude Code Engine section
+    // Should display Claude Code Engine section with compact layout
     await waitFor(() => {
       expect(screen.getByText('Claude Code Engine')).toBeInTheDocument()
+      expect(screen.getByText('Client Mode')).toBeInTheDocument()
     })
-    expect(screen.getByText('Configure the Claude Code agent client mode')).toBeInTheDocument()
   })
 
 })
