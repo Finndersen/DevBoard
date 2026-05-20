@@ -34,13 +34,19 @@ export default function AgentBlockDisplay({ children, isLatest }: AgentBlockDisp
 
   return (
     <div className="flex flex-col">
-      <div className="relative">
+      <div
+        className="relative overflow-hidden"
+        style={{
+          height: !isExpanded && needsExpansion ? `${MAX_COLLAPSED_HEIGHT}px` : undefined,
+        }}
+      >
         <div
           ref={contentRef}
-          className="overflow-hidden transition-all duration-300"
           style={{
-            maxHeight: !isExpanded && needsExpansion ? `${MAX_COLLAPSED_HEIGHT}px` : undefined,
-            marginTop: !isExpanded && needsExpansion ? `${-(scrollHeight - MAX_COLLAPSED_HEIGHT)}px` : undefined
+            position: !isExpanded && needsExpansion ? 'absolute' : undefined,
+            bottom: !isExpanded && needsExpansion ? 0 : undefined,
+            left: !isExpanded && needsExpansion ? 0 : undefined,
+            right: !isExpanded && needsExpansion ? 0 : undefined,
           }}
         >
           {children}

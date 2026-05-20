@@ -51,7 +51,10 @@ class TestGenerateTaskTitleAndBranch:
         assert call_args.kwargs["output_model"] is TaskTitleResult
         assert call_args.kwargs["effort"] == "low"
         assert call_args.kwargs["cwd"] == str(get_devboard_home())
-        mock_client.run.assert_called_once_with(prompt)
+        call_arg = mock_client.run.call_args[0][0]
+        assert prompt in call_arg
+        assert "Generate a task title and branch name" in call_arg
+        assert "## User Prompt" in call_arg
 
     @pytest.mark.asyncio
     @patch("devboard.agents.title_generator.ClaudeClient")

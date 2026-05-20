@@ -50,18 +50,21 @@ async def generate_task_title_and_branch(prompt: str) -> TaskTitleResult:
         >>> print(result.branch_name)
         "add-user-authentication-api"
     """
-    system_prompt = """You are a task title and branch name generator. Given a user prompt describing a task, generate:
+    system_prompt = "You are a task title and branch name generator."
 
-1. A concise, descriptive task title (maximum 80 characters)
-2. A kebab-case branch name (maximum 40 characters, no prefixes like "feat/" or "fix/")
+    user_message = f"""Generate a task title and branch name from the user prompt below.
 
 Guidelines:
-- Title should be clear and actionable, starting with a verb when possible
-- Branch name should be lowercase, kebab-case, and descriptive
+- Title should be concise and descriptive (maximum 80 characters), starting with a verb when possible
+- Branch name should be lowercase, kebab-case, maximum 40 characters, no prefixes like "feat/" or "fix/"
 - Focus on the main action/outcome, not implementation details
 - Keep both short but informative
 
-Respond immediately using the structured output tool. Do not include any other text in your response."""
+Respond immediately using the structured output tool. Do not include any other text in your response.
+
+## User Prompt
+
+{prompt}"""
 
     try:
         client = ClaudeClient(
@@ -74,7 +77,7 @@ Respond immediately using the structured output tool. Do not include any other t
             effort="low",
         )
 
-        result = await client.run(prompt)
+        result = await client.run(user_message)
 
         if result.structured_output is not None:
             assert isinstance(result.structured_output, TaskTitleResult)

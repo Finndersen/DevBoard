@@ -20,7 +20,7 @@ from claude_agent_sdk import (
     tool,
 )
 from claude_agent_sdk.types import McpSdkServerConfig, SandboxSettings, SystemPromptPreset
-from claude_interactive_sdk import ClaudeInteractiveClient  # type: ignore
+from claude_interactive_sdk import ClaudeInteractiveClient
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, ValidationError
 from pydantic_ai import Tool
@@ -522,7 +522,9 @@ class ClaudeClient:
                     await task
 
     @staticmethod
-    async def _wait_for_subprocess_flush(client: ClaudeSDKClient, timeout: float = 5.0) -> None:
+    async def _wait_for_subprocess_flush(
+        client: ClaudeSDKClient | ClaudeInteractiveClient, timeout: float = 5.0
+    ) -> None:
         """Close stdin and wait for the CLI subprocess to flush and exit.
 
         The SDK's transport.close() sends EOF and SIGTERM almost simultaneously,
@@ -571,14 +573,14 @@ class ClaudeClient:
             pass
 
 
-def _get_subprocess(client: ClaudeSDKClient) -> asyncio.subprocess.Process | None:
+def _get_subprocess(client: ClaudeSDKClient | ClaudeInteractiveClient) -> asyncio.subprocess.Process | None:
     """Access the underlying subprocess via SDK internals."""
     query = getattr(client, "_query", None)
     transport = getattr(query, "transport", None) if query else None
     return getattr(transport, "_process", None) if transport else None
 
 
-async def _try_soft_interrupt(client: ClaudeSDKClient) -> None:
+async def _try_soft_interrupt(client: ClaudeSDKClient | ClaudeInteractiveClient) -> None:
     """Send soft interrupt to CLI; errors silently suppressed."""
     with contextlib.suppress(Exception):
         await client.interrupt()
