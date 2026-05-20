@@ -394,13 +394,46 @@ def _is_excluded_file(file_path: str) -> bool:
     return any(p.search(file_path) for p in _EXCLUDED_DIFF_PATTERNS)
 
 
+def _strip_diff_header(diff_content: str) -> str:
+    """Strip git diff header lines, returning only the hunks.
+
+    Skips all lines before the first '@@' hunk marker or 'Binary files' line.
+    If content already starts with @@, content is already stripped.
+    Returns empty string if no @@ hunks or Binary files line found (pure rename, mode-only change).
+    """
+    if not diff_content:
+        return ""
+
+    lines = diff_content.split("\n")
+
+    # If first line starts with @@, content is already stripped
+    if lines and lines[0].startswith("@@"):
+        return diff_content
+
+    # Find first @@ hunk marker or Binary files line
+    for i, line in enumerate(lines):
+        if line.startswith("@@") or line.startswith("Binary files"):
+            return "\n".join(lines[i:])
+
+    # No hunks found (covers: pure rename, mode-only change)
+    return ""
+
+
 def _format_file_diff(file_path: str, diff_content: str, additions: int, deletions: int) -> str:
     """Format one file's diff with per-file truncation applied."""
     header = f"--- {file_path} ---"
-    if len(diff_content) <= _MAX_FILE_DIFF_CHARS:
-        return f"{header}\n{diff_content}"
-    truncated = diff_content[:_MAX_FILE_DIFF_CHARS]
-    omitted_chars = len(diff_content) - _MAX_FILE_DIFF_CHARS
+
+    # Strip git diff header lines, keeping only hunks
+    body = _strip_diff_header(diff_content)
+
+    # If no hunks (pure rename, mode-only change — but not binary), use placeholder
+    if not body:
+        return f"{header}\n[no content changes]"
+
+    if len(body) <= _MAX_FILE_DIFF_CHARS:
+        return f"{header}\n{body}"
+    truncated = body[:_MAX_FILE_DIFF_CHARS]
+    omitted_chars = len(body) - _MAX_FILE_DIFF_CHARS
     return f"{header}\n{truncated}\n[... {omitted_chars:,} characters truncated (+{additions}/-{deletions} total)]"
 
 

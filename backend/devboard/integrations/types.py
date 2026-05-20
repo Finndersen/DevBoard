@@ -55,6 +55,9 @@ class FileDiff:
     deletions: int
     is_new_file: bool = False
     is_deleted: bool = False
+    old_file_path: str | None = None
+    is_binary: bool = False
+    is_mode_change: bool = False
 
 
 @dataclass
@@ -87,6 +90,8 @@ class StructuredDiff:
               - src/foo.py (+30/-5)
               - src/bar.py (+15/-7) (new)
               - src/baz.py (+0/-0) (deleted)
+              - src/renamed.py (+5/-3) (renamed from src/old.py)
+              - assets/logo.png (+0/-0) (binary)
         """
         if not self.files:
             return "No file changes."
@@ -99,6 +104,19 @@ class StructuredDiff:
                 line += " (new)"
             elif f.is_deleted:
                 line += " (deleted)"
+
+            # Add annotations for other metadata
+            annotations = []
+            if f.old_file_path:
+                annotations.append(f"renamed from {f.old_file_path}")
+            if f.is_binary:
+                annotations.append("binary")
+            if f.is_mode_change:
+                annotations.append("mode change")
+
+            if annotations:
+                line += " (" + ", ".join(annotations) + ")"
+
             file_lines.append(line)
 
         return header + "\n" + "\n".join(file_lines)

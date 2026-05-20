@@ -50,3 +50,60 @@ class TestStructuredDiffFormatSummary:
             "  - src/bar.py (+15/-7) (new)\n"
             "  - src/baz.py (+0/-0) (deleted)"
         )
+
+    def test_renamed_file_annotation(self):
+        diff = StructuredDiff(
+            files=[
+                FileDiff(
+                    file_path="src/new_name.py",
+                    diff_content="",
+                    additions=5,
+                    deletions=3,
+                    old_file_path="src/old_name.py",
+                )
+            ],
+            additions=5,
+            deletions=3,
+        )
+        result = diff.format_summary()
+        assert result == ("1 files changed, +5/-3\n  - src/new_name.py (+5/-3) (renamed from src/old_name.py)")
+
+    def test_binary_file_annotation(self):
+        diff = StructuredDiff(
+            files=[FileDiff(file_path="assets/logo.png", diff_content="", additions=0, deletions=0, is_binary=True)],
+            additions=0,
+            deletions=0,
+        )
+        result = diff.format_summary()
+        assert result == ("1 files changed, +0/-0\n  - assets/logo.png (+0/-0) (binary)")
+
+    def test_mode_change_annotation(self):
+        diff = StructuredDiff(
+            files=[
+                FileDiff(file_path="scripts/run.sh", diff_content="", additions=0, deletions=0, is_mode_change=True)
+            ],
+            additions=0,
+            deletions=0,
+        )
+        result = diff.format_summary()
+        assert result == ("1 files changed, +0/-0\n  - scripts/run.sh (+0/-0) (mode change)")
+
+    def test_multiple_annotations(self):
+        diff = StructuredDiff(
+            files=[
+                FileDiff(
+                    file_path="src/new_name.py",
+                    diff_content="",
+                    additions=5,
+                    deletions=3,
+                    old_file_path="src/old_name.py",
+                    is_mode_change=True,
+                )
+            ],
+            additions=5,
+            deletions=3,
+        )
+        result = diff.format_summary()
+        assert result == (
+            "1 files changed, +5/-3\n  - src/new_name.py (+5/-3) (renamed from src/old_name.py, mode change)"
+        )

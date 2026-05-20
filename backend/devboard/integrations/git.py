@@ -226,16 +226,49 @@ class GitRepoIntegration:
             if not block:
                 continue
 
-            # Extract file path from +++ b/path line
-            file_path_match = re.search(r"^\+\+\+ b/(.+)$", block, re.MULTILINE)
-            if not file_path_match:
-                # Try --- a/path for deletions
-                file_path_match = re.search(r"^--- a/(.+)$", block, re.MULTILINE)
+            # Capture metadata BEFORE filtering
+            old_file_path: str | None = None
+            is_binary = False
+            is_mode_change = False
 
-            if not file_path_match:
-                continue
+            # Detect rename: extract old path from "rename from <path>" line
+            rename_from_match = re.search(r"^rename from (.+)$", block, re.MULTILINE)
+            if rename_from_match:
+                old_file_path = rename_from_match.group(1)
 
-            file_path = file_path_match.group(1)
+            # For renamed files, prefer the new path from "rename to <path>" line
+            rename_to_match = re.search(r"^rename to (.+)$", block, re.MULTILINE)
+            if rename_to_match:
+                file_path = rename_to_match.group(1)
+            else:
+                # Extract file path from +++ b/path line
+                file_path_match = re.search(r"^\+\+\+ b/(.+)$", block, re.MULTILINE)
+                if not file_path_match:
+                    # Try --- a/path for deletions
+                    file_path_match = re.search(r"^--- a/(.+)$", block, re.MULTILINE)
+
+                if not file_path_match:
+                    # For binary files, try to extract from "Binary files a/... and b/..." line
+                    binary_match = re.search(r"^Binary files a/(.+) and b/(.+) differ", block, re.MULTILINE)
+                    if binary_match:
+                        file_path = binary_match.group(2)
+                    else:
+                        # Fallback: extract from "diff --git a/<old> b/<new>" line (covers mode-only changes)
+                        diff_git_match = re.search(r"^diff --git a/.+ b/(.+)$", block, re.MULTILINE)
+                        if diff_git_match:
+                            file_path = diff_git_match.group(1)
+                        else:
+                            continue
+                else:
+                    file_path = file_path_match.group(1)
+
+            # Detect binary file
+            if re.search(r"^Binary files .+ differ", block, re.MULTILINE):
+                is_binary = True
+
+            # Detect mode changes
+            if re.search(r"^old mode\s", block, re.MULTILINE) or re.search(r"^new mode\s", block, re.MULTILINE):
+                is_mode_change = True
 
             # Detect new file and deleted file status
             is_new_file = bool(re.search(r"^new file mode", block, re.MULTILINE))
@@ -265,6 +298,9 @@ class GitRepoIntegration:
                     deletions=deletions,
                     is_new_file=is_new_file,
                     is_deleted=is_deleted,
+                    old_file_path=old_file_path,
+                    is_binary=is_binary,
+                    is_mode_change=is_mode_change,
                 )
             )
 

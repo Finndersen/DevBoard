@@ -879,6 +879,9 @@ def _make_file(
     deletions: int = 0,
     is_new: bool = False,
     is_deleted: bool = False,
+    old_file_path: str | None = None,
+    is_binary: bool = False,
+    is_mode_change: bool = False,
 ) -> FileDiff:
     return FileDiff(
         file_path=path,
@@ -887,6 +890,9 @@ def _make_file(
         deletions=deletions,
         is_new_file=is_new,
         is_deleted=is_deleted,
+        old_file_path=old_file_path,
+        is_binary=is_binary,
+        is_mode_change=is_mode_change,
     )
 
 
@@ -902,10 +908,13 @@ class TestBuildCodeReviewPrompt:
     """Tests for build_code_review_prompt diff filtering and truncation."""
 
     def test_normal_file_under_limit_is_included_verbatim(self):
-        content = "+" + "\n+".join(["line"] * 10)
-        file = _make_file("src/foo.py", content, additions=10)
+        hunk = "@@ -1,0 +1,10 @@\n" + ("+line\n" * 10)
+        diff_content = (
+            "diff --git a/src/foo.py b/src/foo.py\nindex abc..def 100644\n--- a/src/foo.py\n+++ b/src/foo.py\n" + hunk
+        )
+        file = _make_file("src/foo.py", diff_content, additions=10)
         prompt = build_code_review_prompt(_make_diff(file))
-        assert content in prompt
+        assert hunk in prompt
 
     def test_lock_file_diff_replaced_with_stub(self):
         file = _make_file("uv.lock", "+lots of locked content\n" * 100, additions=100)
@@ -922,18 +931,33 @@ class TestBuildCodeReviewPrompt:
 
     def test_per_file_truncation_at_limit(self):
         # Use a distinctive sentinel after the cut point so we can verify it's absent.
+        # Create a real diff with git header and @@ hunk
+        git_header = (
+            "diff --git a/src/big.py b/src/big.py\nindex abc1234..def5678\n--- a/src/big.py\n+++ b/src/big.py\n"
+        )
+        # Create hunk with content that exceeds _MAX_FILE_DIFF_CHARS
         kept = "a" * _MAX_FILE_DIFF_CHARS
         overflow = "OVERFLOW_SENTINEL"
-        long_content = kept + overflow
-        file = _make_file("src/big.py", long_content, additions=1)
+        long_hunk = f"@@ -1,1000 +1,1001 @@\n{kept}{overflow}"
+        full_diff = git_header + long_hunk
+
+        file = _make_file("src/big.py", full_diff, additions=1)
         prompt = build_code_review_prompt(_make_diff(file))
         assert "characters truncated" in prompt
         assert kept[:100] in prompt  # start of kept content is present
         assert overflow not in prompt  # sentinel beyond the limit is absent
+        assert "diff --git" not in prompt  # git header should be stripped
 
     def test_file_exactly_at_limit_is_not_truncated(self):
-        content = "x" * _MAX_FILE_DIFF_CHARS
-        file = _make_file("src/exact.py", content, additions=1)
+        # Create real diff with @@ hunk that's exactly at the limit
+        git_header = (
+            "diff --git a/src/exact.py b/src/exact.py\nindex abc1234..def5678\n--- a/src/exact.py\n+++ b/src/exact.py\n"
+        )
+        # Hunk content is exactly _MAX_FILE_DIFF_CHARS
+        hunk = "@@ -1,100 +1,101 @@\n" + ("x" * (_MAX_FILE_DIFF_CHARS - 25))  # account for @@ line
+        full_diff = git_header + hunk
+
+        file = _make_file("src/exact.py", full_diff, additions=1)
         prompt = build_code_review_prompt(_make_diff(file))
         assert "characters truncated" not in prompt
 
@@ -945,7 +969,12 @@ class TestBuildCodeReviewPrompt:
         assert "[File deleted]" in prompt
 
     def test_new_files_included_when_under_global_budget(self):
-        new_file = _make_file("src/new.py", "+hello\n", additions=1, is_new=True)
+        diff_content = (
+            "diff --git a/src/new.py b/src/new.py\nnew file mode 100644\n"
+            "index 0000000..abc1234\n--- /dev/null\n+++ b/src/new.py\n"
+            "@@ -0,0 +1 @@\n+hello\n"
+        )
+        new_file = _make_file("src/new.py", diff_content, additions=1, is_new=True)
         prompt = build_code_review_prompt(_make_diff(new_file))
         assert "+hello" in prompt
         assert "omitted from the diff" not in prompt
@@ -954,8 +983,24 @@ class TestBuildCodeReviewPrompt:
         # Create enough modified files to exceed _MAX_TOTAL_DIFF_CHARS after per-file truncation.
         # Each modified file contributes _MAX_FILE_DIFF_CHARS chars; we need enough to fill the budget.
         files_needed = _MAX_TOTAL_DIFF_CHARS // _MAX_FILE_DIFF_CHARS + 1
-        big_content = "x" * (_MAX_FILE_DIFF_CHARS + 100)  # over per-file limit → truncated to _MAX_FILE_DIFF_CHARS
-        modified_files = [_make_file(f"src/modified_{i}.py", big_content, additions=1) for i in range(files_needed)]
+
+        # Create real diff content with @@ hunk that gets truncated
+        def make_big_file(file_num: int) -> FileDiff:
+            git_header = (
+                f"diff --git a/src/modified_{file_num}.py b/src/modified_{file_num}.py\n"
+                "index abc1234..def5678\n"
+                f"--- a/src/modified_{file_num}.py\n"
+                f"+++ b/src/modified_{file_num}.py\n"
+            )
+            # Make hunk larger than per-file limit
+            hunk = "@@ -1,1000 +1,1001 @@\n" + ("x" * (_MAX_FILE_DIFF_CHARS + 100))
+            return _make_file(
+                f"src/modified_{file_num}.py",
+                git_header + hunk,
+                additions=1,
+            )
+
+        modified_files = [make_big_file(i) for i in range(files_needed)]
         new_file = _make_file("src/brand_new.py", "+new content\n", additions=1, is_new=True)
 
         prompt = build_code_review_prompt(_make_diff(*modified_files, new_file))
@@ -966,8 +1011,22 @@ class TestBuildCodeReviewPrompt:
 
     def test_modified_files_always_included_when_budget_exceeded(self):
         files_needed = _MAX_TOTAL_DIFF_CHARS // _MAX_FILE_DIFF_CHARS + 1
-        big_content = "x" * (_MAX_FILE_DIFF_CHARS + 100)
-        modified_files = [_make_file(f"src/modified_{i}.py", big_content, additions=1) for i in range(files_needed)]
+
+        def make_big_file(file_num: int) -> FileDiff:
+            git_header = (
+                f"diff --git a/src/modified_{file_num}.py b/src/modified_{file_num}.py\n"
+                "index abc1234..def5678\n"
+                f"--- a/src/modified_{file_num}.py\n"
+                f"+++ b/src/modified_{file_num}.py\n"
+            )
+            hunk = "@@ -1,1000 +1,1001 @@\n" + ("x" * (_MAX_FILE_DIFF_CHARS + 100))
+            return _make_file(
+                f"src/modified_{file_num}.py",
+                git_header + hunk,
+                additions=1,
+            )
+
+        modified_files = [make_big_file(i) for i in range(files_needed)]
         new_file = _make_file("src/new.py", "+new\n", additions=1, is_new=True)
 
         prompt = build_code_review_prompt(_make_diff(*modified_files, new_file))
@@ -980,6 +1039,120 @@ class TestBuildCodeReviewPrompt:
         file = _make_file("src/foo.py", "+x\n", additions=1)
         prompt = build_code_review_prompt(_make_diff(file), additional_context="Pay attention to security.")
         assert "Pay attention to security." in prompt
+
+    def test_modified_file_git_header_stripped(self):
+        """Modified file: git header stripped, only @@ hunks preserved."""
+        # Full git diff with header lines
+        full_diff = (
+            "diff --git a/src/module.py b/src/module.py\n"
+            "index abc1234..def5678 100644\n"
+            "--- a/src/module.py\n"
+            "+++ b/src/module.py\n"
+            "@@ -10,3 +10,4 @@\n"
+            " def foo():\n"
+            "+    return 42\n"
+        )
+        file = _make_file("src/module.py", full_diff, additions=1)
+        prompt = build_code_review_prompt(_make_diff(file))
+
+        # Git header lines should be stripped
+        assert "diff --git" not in prompt
+        assert "index abc1234" not in prompt
+        # But the @@ hunk should be preserved
+        assert "@@ -10,3 +10,4 @@" in prompt
+        assert "return 42" in prompt
+        assert "--- src/module.py ---" in prompt  # Custom separator preserved
+
+    def test_new_file_dev_null_header_stripped(self):
+        """New file: /dev/null header stripped, only @@ hunks preserved."""
+        full_diff = (
+            "diff --git a/src/new_file.py b/src/new_file.py\n"
+            "new file mode 100644\n"
+            "index 0000000..abc1234\n"
+            "--- /dev/null\n"
+            "+++ b/src/new_file.py\n"
+            "@@ -0,0 +1,3 @@\n"
+            "+def hello():\n"
+            "+    pass\n"
+        )
+        file = _make_file("src/new_file.py", full_diff, additions=2, is_new=True)
+        prompt = build_code_review_prompt(_make_diff(file))
+
+        # Git header should be stripped
+        assert "new file mode" not in prompt
+        assert "/dev/null" not in prompt
+        # @@ hunk should be preserved
+        assert "@@ -0,0 +1,3 @@" in prompt
+        assert "+def hello" in prompt
+
+    def test_pure_rename_shows_no_content_changes(self):
+        """Pure rename: [no content changes] shown when no @@ hunks."""
+        # Rename with no actual content changes
+        rename_diff = (
+            "diff --git a/old_name.py b/new_name.py\n"
+            "similarity index 100%\n"
+            "rename from old_name.py\n"
+            "rename to new_name.py\n"
+        )
+        file = _make_file(
+            "new_name.py",
+            rename_diff,
+            additions=0,
+            deletions=0,
+            old_file_path="old_name.py",
+        )
+        prompt = build_code_review_prompt(_make_diff(file))
+
+        # Should show [no content changes] placeholder
+        assert "[no content changes]" in prompt
+        # Summary should show the rename annotation
+        assert "(renamed from old_name.py)" in prompt
+
+    def test_binary_file_shows_binary_annotation(self):
+        """Binary file: is_binary shown in summary."""
+        binary_diff = (
+            "diff --git a/assets/logo.png b/assets/logo.png\n"
+            "Binary files a/assets/logo.png and b/assets/logo.png differ\n"
+        )
+        file = _make_file("assets/logo.png", binary_diff, is_binary=True)
+        prompt = build_code_review_prompt(_make_diff(file))
+
+        # Binary annotation in summary
+        assert "(binary)" in prompt
+        # Binary files show the "Binary files ... differ" line as the body
+        assert "Binary files a/assets/logo.png and b/assets/logo.png differ" in prompt
+        assert "[no content changes]" not in prompt
+
+    def test_mode_only_change_shows_mode_change_annotation(self):
+        """Mode-only change: is_mode_change shown in summary, [no content changes] in body."""
+        mode_diff = "diff --git a/scripts/run.sh b/scripts/run.sh\nold mode 100644\nnew mode 100755\n"
+        file = _make_file("scripts/run.sh", mode_diff, additions=0, deletions=0, is_mode_change=True)
+        prompt = build_code_review_prompt(_make_diff(file))
+
+        # Summary annotation
+        assert "(mode change)" in prompt
+        # No content changes placeholder
+        assert "[no content changes]" in prompt
+
+    def test_truncation_after_header_strip(self):
+        """Truncation works correctly after stripping git header."""
+        # Git header + lots of hunk content
+        git_header = (
+            "diff --git a/src/big.py b/src/big.py\nindex abc1234..def5678\n--- a/src/big.py\n+++ b/src/big.py\n"
+        )
+        # Create a large hunk that exceeds _MAX_FILE_DIFF_CHARS
+        large_hunk = "@@ -1,1000 +1,1001 @@\n" + "+" + ("x" * (_MAX_FILE_DIFF_CHARS + 100))
+        full_diff = git_header + large_hunk
+
+        file = _make_file("src/big.py", full_diff, additions=1)
+        prompt = build_code_review_prompt(_make_diff(file))
+
+        # Should show truncation message
+        assert "characters truncated" in prompt
+        # Git header should not be present
+        assert "diff --git" not in prompt
+        # But @@ hunk start should be there
+        assert "@@" in prompt
 
 
 class TestCreateCodeReviewTool:

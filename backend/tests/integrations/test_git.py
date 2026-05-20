@@ -183,7 +183,8 @@ index 1234567..abcdefg
         result = git._parse_git_diff(raw_diff)
 
         assert len(result.files) == 1
-        diff_content = result.files[0].diff_content
+        file_diff = result.files[0]
+        diff_content = file_diff.diff_content
 
         # These metadata lines should be filtered out
         assert "similarity index" not in diff_content
@@ -197,6 +198,62 @@ index 1234567..abcdefg
         assert "@@" in diff_content
         assert "+    new_line" in diff_content
         assert "-    old_line" in diff_content
+
+        # Check that metadata fields are properly populated
+        assert file_diff.old_file_path == "old_name.py"
+        assert file_diff.is_mode_change is True
+        assert file_diff.is_binary is False
+
+    def test_parse_binary_file(self, temp_git_repo):
+        """Test parsing diff for a binary file change."""
+        git = GitRepoIntegration(temp_git_repo)
+        raw_diff = """diff --git a/image.png b/image.png
+index 1234567..abcdefg 100644
+Binary files a/image.png and b/image.png differ"""
+        result = git._parse_git_diff(raw_diff)
+
+        assert len(result.files) == 1
+        file_diff = result.files[0]
+        assert file_diff.file_path == "image.png"
+        assert file_diff.is_binary is True
+        assert "Binary files" in file_diff.diff_content
+
+    def test_parse_pure_rename(self, temp_git_repo):
+        """Test parsing diff for a pure rename (no content changes)."""
+        git = GitRepoIntegration(temp_git_repo)
+        raw_diff = """diff --git a/old_name.py b/new_name.py
+similarity index 100%
+rename from old_name.py
+rename to new_name.py
+"""
+        result = git._parse_git_diff(raw_diff)
+
+        assert len(result.files) == 1
+        file_diff = result.files[0]
+        assert file_diff.file_path == "new_name.py"
+        assert file_diff.old_file_path == "old_name.py"
+        assert file_diff.additions == 0
+        assert file_diff.deletions == 0
+        # Pure rename should have no hunks in diff_content
+        assert "@@" not in file_diff.diff_content
+
+    def test_parse_mode_only_change(self, temp_git_repo):
+        """Test parsing diff for a mode-only change (e.g., making script executable)."""
+        git = GitRepoIntegration(temp_git_repo)
+        raw_diff = """diff --git a/script.sh b/script.sh
+old mode 100644
+new mode 100755
+"""
+        result = git._parse_git_diff(raw_diff)
+
+        assert len(result.files) == 1
+        file_diff = result.files[0]
+        assert file_diff.file_path == "script.sh"
+        assert file_diff.is_mode_change is True
+        assert file_diff.additions == 0
+        assert file_diff.deletions == 0
+        # Mode-only change should have no hunks
+        assert "@@" not in file_diff.diff_content
 
 
 class TestStageUntrackedFilesIntent:
