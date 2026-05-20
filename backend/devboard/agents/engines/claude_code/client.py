@@ -20,9 +20,12 @@ from claude_agent_sdk import (
     tool,
 )
 from claude_agent_sdk.types import McpSdkServerConfig, SandboxSettings, SystemPromptPreset
+from claude_interactive_sdk import ClaudeInteractiveClient  # type: ignore
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, ValidationError
 from pydantic_ai import Tool
+
+from devboard.config.agent_engine_configs import ClientMode
 
 from .utils import BUILTIN_TOOLS_MCP_NAME, describe_message, get_message_content_details, load_env_from_settings
 
@@ -108,6 +111,7 @@ class ClaudeClient:
         additional_write_dirs: list[str] | None = None,
         output_model: type[BaseModel] | None = None,
         effort: Literal["low", "medium", "high", "max"] | None = None,
+        client_mode: ClientMode = ClientMode.SDK,
     ):
         """Initialize Claude Code client.
 
@@ -128,6 +132,7 @@ class ClaudeClient:
             effort: Optional effort level for thinking ("low", "medium", "high", "max")
         """
         self._output_model = output_model
+        self._client_mode = client_mode
         self.session_id = session_id
         self._tools = tools or []
 
@@ -416,7 +421,11 @@ class ClaudeClient:
                     model=self.options.model,
                     system_prompt=self.options.system_prompt,
                 ):
-                    async with ClaudeSDKClient(options=self.options) as client:
+                    if self._client_mode == ClientMode.INTERACTIVE:
+                        sdk_client = ClaudeInteractiveClient(options=self.options)
+                    else:
+                        sdk_client = ClaudeSDKClient(options=self.options)
+                    async with sdk_client as client:
                         with logfire.span("claude_client.send_query", query=user_query):
                             await client.query(user_query)
 
@@ -432,6 +441,7 @@ class ClaudeClient:
                                 asyncio.create_task(_try_soft_interrupt(client))
 
                                 # Wait briefly for the process to stop cleanly, then force-kill.
+                                # _get_subprocess returns None for non-SDK clients, so this no-ops.
                                 process = _get_subprocess(client)
                                 if process and process.returncode is None:
                                     try:

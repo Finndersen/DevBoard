@@ -1,6 +1,7 @@
 """Tests for ConfigService."""
 
 import json
+from enum import StrEnum
 from typing import Literal
 from unittest.mock import MagicMock, patch
 
@@ -310,3 +311,56 @@ class TestEnumFieldSupport:
         api_token_field = next(f for f in result.fields if f.name == "api_token")
         assert api_token_field.type == "string"
         assert api_token_field.enum_values is None
+
+
+class StrEnumMode(StrEnum):
+    SDK = "sdk"
+    INTERACTIVE = "interactive"
+
+
+class StrEnumTestConfig(BaseConfig):
+    """Test configuration with a StrEnum field."""
+
+    client_mode: StrEnumMode = StrEnumMode.SDK
+
+    env_prefix = "STR_ENUM_TEST_"
+    config_key = "test.str_enum"
+
+
+class TestStrEnumFieldSupport:
+    """Test StrEnum field type detection and enum_values population."""
+
+    @pytest.fixture
+    def str_enum_registry(self):
+        registry = MagicMock()
+        registry.get.return_value = StrEnumTestConfig
+        registry.list_keys.return_value = ["test.str_enum"]
+        return registry
+
+    def test_get_field_type_returns_enum_for_strenum(self, mock_config_repository, str_enum_registry):
+        """_get_field_type returns 'enum' for StrEnum-annotated fields."""
+        mock_config_repository.get_by_key.return_value = None
+        service = ConfigService(
+            configuration_repository=mock_config_repository,
+            config_registry=str_enum_registry,
+            env_vars={},
+        )
+
+        result = service.get_config_details(StrEnumTestConfig)
+
+        field = next(f for f in result.fields if f.name == "client_mode")
+        assert field.type == "enum"
+
+    def test_get_config_details_populates_enum_values_for_strenum(self, mock_config_repository, str_enum_registry):
+        """get_config_details populates enum_values from StrEnum members."""
+        mock_config_repository.get_by_key.return_value = None
+        service = ConfigService(
+            configuration_repository=mock_config_repository,
+            config_registry=str_enum_registry,
+            env_vars={},
+        )
+
+        result = service.get_config_details(StrEnumTestConfig)
+
+        field = next(f for f in result.fields if f.name == "client_mode")
+        assert field.enum_values == ["sdk", "interactive"]

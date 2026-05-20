@@ -56,6 +56,8 @@ export default function Settings() {
   const [loadingStatuses, setLoadingStatuses] = useState(false)
   const [devboardConfig, setDevboardConfig] = useState<ConfigurationDetailResponse | null>(null)
   const [loadingDevboardConfig, setLoadingDevboardConfig] = useState(false)
+  const [claudeCodeEngineConfig, setClaudeCodeEngineConfig] = useState<ConfigurationDetailResponse | null>(null)
+  const [loadingClaudeCodeEngine, setLoadingClaudeCodeEngine] = useState(false)
 
   const handleConfigurationSave = (config: ConfigurationDetailResponse) => {
     console.log('Configuration saved:', config)
@@ -131,6 +133,18 @@ export default function Settings() {
     }
   }
 
+  const loadClaudeCodeEngineConfig = async () => {
+    try {
+      setLoadingClaudeCodeEngine(true)
+      const config = await apiClient.getConfigurationDetail('agents.claude_code')
+      setClaudeCodeEngineConfig(config)
+    } catch (error) {
+      console.error('Failed to load Claude Code Engine config:', error)
+    } finally {
+      setLoadingClaudeCodeEngine(false)
+    }
+  }
+
   // Update URL when tab changes
   const handleTabChange = (newTab: 'integrations' | 'models' | 'agents' | 'custom-fields' | 'general') => {
     setActiveTab(newTab)
@@ -150,6 +164,10 @@ export default function Settings() {
     if (newTab === 'general') {
       loadDevboardConfig()
     }
+
+    if (newTab === 'agents') {
+      loadClaudeCodeEngineConfig()
+    }
   }
 
   // Update activeTab when URL changes
@@ -165,6 +183,9 @@ export default function Settings() {
     }
     if (activeTab === 'general') {
       loadDevboardConfig()
+    }
+    if (activeTab === 'agents') {
+      loadClaudeCodeEngineConfig()
     }
   }, [activeTab])
 
@@ -270,41 +291,67 @@ export default function Settings() {
       )}
 
       {activeTab === 'agents' && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          {/* Agent Role List */}
-          <div className="md:col-span-1">
-            <Card padding="none">
-              <div className={`px-6 py-4 border-b ${borderColors.default}`}>
-                <h3 className={`text-lg font-medium ${textColors.primary}`}>Agent Roles</h3>
-                <p className={`text-sm ${textColors.secondary} mt-1`}>
-                  Configure AI agent behavior
-                </p>
+        <div className="space-y-6">
+          {/* Claude Code Engine Configuration */}
+          <Card padding="none">
+            <div className={`px-6 py-4 border-b ${borderColors.default}`}>
+              <h3 className={`text-lg font-medium ${textColors.primary}`}>Claude Code Engine</h3>
+              <p className={`text-sm ${textColors.secondary} mt-1`}>
+                Configure the Claude Code agent client mode
+              </p>
+            </div>
+            {loadingClaudeCodeEngine ? (
+              <div className="p-6 animate-pulse">
+                <div className="h-10 bg-gray-200 dark:bg-white/[0.06] rounded"></div>
               </div>
-
-              <AgentRoleList
-                roles={agentTypes}
-                selectedRole={selectedAgentRole}
-                onSelectRole={setSelectedAgentRole}
+            ) : claudeCodeEngineConfig ? (
+              <ConfigurationForm
+                config={claudeCodeEngineConfig}
+                title=""
+                onSave={(config) => setClaudeCodeEngineConfig(config)}
               />
-            </Card>
-          </div>
+            ) : (
+              <div className="p-6 text-sm text-gray-500 dark:text-gray-400">Failed to load configuration.</div>
+            )}
+          </Card>
 
-          {/* Agent Configuration Panel */}
-          <div className="md:col-span-3">
-            <Card className="p-6">
-              {(() => {
-                const selectedAgent = agentTypes.find(a => a.key === selectedAgentRole)
-                if (!selectedAgent) return null
-                return (
-                  <AgentRoleConfigPanel
-                    key={selectedAgent.key}
-                    agentRole={selectedAgent.key}
-                    agentName={selectedAgent.name}
-                    agentDescription={selectedAgent.description}
-                  />
-                )
-              })()}
-            </Card>
+          {/* Agent Role List and Configuration */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            {/* Agent Role List */}
+            <div className="md:col-span-1">
+              <Card padding="none">
+                <div className={`px-6 py-4 border-b ${borderColors.default}`}>
+                  <h3 className={`text-lg font-medium ${textColors.primary}`}>Agent Roles</h3>
+                  <p className={`text-sm ${textColors.secondary} mt-1`}>
+                    Configure AI agent behavior
+                  </p>
+                </div>
+
+                <AgentRoleList
+                  roles={agentTypes}
+                  selectedRole={selectedAgentRole}
+                  onSelectRole={setSelectedAgentRole}
+                />
+              </Card>
+            </div>
+
+            {/* Agent Configuration Panel */}
+            <div className="md:col-span-3">
+              <Card className="p-6">
+                {(() => {
+                  const selectedAgent = agentTypes.find(a => a.key === selectedAgentRole)
+                  if (!selectedAgent) return null
+                  return (
+                    <AgentRoleConfigPanel
+                      key={selectedAgent.key}
+                      agentRole={selectedAgent.key}
+                      agentName={selectedAgent.name}
+                      agentDescription={selectedAgent.description}
+                    />
+                  )
+                })()}
+              </Card>
+            </div>
           </div>
         </div>
       )}

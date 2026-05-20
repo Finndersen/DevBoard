@@ -95,9 +95,24 @@ describe('Settings', () => {
     // Click on different integrations
     const jiraButton = screen.getByText('Jira').closest('button')
     await user.click(jiraButton!)
-    
+
     // Should still be able to interact with the interface
     expect(jiraButton).toBeInTheDocument()
+  })
+
+  it('renders Claude Code Engine section in agents tab', async () => {
+    const user = userEvent.setup()
+    render(<Settings />)
+
+    // Click on Agents tab
+    const agentsTab = screen.getByText('Agents')
+    await user.click(agentsTab)
+
+    // Should display Claude Code Engine section
+    await waitFor(() => {
+      expect(screen.getByText('Claude Code Engine')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Configure the Claude Code agent client mode')).toBeInTheDocument()
   })
 
 })

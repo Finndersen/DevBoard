@@ -11,6 +11,7 @@ from devboard.agents.events import ContextUsage, ConversationEvent, SystemEvent,
 from devboard.agents.exceptions import AgentInterruptedError
 from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.api.schemas.agent_conversation import ToolApprovals
+from devboard.config.agent_engine_configs import ClaudeCodeEngineConfig, ClientMode
 
 
 class ClaudeCodeAgentExecutionService(AgentExecutionService):
@@ -136,6 +137,9 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
             else None
         )
 
+        engine_config = self._agent_config_service.get_config(ClaudeCodeEngineConfig)
+        client_mode = engine_config.client_mode if engine_config else ClientMode.SDK
+
         return ClaudeCodeAgent(
             role=self.role,
             model=db_model,
@@ -145,4 +149,5 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
             custom_instructions=self.get_custom_instructions(),
             additional_write_dirs=self.additional_write_dirs,
             effort=self._effort,
+            client_mode=client_mode,
         )

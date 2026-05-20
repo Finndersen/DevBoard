@@ -1,5 +1,7 @@
 """Service for managing agent engine and model configuration."""
 
+from typing import TypeVar
+
 import logfire
 from pydantic import BaseModel
 
@@ -15,11 +17,14 @@ from devboard.agents.language_models import (
 )
 from devboard.agents.roles import AgentRoleType
 from devboard.api.schemas.agents import MCPToolSummary
+from devboard.config.base import BaseConfig
 from devboard.db.models import MCPTool
 from devboard.db.models.language_model import LanguageModelDB
 from devboard.db.repositories import AgentRoleConfigRepository
 from devboard.db.repositories.language_model import LanguageModelRepository
 from devboard.services.config_service import ConfigService
+
+_T = TypeVar("_T", bound=BaseConfig)
 
 
 class AgentConfiguration(BaseModel):
@@ -78,6 +83,9 @@ class AgentConfigService:
         self._config_service = config_service
         self._language_model_repo = language_model_repo
         self._engine_registry = engine_registry
+
+    def get_config(self, config_class: type[_T]) -> _T | None:
+        return self._config_service.get_config(config_class)
 
     def get_agent_configuration(self, agent_role: AgentRoleType) -> AgentConfiguration:
         """Get role-level configuration with effective config and available engines.

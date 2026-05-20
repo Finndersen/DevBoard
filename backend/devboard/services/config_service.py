@@ -2,6 +2,7 @@
 
 import json
 import os
+from enum import StrEnum
 from typing import Any, Literal, TypeVar, Union, get_args, get_origin
 
 from pydantic import BaseModel, ValidationError, computed_field
@@ -259,6 +260,8 @@ class ConfigService:
 
         if origin is Literal:
             return "enum"
+        elif isinstance(annotation, type) and issubclass(annotation, StrEnum):
+            return "enum"
         elif annotation is str:
             return "string"
         elif annotation is bool:
@@ -281,6 +284,8 @@ class ConfigService:
             if len(non_none_args) == 1:
                 annotation = non_none_args[0]
 
+        if isinstance(annotation, type) and issubclass(annotation, StrEnum):
+            return [str(v) for v in annotation]
         return [str(v) for v in get_args(annotation)]
 
     def _is_secret_field(self, field_name: str) -> bool:

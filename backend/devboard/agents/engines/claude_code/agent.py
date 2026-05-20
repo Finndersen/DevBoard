@@ -50,6 +50,7 @@ from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import (
     ToolApprovals,
 )
+from devboard.config.agent_engine_configs import ClientMode
 from devboard.db.models.language_model import LanguageModelDB
 
 # Maximum number of retry attempts for invalid responses
@@ -123,6 +124,7 @@ class ClaudeCodeAgent(BaseAgent):
         custom_instructions: str | None = None,
         additional_write_dirs: list[str] | None = None,
         effort: Literal["low", "medium", "high"] | None = None,
+        client_mode: ClientMode = ClientMode.SDK,
     ):
         """Initialize Claude Code agent with role.
 
@@ -146,6 +148,7 @@ class ClaudeCodeAgent(BaseAgent):
         self.last_result_message: ResultMessage | None = None
         self._additional_write_dirs = additional_write_dirs
         self._effort = effort
+        self._client_mode = client_mode
         # Convert PydanticAI tools to virtual tools and function tools
         self._virtual_tools, self._function_tools = self._partition_tools()
 
@@ -192,6 +195,7 @@ class ClaudeCodeAgent(BaseAgent):
             load_settings=self.role.include_claude_md,
             additional_write_dirs=self._additional_write_dirs,
             effort=self._effort,
+            client_mode=self._client_mode,
         )
 
     def _build_system_prompt(self) -> str:

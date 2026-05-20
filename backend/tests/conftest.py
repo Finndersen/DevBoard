@@ -1,6 +1,12 @@
 import datetime
+import sys
 from collections.abc import Generator, Iterator
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
+
+# Stub out claude_interactive_sdk so tests can import production modules even
+# when the package is not installed in the dev/CI environment.
+if "claude_interactive_sdk" not in sys.modules:
+    sys.modules["claude_interactive_sdk"] = MagicMock()
 
 import logfire
 import pytest

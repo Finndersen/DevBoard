@@ -23,12 +23,24 @@ from pydantic_core import ValidationError
 
 from devboard.agents.engines.claude_code.client import ClaudeClient, ClaudeCodeResult
 from devboard.agents.engines.claude_code.utils import BUILTIN_TOOLS_MCP_NAME
+from devboard.config.agent_engine_configs import ClientMode
 
 
 @pytest.fixture
 def mock_sdk_client():
     """Create a mock ClaudeSDKClient."""
     with patch("devboard.agents.engines.claude_code.client.ClaudeSDKClient") as mock_class:
+        mock_instance = AsyncMock()
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=None)
+        mock_class.return_value = mock_instance
+        yield mock_instance
+
+
+@pytest.fixture
+def mock_interactive_client():
+    """Create a mock ClaudeInteractiveClient."""
+    with patch("devboard.agents.engines.claude_code.client.ClaudeInteractiveClient") as mock_class:
         mock_instance = AsyncMock()
         mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
         mock_instance.__aexit__ = AsyncMock(return_value=None)
@@ -1066,3 +1078,102 @@ class TestOutputModel:
         expected_schema = _SampleOutput.model_json_schema()
         assert client.options.output_format == {"type": "json_schema", "schema": expected_schema}
         assert result.structured_output == _SampleOutput(name="fix-bug", value=1)
+
+
+class TestClientMode:
+    """Tests for client_mode parameter — which underlying client is instantiated."""
+
+    @pytest.mark.asyncio
+    async def test_default_uses_sdk_client(self, mock_sdk_client):
+        """Default client_mode (SDK) uses ClaudeSDKClient."""
+        result_msg = ResultMessage(
+            subtype="complete",
+            duration_ms=100,
+            duration_api_ms=80,
+            is_error=False,
+            num_turns=1,
+            session_id="s1",
+            result="ok",
+        )
+
+        async def mock_receive_response():
+            yield result_msg
+
+        mock_sdk_client.receive_response = mock_receive_response
+
+        client = ClaudeClient()
+        assert client._client_mode == ClientMode.SDK
+        await client.run("hello")
+
+        # ClaudeSDKClient was used (mock_sdk_client fixture patches it and captures the call)
+        mock_sdk_client.query.assert_called_once_with("hello")
+
+    @pytest.mark.asyncio
+    async def test_sdk_mode_explicit_uses_sdk_client(self, mock_sdk_client):
+        """Explicit client_mode=SDK uses ClaudeSDKClient."""
+        result_msg = ResultMessage(
+            subtype="complete",
+            duration_ms=100,
+            duration_api_ms=80,
+            is_error=False,
+            num_turns=1,
+            session_id="s2",
+            result="ok",
+        )
+
+        async def mock_receive_response():
+            yield result_msg
+
+        mock_sdk_client.receive_response = mock_receive_response
+
+        client = ClaudeClient(client_mode=ClientMode.SDK)
+        await client.run("hello sdk")
+
+        mock_sdk_client.query.assert_called_once_with("hello sdk")
+
+    @pytest.mark.asyncio
+    async def test_interactive_mode_uses_interactive_client(self, mock_interactive_client):
+        """client_mode=INTERACTIVE uses ClaudeInteractiveClient instead of ClaudeSDKClient."""
+        result_msg = ResultMessage(
+            subtype="complete",
+            duration_ms=100,
+            duration_api_ms=80,
+            is_error=False,
+            num_turns=1,
+            session_id="s3",
+            result="ok",
+        )
+
+        async def mock_receive_response():
+            yield result_msg
+
+        mock_interactive_client.receive_response = mock_receive_response
+
+        client = ClaudeClient(client_mode=ClientMode.INTERACTIVE)
+        assert client._client_mode == ClientMode.INTERACTIVE
+        await client.run("hello interactive")
+
+        mock_interactive_client.query.assert_called_once_with("hello interactive")
+
+    @pytest.mark.asyncio
+    async def test_interactive_mode_does_not_use_sdk_client(self, mock_interactive_client):
+        """client_mode=INTERACTIVE never instantiates ClaudeSDKClient."""
+        result_msg = ResultMessage(
+            subtype="complete",
+            duration_ms=100,
+            duration_api_ms=80,
+            is_error=False,
+            num_turns=1,
+            session_id="s4",
+            result="ok",
+        )
+
+        async def mock_receive_response():
+            yield result_msg
+
+        mock_interactive_client.receive_response = mock_receive_response
+
+        with patch("devboard.agents.engines.claude_code.client.ClaudeSDKClient") as mock_sdk_class:
+            client = ClaudeClient(client_mode=ClientMode.INTERACTIVE)
+            await client.run("test")
+            mock_sdk_class.assert_not_called()
