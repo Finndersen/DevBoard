@@ -36,6 +36,7 @@ class AgentConfiguration(BaseModel):
         custom_instructions: User-defined instructions appended to system prompt
         available_engines: List of engines available for this agent role
         enabled_mcp_tools: List of MCP tools assigned to this agent role
+        model_type_display_names: Display names for each model type as resolved for this role
     """
 
     agent_role: AgentRoleType
@@ -43,6 +44,7 @@ class AgentConfiguration(BaseModel):
     custom_instructions: str | None = None
     available_engines: list[AgentEngineInfo]
     enabled_mcp_tools: list[MCPToolSummary] = []
+    model_type_display_names: dict[str, str] = {}
 
 
 class AvailableModelsByEngine(BaseModel):
@@ -130,12 +132,20 @@ class AgentConfigService:
             for tool in mcp_tools
         ]
 
+        model_type_display_names = {
+            model_type.value: display_name
+            for model_type in ModelType
+            if (display_name := self._get_model_display_name_for_engine(model_type, effective_config.engine))
+            is not None
+        }
+
         return AgentConfiguration(
             agent_role=agent_role,
             config=effective_config,
             custom_instructions=custom_instructions,
             available_engines=available_engines,
             enabled_mcp_tools=enabled_mcp_tools,
+            model_type_display_names=model_type_display_names,
         )
 
     def get_available_models_by_engine(self) -> AvailableModelsByEngine:
@@ -310,7 +320,7 @@ class AgentConfigService:
 
         return AgentEngineModelConfig(
             engine=effective_engine,
-            model=resolved_model,
+            model_db=resolved_model,
         )
 
     def _get_available_models_for_engine(self, engine: AgentEngine) -> list[LanguageModelDB]:
@@ -421,7 +431,11 @@ class AgentConfigService:
         and extracts the model name from the "provider:model_name" format.
         """
         config = self.get_effective_config(role_type)
-        model_id = self.get_model_id_for_type(model_type, config.engine)
+        return self._get_model_display_name_for_engine(model_type, config.engine)
+
+    def _get_model_display_name_for_engine(self, model_type: ModelType, engine: AgentEngine) -> str | None:
+        """Resolve the display name for a model type for a specific engine."""
+        model_id = self.get_model_id_for_type(model_type, engine)
         if model_id is None:
             return None
         return model_id.split(":", 1)[1] if ":" in model_id else model_id

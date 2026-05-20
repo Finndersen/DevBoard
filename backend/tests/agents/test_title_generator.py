@@ -5,9 +5,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from devboard.agents.engines.claude_code.client import ClaudeCodeResult
+from devboard.agents.language_models import ModelType
 from devboard.agents.title_generator import (
     ConversationTitleResult,
-    TaskTitleResult,
+    TaskGenerationResult,
     generate_conversation_title,
     generate_task_title_and_branch,
 )
@@ -22,9 +23,10 @@ class TestGenerateTaskTitleAndBranch:
     async def test_successful_title_and_branch_generation(self, mock_client_class):
         """Test successful generation of task title and branch name."""
         prompt = "Add user authentication to the API"
-        expected_result = TaskTitleResult(
+        expected_result = TaskGenerationResult(
             title="Add user authentication to API",
             branch_name="add-user-authentication-api",
+            model_type=ModelType.ADVANCED,
         )
 
         mock_client = AsyncMock()
@@ -38,9 +40,10 @@ class TestGenerateTaskTitleAndBranch:
 
         result = await generate_task_title_and_branch(prompt)
 
-        assert result == TaskTitleResult(
+        assert result == TaskGenerationResult(
             title="Add user authentication to API",
             branch_name="add-user-authentication-api",
+            model_type=ModelType.ADVANCED,
         )
 
         mock_client_class.assert_called_once()
@@ -48,12 +51,12 @@ class TestGenerateTaskTitleAndBranch:
         assert call_args.kwargs["model"] == "haiku"
         assert call_args.kwargs["load_settings"] is False
         assert call_args.kwargs["sandbox_enabled"] is False
-        assert call_args.kwargs["output_model"] is TaskTitleResult
+        assert call_args.kwargs["output_model"] is TaskGenerationResult
         assert call_args.kwargs["effort"] == "low"
         assert call_args.kwargs["cwd"] == str(get_devboard_home())
         call_arg = mock_client.run.call_args[0][0]
         assert prompt in call_arg
-        assert "Generate a task title and branch name" in call_arg
+        assert "Generate a task title, branch name, and model type" in call_arg
         assert "## User Prompt" in call_arg
 
     @pytest.mark.asyncio
@@ -76,6 +79,7 @@ class TestGenerateTaskTitleAndBranch:
         assert result.title == prompt  # Prompt is under 80 chars
         assert result.branch_name.startswith("task-")
         assert result.branch_name.replace("task-", "").isdigit()
+        assert result.model_type == ModelType.STANDARD
 
     @pytest.mark.asyncio
     @patch("devboard.agents.title_generator.ClaudeClient")
@@ -91,6 +95,7 @@ class TestGenerateTaskTitleAndBranch:
 
         assert result.title == prompt
         assert result.branch_name.startswith("task-")
+        assert result.model_type == ModelType.STANDARD
 
     @pytest.mark.asyncio
     @patch("devboard.agents.title_generator.ClaudeClient")
@@ -113,6 +118,7 @@ class TestGenerateTaskTitleAndBranch:
 
         assert result.title == "A" * 77 + "..."
         assert result.branch_name == "task-1234567890"
+        assert result.model_type == ModelType.STANDARD
 
 
 class TestGenerateConversationTitle:

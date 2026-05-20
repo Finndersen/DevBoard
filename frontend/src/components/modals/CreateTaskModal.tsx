@@ -37,7 +37,9 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
       initial_message: (draftData?.initial_message as string) || '',
       selectedProjectId: (draftData?.selectedProjectId as string) || projectId || '',
       autoGenerateBranch: (draftData?.autoGenerateBranch as boolean) ?? true,
-      customFieldValues: (draftData?.customFieldValues as Record<string, unknown>) || {}
+      customFieldValues: (draftData?.customFieldValues as Record<string, unknown>) || {},
+      autoSelectModel: (draftData?.autoSelectModel as boolean) ?? true,
+      model_type: (draftData?.model_type as string) || ''
     }
   }, [currentDraft?.formData, projectId])
 
@@ -51,6 +53,10 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
   // Custom fields state
   const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
   const [customFieldsLoading, setCustomFieldsLoading] = useState(false)
+
+  // Agent configuration state
+  const [agentConfig, setAgentConfig] = useState<{ model_type?: string; model_type_display_names?: Record<string, string> } | null>(null)
+  const [agentConfigLoading, setAgentConfigLoading] = useState(false)
 
   // Auto-save draft
   const saveDraft = useCallback(() => {
@@ -106,6 +112,28 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
     }
   }, [isOpen, currentDraft?.formData?.customFieldValues])
 
+  // Fetch agent configuration when modal opens (run only once per open, not on every draft save)
+  useEffect(() => {
+    if (isOpen) {
+      setAgentConfigLoading(true)
+      apiClient.getAgentConfiguration('task_planning')
+        .then(config => {
+          const defaultModelType = config.config.model?.model_type || 'standard'
+          setAgentConfig({
+            model_type: defaultModelType,
+            model_type_display_names: config.model_type_display_names
+          })
+          // Set default model_type in form if not already set in draft
+          if (!currentDraft?.formData?.model_type) {
+            setFormData(prev => ({ ...prev, model_type: defaultModelType }))
+          }
+        })
+        .catch(err => console.error('Failed to load agent configuration:', err))
+        .finally(() => setAgentConfigLoading(false))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen])
+
   // Reset error state when modal closes
   useEffect(() => {
     if (!isOpen) {
@@ -157,6 +185,20 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
       ...prev,
       autoGenerateBranch: isChecked,
       working_branch: isChecked ? '' : prev.working_branch
+    }))
+  }, [])
+
+  const handleAutoSelectModelChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      autoSelectModel: e.target.checked
+    }))
+  }, [])
+
+  const handleModelTypeChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      model_type: e.target.value
     }))
   }, [])
 
@@ -224,6 +266,13 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
 
       if (formData.base_branch.trim()) {
         taskData.base_branch = formData.base_branch.trim()
+      }
+
+      // Include model_type based on auto-select setting
+      if (formData.autoSelectModel && formData.initial_message?.trim()) {
+        taskData.model_type = 'auto'
+      } else if (formData.model_type) {
+        taskData.model_type = formData.model_type
       }
 
       const createdTask = await apiClient.createTask(effectiveProjectId, taskData)
@@ -403,6 +452,62 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
                 placeholder="custom-branch-name"
               />
             )}
+          </div>
+        )}
+
+        {/* Agent Model Configuration */}
+        {formData.codebase_id && (
+          <div>
+            {formData.initial_message?.trim() && (
+              <div className="flex items-center mb-2">
+                <input
+                  type="checkbox"
+                  id="auto-select-model"
+                  checked={formData.autoSelectModel}
+                  onChange={handleAutoSelectModelChange}
+                  className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="auto-select-model" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Auto-select from prompt
+                </label>
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Agent Model
+              </label>
+              <select
+                value={formData.model_type}
+                onChange={handleModelTypeChange}
+                disabled={!!(formData.autoSelectModel && formData.initial_message?.trim())}
+                className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white ${
+                  formData.autoSelectModel && formData.initial_message?.trim() ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
+              >
+                {agentConfigLoading ? (
+                  <option>Loading models...</option>
+                ) : (
+                  <>
+                    <option value="fast">
+                      Fast{agentConfig?.model_type_display_names?.fast ? ` (${agentConfig.model_type_display_names.fast})` : ''}
+                    </option>
+                    <option value="standard">
+                      Standard{agentConfig?.model_type_display_names?.standard ? ` (${agentConfig.model_type_display_names.standard})` : ''}
+                    </option>
+                    <option value="advanced">
+                      Advanced{agentConfig?.model_type_display_names?.advanced ? ` (${agentConfig.model_type_display_names.advanced})` : ''}
+                    </option>
+                  </>
+                )}
+              </select>
+              {formData.model_type && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {formData.model_type === 'fast' && 'Trivial/mechanical changes only'}
+                  {formData.model_type === 'standard' && 'Moderate complexity'}
+                  {formData.model_type === 'advanced' && 'Complex/architectural changes'}
+                </p>
+              )}
+            </div>
           </div>
         )}
 

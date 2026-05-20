@@ -211,7 +211,6 @@ class TestCreateCodebaseInvestigationTool:
         mock_config = Mock(spec=AgentEngineModelConfig)
         mock_config.engine = AgentEngine.INTERNAL
         mock_config.model = Mock()
-        mock_config.model_id = "test-model"
         mock_agent_config_service.get_effective_config.return_value = mock_config
 
         mock_sub_agent_result = SubAgentResult(result="Investigation result", conversation_id=42)
@@ -285,7 +284,6 @@ class TestCreateCodebaseInvestigationTool:
         mock_config = Mock(spec=AgentEngineModelConfig)
         mock_config.engine = AgentEngine.INTERNAL
         mock_config.model = Mock()
-        mock_config.model_id = "test-model"
         mock_agent_config_service.get_effective_config.return_value = mock_config
 
         mock_sub_agent_result = SubAgentResult(result="Investigation result", conversation_id=42)
@@ -420,7 +418,7 @@ class TestCreateSubAgentConversation:
         """Test that create_sub_agent_conversation creates conversation, commits, and returns object."""
         mock_config = Mock(spec=AgentEngineModelConfig)
         mock_config.engine = AgentEngine.INTERNAL
-        mock_config.model_id = "test-model"
+        mock_config.model = Mock(id="test-model")
         mock_agent_config_service.get_effective_config.return_value = mock_config
 
         mock_entity = make_mock_task(task_id=5)
@@ -444,7 +442,7 @@ class TestCreateSubAgentConversation:
         """Test that parent_conversation_id is passed through to create."""
         mock_config = Mock(spec=AgentEngineModelConfig)
         mock_config.engine = AgentEngine.INTERNAL
-        mock_config.model_id = "test-model"
+        mock_config.model = Mock(id="test-model")
         mock_agent_config_service.get_effective_config.return_value = mock_config
 
         create_sub_agent_conversation(
@@ -462,7 +460,7 @@ class TestCreateSubAgentConversation:
         """Test that commit is called immediately after create."""
         mock_config = Mock(spec=AgentEngineModelConfig)
         mock_config.engine = AgentEngine.INTERNAL
-        mock_config.model_id = "test-model"
+        mock_config.model = Mock(id="test-model")
         mock_agent_config_service.get_effective_config.return_value = mock_config
 
         call_order = []
@@ -485,7 +483,7 @@ class TestCreateSubAgentConversation:
         """When model_type is None, the role's default model_id is used."""
         mock_config = Mock(spec=AgentEngineModelConfig)
         mock_config.engine = AgentEngine.INTERNAL
-        mock_config.model_id = "anthropic:claude-sonnet"
+        mock_config.model = Mock(id="anthropic:claude-sonnet")
         mock_agent_config_service.get_effective_config.return_value = mock_config
 
         create_sub_agent_conversation(
@@ -504,7 +502,7 @@ class TestCreateSubAgentConversation:
         """When model_type is provided, get_model_id_for_type is called and its result used as model_id."""
         mock_config = Mock(spec=AgentEngineModelConfig)
         mock_config.engine = AgentEngine.INTERNAL
-        mock_config.model_id = "anthropic:claude-sonnet"
+        mock_config.model = Mock(id="anthropic:claude-sonnet")
         mock_agent_config_service.get_effective_config.return_value = mock_config
         mock_agent_config_service.get_model_id_for_type.return_value = "anthropic:claude-haiku"
 
@@ -554,7 +552,6 @@ class TestRunSubAgent:
         mock_config = Mock(spec=AgentEngineModelConfig)
         mock_config.engine = AgentEngine.INTERNAL
         mock_config.model = Mock()
-        mock_config.model_id = "test-model"
         mock_agent_config_service.get_effective_config.return_value = mock_config
 
         mock_sub_agent_result = SubAgentResult(result="Review result", conversation_id=42)
@@ -585,7 +582,6 @@ class TestRunSubAgent:
         mock_config = Mock(spec=AgentEngineModelConfig)
         mock_config.engine = AgentEngine.INTERNAL
         mock_config.model = Mock()
-        mock_config.model_id = "test-model"
         mock_agent_config_service.get_effective_config.return_value = mock_config
 
         mock_sub_agent_result = SubAgentResult(result="Done", conversation_id=42)
@@ -1056,7 +1052,6 @@ class TestCreateCodeReviewTool:
         mock_config = Mock(spec=AgentEngineModelConfig)
         mock_config.engine = AgentEngine.INTERNAL
         mock_config.model = Mock()
-        mock_config.model_id = "test-model"
         mock_agent_config_service.get_effective_config.return_value = mock_config
 
         mock_sub_agent_result = SubAgentResult(result="Review complete", conversation_id=42)

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDownIcon } from '@heroicons/react/24/outline'
-import type { ConversationResponse, ModelInfo, UpdateConversationModelRequest, AgentConfigurationResponse } from '../../lib/api'
+import type { ConversationResponse, UpdateConversationModelRequest, AgentConfigurationResponse } from '../../lib/api'
 import { apiClient } from '../../lib/api'
 import { surfaces, borderColors, textColors, hoverColors } from '../../styles/designSystem'
 import { useNotificationStore } from '../../stores/notificationStore'

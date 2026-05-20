@@ -2,8 +2,15 @@
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 
+from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.execution.registry import get_execution_manager
-from devboard.agents.title_generator import generate_conversation_title, generate_task_title_and_branch
+from devboard.agents.language_models import ModelType
+from devboard.agents.roles import AgentRoleType
+from devboard.agents.title_generator import (
+    TaskGenerationResult,
+    generate_conversation_title,
+    generate_task_title_and_branch,
+)
 from devboard.api.dependencies.entities import get_verified_codebase, get_verified_project
 from devboard.api.dependencies.repositories import (
     get_codebase_repository,
@@ -14,6 +21,7 @@ from devboard.api.dependencies.repositories import (
     get_task_repository,
 )
 from devboard.api.dependencies.services import (
+    get_agent_config_service,
     get_conversation_service,
     get_project_service,
     get_system_event_emitter,
@@ -50,6 +58,32 @@ from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_service import TaskService
 
 router = APIRouter()
+
+
+async def _resolve_model_id_override(
+    model_type: str | None,
+    title_result: TaskGenerationResult | None,
+    initial_message: str | None,
+    agent_config_service: AgentConfigService,
+) -> str | None:
+    """Resolve a model_id override from a model_type string.
+
+    Returns None when model_type is not specified (use role default).
+    """
+    if model_type is None:
+        return None
+    effective_config = agent_config_service.get_effective_config(AgentRoleType.TASK_PLANNING)
+    if model_type == "auto":
+        if title_result is not None:
+            auto_model_type = title_result.model_type
+        elif initial_message is not None:
+            auto_result = await generate_task_title_and_branch(initial_message)
+            auto_model_type = auto_result.model_type
+        else:
+            return None
+    else:
+        auto_model_type = ModelType(model_type)
+    return agent_config_service.get_model_id_for_type(auto_model_type, effective_config.engine)
 
 
 @router.get("/", response_model=list[ProjectResponse])
@@ -309,6 +343,7 @@ async def create_project_task(
     codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     project_repo: ProjectRepository = Depends(get_project_repository),
+    agent_config_service: AgentConfigService = Depends(get_agent_config_service),
 ):
     """Create a new task under a project with initial conversation."""
 
@@ -323,6 +358,7 @@ async def create_project_task(
     base_branch = task.base_branch or codebase.default_branch
 
     # Generate title and branch name if title not provided
+    title_result: TaskGenerationResult | None = None
     if task.title is None:
         if task.initial_message is None:
             raise HTTPException(status_code=400, detail="Either title or initial_message must be provided")
@@ -334,6 +370,11 @@ async def create_project_task(
         task_title = task.title
         task_branch_name = task.branch_name
 
+    # Resolve model_id override from model_type
+    resolved_model_id = await _resolve_model_id_override(
+        task.model_type, title_result, task.initial_message, agent_config_service
+    )
+
     # Create task using service (creates task + documents + conversation)
     # Tasks always start in PLANNING status
     created_task = await task_service.create_task(
@@ -344,6 +385,7 @@ async def create_project_task(
         branch_name=task_branch_name,
         base_branch=base_branch,
         custom_fields=task.custom_fields,
+        model_id_override=resolved_model_id,
     )
 
     # Get the active conversation that was just created

@@ -34,7 +34,15 @@ const mockAgent: BackgroundAgent = {
 
 const mockConfigResponse = {
   agent_role: 'project',
-  config: { engine: 'internal', model_id: 'openai:gpt-4' },
+  config: {
+    engine: 'internal',
+    model: {
+      id: 'openai:gpt-4',
+      provider: 'openai',
+      name: 'GPT-4',
+      model_type: 'standard'
+    }
+  },
   custom_instructions: null,
   available_engines: [
     {
@@ -55,6 +63,11 @@ const mockConfigResponse = {
     },
   ],
   enabled_mcp_tools: [],
+  model_type_display_names: {
+    fast: 'openai:gpt-3.5-turbo',
+    standard: 'openai:gpt-4',
+    advanced: 'anthropic:claude-opus-4.1'
+  }
 }
 
 const mockModelsResponse = {

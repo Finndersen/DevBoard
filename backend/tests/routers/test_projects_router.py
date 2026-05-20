@@ -6,8 +6,9 @@ import pytest
 
 # from devboard.api.dependencies.agents import get_project_agent  # Removed in refactor
 from devboard.agents.engines import AgentEngine
+from devboard.agents.language_models import ModelType
 from devboard.agents.roles import AgentRoleType
-from devboard.agents.title_generator import TaskTitleResult
+from devboard.agents.title_generator import TaskGenerationResult
 from devboard.db.models import CustomFieldType, ParentEntityType
 from devboard.db.models.codebase import Codebase
 from devboard.db.models.document import DocumentType
@@ -628,8 +629,8 @@ class TestProjectTasksRouter:
     ):
         """Test creating a task with initial_message only (generates title, starts agent)."""
         # Mock title generation
-        mock_generate_title.return_value = TaskTitleResult(
-            title="Generated Task Title", branch_name="generated-task-title"
+        mock_generate_title.return_value = TaskGenerationResult(
+            title="Generated Task Title", branch_name="generated-task-title", model_type=ModelType.STANDARD
         )
 
         # Mock execution manager
@@ -731,7 +732,9 @@ class TestProjectTasksRouter:
     ):
         """Test that task creation handles title generation failures gracefully."""
         # Mock title generation failure by returning a fallback result
-        mock_generate_title.return_value = TaskTitleResult(title="task-1642501234", branch_name="task-1642501234")
+        mock_generate_title.return_value = TaskGenerationResult(
+            title="task-1642501234", branch_name="task-1642501234", model_type=ModelType.STANDARD
+        )
 
         # Create test project
         project_repo = ProjectRepository(db_session)
@@ -753,6 +756,169 @@ class TestProjectTasksRouter:
         task_data = response.json()
         # Should use fallback title from mock
         assert task_data["title"] == "task-1642501234"
+
+
+class TestCreateProjectTaskModelType:
+    """Tests for model_type parameter in create_project_task endpoint."""
+
+    @pytest.fixture(autouse=True)
+    def mock_git(self):
+        from devboard.integrations.base import IntegrationConnectionResult
+
+        with patch("devboard.services.task_git.service.GitRepoIntegration") as mock_cls:
+            mock_instance = mock_cls.return_value
+            mock_instance.validate = AsyncMock(return_value=IntegrationConnectionResult(success=True, message="ok"))
+            mock_instance.branch_exists = AsyncMock(return_value=True)
+            yield mock_cls
+
+    def _create_project(self, db_session, test_project_data):
+        """Helper to create a project directly in the DB."""
+        project_repo = ProjectRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        spec_doc = document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        project = project_repo.create(
+            name=test_project_data["name"],
+            description=test_project_data["description"],
+            specification=spec_doc,
+        )
+        db_session.commit()
+        return project
+
+    def _make_mock_agent_config_service(self, engine=AgentEngine.INTERNAL, resolved_model_id="anthropic:claude-opus-4"):
+        """Build a mock AgentConfigService that returns a proper config with a given resolved model_id."""
+        from devboard.agents.config_types import AgentEngineModelConfig
+
+        mock_service = Mock()
+        # Return a real AgentEngineModelConfig so conversation service can call .model safely
+        effective_config = AgentEngineModelConfig(engine=engine, model_db=None)
+        mock_service.get_effective_config.return_value = effective_config
+        mock_service.get_model_id_for_type.return_value = resolved_model_id
+        return mock_service
+
+    @patch("devboard.api.routers.projects.generate_task_title_and_branch")
+    @patch("devboard.api.routers.projects.get_execution_manager")
+    def test_explicit_model_type_resolves_to_model_id(
+        self, mock_get_execution_manager, mock_generate_title, client, db_session, test_project_data, test_codebase
+    ):
+        """Explicit model_type resolves via AgentConfigService and is passed to task creation."""
+        from devboard.api.dependencies.services import get_agent_config_service
+        from devboard.api.main import app
+
+        mock_generate_title.return_value = TaskGenerationResult(
+            title="Generated Title", branch_name="generated-title", model_type=ModelType.STANDARD
+        )
+        mock_get_execution_manager.return_value = Mock()
+        mock_agent_config_service = self._make_mock_agent_config_service(resolved_model_id="anthropic:claude-haiku-4-5")
+
+        project = self._create_project(db_session, test_project_data)
+
+        app.dependency_overrides[get_agent_config_service] = lambda: mock_agent_config_service
+        try:
+            response = client.post(
+                f"/api/projects/{project.id}/tasks",
+                json={"codebase_id": test_codebase.id, "initial_message": "Fix the bug", "model_type": "fast"},
+            )
+        finally:
+            del app.dependency_overrides[get_agent_config_service]
+
+        assert response.status_code == 200
+        # get_effective_config called at least once for model_type resolution (also called by conversation service)
+        mock_agent_config_service.get_effective_config.assert_called_with(AgentRoleType.TASK_PLANNING)
+        mock_agent_config_service.get_model_id_for_type.assert_called_once_with(
+            ModelType.FAST, mock_agent_config_service.get_effective_config.return_value.engine
+        )
+
+    @patch("devboard.api.routers.projects.generate_task_title_and_branch")
+    @patch("devboard.api.routers.projects.get_execution_manager")
+    def test_auto_model_type_reuses_title_result(
+        self, mock_get_execution_manager, mock_generate_title, client, db_session, test_project_data, test_codebase
+    ):
+        """model_type='auto' with no title uses model_type from title generation result."""
+        from devboard.api.dependencies.services import get_agent_config_service
+        from devboard.api.main import app
+
+        mock_generate_title.return_value = TaskGenerationResult(
+            title="Generated Title", branch_name="generated-title", model_type=ModelType.ADVANCED
+        )
+        mock_get_execution_manager.return_value = Mock()
+        mock_agent_config_service = self._make_mock_agent_config_service(resolved_model_id="anthropic:claude-opus-4")
+
+        project = self._create_project(db_session, test_project_data)
+
+        app.dependency_overrides[get_agent_config_service] = lambda: mock_agent_config_service
+        try:
+            response = client.post(
+                f"/api/projects/{project.id}/tasks",
+                json={"codebase_id": test_codebase.id, "initial_message": "Big refactor", "model_type": "auto"},
+            )
+        finally:
+            del app.dependency_overrides[get_agent_config_service]
+
+        assert response.status_code == 200
+        # generate_task_title_and_branch should be called exactly once (not twice)
+        mock_generate_title.assert_called_once()
+        mock_agent_config_service.get_model_id_for_type.assert_called_once_with(
+            ModelType.ADVANCED, mock_agent_config_service.get_effective_config.return_value.engine
+        )
+
+    @patch("devboard.api.routers.projects.generate_task_title_and_branch")
+    @patch("devboard.api.routers.projects.get_execution_manager")
+    def test_auto_model_type_with_title_calls_generator_separately(
+        self, mock_get_execution_manager, mock_generate_title, client, db_session, test_project_data, test_codebase
+    ):
+        """model_type='auto' with explicit title calls generator separately to get model_type."""
+        from devboard.api.dependencies.services import get_agent_config_service
+        from devboard.api.main import app
+
+        mock_generate_title.return_value = TaskGenerationResult(
+            title="Ignored Title", branch_name="ignored-title", model_type=ModelType.STANDARD
+        )
+        mock_get_execution_manager.return_value = Mock()
+        mock_agent_config_service = self._make_mock_agent_config_service(resolved_model_id="anthropic:claude-sonnet-4")
+
+        project = self._create_project(db_session, test_project_data)
+
+        app.dependency_overrides[get_agent_config_service] = lambda: mock_agent_config_service
+        try:
+            response = client.post(
+                f"/api/projects/{project.id}/tasks",
+                json={
+                    "title": "Explicit Title",
+                    "codebase_id": test_codebase.id,
+                    "initial_message": "Moderate change",
+                    "model_type": "auto",
+                },
+            )
+        finally:
+            del app.dependency_overrides[get_agent_config_service]
+
+        assert response.status_code == 200
+        # generator called separately (title was provided so first call didn't happen)
+        mock_generate_title.assert_called_once_with("Moderate change")
+        mock_agent_config_service.get_model_id_for_type.assert_called_once_with(
+            ModelType.STANDARD, mock_agent_config_service.get_effective_config.return_value.engine
+        )
+
+    def test_no_model_type_skips_resolution(self, client, db_session, test_project_data, test_codebase):
+        """Omitting model_type does not call get_model_id_for_type."""
+        from devboard.api.dependencies.services import get_agent_config_service
+        from devboard.api.main import app
+
+        mock_agent_config_service = self._make_mock_agent_config_service()
+
+        project = self._create_project(db_session, test_project_data)
+
+        app.dependency_overrides[get_agent_config_service] = lambda: mock_agent_config_service
+        try:
+            response = client.post(
+                f"/api/projects/{project.id}/tasks",
+                json={"title": "Simple Task", "codebase_id": test_codebase.id},
+            )
+        finally:
+            del app.dependency_overrides[get_agent_config_service]
+
+        assert response.status_code == 200
+        mock_agent_config_service.get_model_id_for_type.assert_not_called()
 
 
 class TestProjectEventEmission:

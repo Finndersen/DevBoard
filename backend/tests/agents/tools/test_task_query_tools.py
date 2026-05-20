@@ -115,6 +115,23 @@ def mock_codebase_repo(mock_codebase):
     return repo
 
 
+@pytest.fixture
+def mock_agent_config_service():
+    """Create a mock AgentConfigService."""
+    from devboard.agents.agent_config_service import AgentConfigService
+    from devboard.agents.config_types import ModelType
+
+    service = Mock(spec=AgentConfigService)
+    # Mock get_effective_config to return a config with valid model_type
+    mock_config = Mock()
+    mock_config.model = Mock()
+    mock_config.model.model_type = ModelType.STANDARD
+    service.get_effective_config.return_value = mock_config
+    # Mock get_model_id_for_type to return a model ID string
+    service.get_model_id_for_type.return_value = "anthropic:claude-sonnet-4"
+    return service
+
+
 class TestTaskToToonRecord:
     """Tests for _task_to_toon_record helper function."""
 
@@ -606,22 +623,26 @@ class TestCreateViewTaskDetailsToolGlobal:
 class TestCreateCreateTaskTool:
     """Tests for create_create_task_tool."""
 
-    def test_tool_creation(self, mock_project, mock_task_service):
+    def test_tool_creation(self, mock_project, mock_task_service, mock_agent_config_service):
         """Tool is created with correct name."""
-        tool = create_create_task_tool(project=mock_project, task_service=mock_task_service)
+        tool = create_create_task_tool(
+            project=mock_project, task_service=mock_task_service, agent_config_service=mock_agent_config_service
+        )
 
         assert isinstance(tool, Tool)
         assert tool.name == "create_task"
         assert tool.function is not None
 
     @pytest.mark.asyncio
-    async def test_create_task_basic(self, mock_project, mock_task_service, mock_task):
+    async def test_create_task_basic(self, mock_project, mock_task_service, mock_task, mock_agent_config_service):
         """Creates a task with required fields and returns JSON."""
         mock_task_service.create_task.return_value = mock_task
         mock_task.branch_name = "feature/implement-feature-x"
         mock_task.base_branch = "main"
 
-        tool = create_create_task_tool(project=mock_project, task_service=mock_task_service)
+        tool = create_create_task_tool(
+            project=mock_project, task_service=mock_task_service, agent_config_service=mock_agent_config_service
+        )
         result = await tool.function(
             title="Implement feature X",
             codebase_name="backend",
@@ -635,6 +656,7 @@ class TestCreateCreateTaskTool:
             specification_content="",
             branch_name=None,
             custom_fields=None,
+            model_id_override="anthropic:claude-sonnet-4",
         )
         result_data = json.loads(result)
         assert result_data == {
@@ -648,14 +670,18 @@ class TestCreateCreateTaskTool:
         }
 
     @pytest.mark.asyncio
-    async def test_create_task_with_all_options(self, mock_project, mock_task_service, mock_codebase, mock_task):
+    async def test_create_task_with_all_options(
+        self, mock_project, mock_task_service, mock_codebase, mock_task, mock_agent_config_service
+    ):
         """Creates a task with all optional fields and returns JSON."""
         mock_codebase.default_branch = "develop"
         mock_task_service.create_task.return_value = mock_task
         mock_task.branch_name = "feature/my-branch"
         mock_task.base_branch = "develop"
 
-        tool = create_create_task_tool(project=mock_project, task_service=mock_task_service)
+        tool = create_create_task_tool(
+            project=mock_project, task_service=mock_task_service, agent_config_service=mock_agent_config_service
+        )
         result = await tool.function(
             title="Implement feature X",
             codebase_name="backend",
@@ -673,6 +699,7 @@ class TestCreateCreateTaskTool:
             specification_content="Task specification here",
             branch_name="feature/my-branch",
             custom_fields={"priority": "high"},
+            model_id_override="anthropic:claude-sonnet-4",
         )
         result_data = json.loads(result)
         assert result_data["task_id"] == 1
@@ -680,9 +707,11 @@ class TestCreateCreateTaskTool:
         assert result_data["codebase_name"] == "backend"
 
     @pytest.mark.asyncio
-    async def test_create_task_codebase_not_found(self, mock_project, mock_task_service):
+    async def test_create_task_codebase_not_found(self, mock_project, mock_task_service, mock_agent_config_service):
         """Raises ModelRetry when codebase not found."""
-        tool = create_create_task_tool(project=mock_project, task_service=mock_task_service)
+        tool = create_create_task_tool(
+            project=mock_project, task_service=mock_task_service, agent_config_service=mock_agent_config_service
+        )
 
         with pytest.raises(ModelRetry) as exc_info:
             await tool.function(
@@ -695,7 +724,7 @@ class TestCreateCreateTaskTool:
 
     @pytest.mark.asyncio
     async def test_create_task_uses_codebase_default_branch(
-        self, mock_project, mock_task_service, mock_codebase, mock_task
+        self, mock_project, mock_task_service, mock_codebase, mock_task, mock_agent_config_service
     ):
         """Uses codebase default branch when base_branch not provided."""
         mock_codebase.default_branch = "develop"
@@ -703,7 +732,9 @@ class TestCreateCreateTaskTool:
         mock_task.branch_name = "feature/task"
         mock_task.base_branch = "develop"
 
-        tool = create_create_task_tool(project=mock_project, task_service=mock_task_service)
+        tool = create_create_task_tool(
+            project=mock_project, task_service=mock_task_service, agent_config_service=mock_agent_config_service
+        )
         await tool.function(
             title="New task",
             codebase_name="backend",
@@ -713,11 +744,13 @@ class TestCreateCreateTaskTool:
         assert call_args.kwargs["base_branch"] == "develop"
 
     @pytest.mark.asyncio
-    async def test_create_task_service_exception(self, mock_project, mock_task_service):
+    async def test_create_task_service_exception(self, mock_project, mock_task_service, mock_agent_config_service):
         """Raises ModelRetry when task service raises exception."""
         mock_task_service.create_task.side_effect = ValueError("Invalid task data")
 
-        tool = create_create_task_tool(project=mock_project, task_service=mock_task_service)
+        tool = create_create_task_tool(
+            project=mock_project, task_service=mock_task_service, agent_config_service=mock_agent_config_service
+        )
 
         with pytest.raises(ModelRetry) as exc_info:
             await tool.function(
@@ -829,9 +862,9 @@ class TestToolSchemas:
         assert "implementation_plan" in description
         assert "change_summary" in description
 
-    def test_create_task_tool_schema_no_custom_fields(self, mock_project, mock_task_service):
+    def test_create_task_tool_schema_no_custom_fields(self, mock_project, mock_task_service, mock_agent_config_service):
         """Verifies create_task tool schema omits custom_fields when no definitions exist."""
-        tool = create_create_task_tool(mock_project, mock_task_service)
+        tool = create_create_task_tool(mock_project, mock_task_service, mock_agent_config_service)
         schema = tool.tool_def.parameters_json_schema
 
         assert schema["type"] == "object"
@@ -867,7 +900,9 @@ class TestToolSchemas:
         # custom_fields should be omitted when no definitions exist
         assert "custom_fields" not in props
 
-    def test_create_task_tool_schema_with_custom_fields(self, mock_project, mock_task_service):
+    def test_create_task_tool_schema_with_custom_fields(
+        self, mock_project, mock_task_service, mock_agent_config_service
+    ):
         """Verifies custom_fields schema exposes typed properties from definitions."""
         priority_def = Mock(spec=CustomFieldDefinition)
         priority_def.name = "priority"
@@ -893,7 +928,7 @@ class TestToolSchemas:
         definitions = [priority_def, notes_def, is_urgent_def]
 
         mock_task_service.get_custom_fields.return_value = definitions
-        tool = create_create_task_tool(mock_project, mock_task_service)
+        tool = create_create_task_tool(mock_project, mock_task_service, mock_agent_config_service)
         schema = tool.tool_def.parameters_json_schema
         props = schema["properties"]
 
@@ -926,7 +961,9 @@ class TestToolSchemas:
         assert cf_schema["required"] == ["priority"]
         assert cf_schema["additionalProperties"] is False
 
-    def test_create_task_tool_schema_custom_fields_no_mandatory(self, mock_project, mock_task_service):
+    def test_create_task_tool_schema_custom_fields_no_mandatory(
+        self, mock_project, mock_task_service, mock_agent_config_service
+    ):
         """Verifies custom_fields schema has no required array when no mandatory fields."""
         team_def = Mock(spec=CustomFieldDefinition)
         team_def.name = "team"
@@ -938,7 +975,7 @@ class TestToolSchemas:
         definitions = [team_def]
 
         mock_task_service.get_custom_fields.return_value = definitions
-        tool = create_create_task_tool(mock_project, mock_task_service)
+        tool = create_create_task_tool(mock_project, mock_task_service, mock_agent_config_service)
         schema = tool.tool_def.parameters_json_schema
         cf_anyof = schema["properties"]["custom_fields"]["anyOf"]
         cf_schema = [s for s in cf_anyof if s.get("type") == "object"][0]
@@ -946,7 +983,7 @@ class TestToolSchemas:
         assert "required" not in cf_schema
         assert cf_schema["properties"]["team"] == {"type": "string"}
 
-    def test_create_task_tool_schema_multiple_codebases(self, mock_task_service):
+    def test_create_task_tool_schema_multiple_codebases(self, mock_task_service, mock_agent_config_service):
         """Verifies codebase_name enum includes all project codebases."""
         codebase1 = Mock(spec=Codebase)
         codebase1.id = 1
@@ -959,19 +996,19 @@ class TestToolSchemas:
         project.id = 1
         project.codebases = [codebase1, codebase2]
 
-        tool = create_create_task_tool(project, mock_task_service)
+        tool = create_create_task_tool(project, mock_task_service, mock_agent_config_service)
         schema = tool.tool_def.parameters_json_schema
 
         # Multiple codebases use 'enum' instead of 'const'
         assert set(schema["properties"]["codebase_name"]["enum"]) == {"backend", "frontend"}
 
-    def test_create_task_tool_schema_no_codebases(self, mock_task_service):
+    def test_create_task_tool_schema_no_codebases(self, mock_task_service, mock_agent_config_service):
         """Verifies codebase_name has no enum/const when project has no codebases."""
         project = Mock(spec=Project)
         project.id = 1
         project.codebases = []
 
-        tool = create_create_task_tool(project, mock_task_service)
+        tool = create_create_task_tool(project, mock_task_service, mock_agent_config_service)
         schema = tool.tool_def.parameters_json_schema
 
         # Should still have codebase_name but without enum/const constraint

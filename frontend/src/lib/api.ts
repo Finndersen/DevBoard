@@ -139,6 +139,7 @@ export interface TaskCreate {
   base_branch?: string  // Optional - defaults to "main"
   custom_fields?: Record<string, unknown> | null
   initial_message?: string  // Optional - initial prompt to send to conversation
+  model_type?: 'fast' | 'standard' | 'advanced' | 'auto'  // Optional - agent model tier for task planning
 }
 
 // Custom Field Definition types
@@ -628,7 +629,7 @@ export interface AgentEngineInfo {
 
 export interface AgentEngineModelConfig {
   engine: string
-  model_id: string | null
+  model: ModelInfo | null
 }
 
 export interface AgentConfigurationResponse {
@@ -637,6 +638,7 @@ export interface AgentConfigurationResponse {
   custom_instructions: string | null
   available_engines: AgentEngineInfo[]
   enabled_mcp_tools: MCPToolSummary[]
+  model_type_display_names: Record<string, string>
 }
 
 export interface UpdateAgentConfigurationRequest {

@@ -90,15 +90,29 @@ describe('ProjectDetail', () => {
           agent_role: 'project',
           config: {
             engine: 'internal',
-            model_id: 'openai:gpt-4'
+            model: {
+              id: 'openai:gpt-4',
+              provider: 'openai',
+              name: 'GPT-4',
+              model_type: 'standard'
+            }
           },
           available_engines: [
             {
               engine: 'internal',
               display_name: 'Internal',
-              description: 'Internal agent framework'
+              description: 'Internal agent framework',
+              requires_model_selection: true,
+              is_available: true,
+              unavailable_reason: null
             }
-          ]
+          ],
+          enabled_mcp_tools: [],
+          model_type_display_names: {
+            fast: 'openai:gpt-3.5-turbo',
+            standard: 'openai:gpt-4',
+            advanced: 'anthropic:claude-opus-4.1'
+          }
         })
       }),
       http.get('*/api/models/by-engine', () => {

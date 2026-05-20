@@ -147,7 +147,7 @@ class ProjectQAAgentRole(AgentRole):
             # Task query tools
             create_list_tasks_tool(self.project, self.task_service),
             create_view_task_details_tool(self.project, self.task_service, self.conversation_repo),
-            create_create_task_tool(self.project, self.task_service, self.conversation_repo),
+            create_create_task_tool(self.project, self.task_service, self.agent_config_service, self.conversation_repo),
             create_edit_task_tool(self.project, self.task_service, self.document_repository),
             # Task agent coordination tools
             create_send_task_agent_prompt_tool(self.project, self.task_service, self.conversation_repo),

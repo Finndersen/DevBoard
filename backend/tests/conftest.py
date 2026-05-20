@@ -303,7 +303,7 @@ def mock_agent_config_service():
     mock_model.name = "gpt-4"
     mock_model.model_type = ModelType.STANDARD
     mock_model.model_id = "openai:gpt-4"
-    default_config = AgentEngineModelConfig(engine=AgentEngine.INTERNAL, model=mock_model)
+    default_config = AgentEngineModelConfig(engine=AgentEngine.INTERNAL, model_db=mock_model)
     mock_service.get_effective_config.return_value = default_config
     # Mock methods for custom instructions and MCP tools
     mock_service.get_custom_instructions.return_value = None

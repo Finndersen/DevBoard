@@ -43,7 +43,7 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
       setConfiguration(configResponse)
       setAvailableModels(modelsResponse)
       setSelectedEngine(configResponse.config.engine)
-      setSelectedModel(configResponse.config.model_id)
+      setSelectedModel(configResponse.config.model?.id ?? null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load agent configuration')
     } finally {
@@ -119,11 +119,11 @@ export function AgentConfigurationSelector({ agentRole, agentName, onConfigChang
 
       // Update local state
       setSelectedEngine(response.config.engine)
-      setSelectedModel(response.config.model_id)
+      setSelectedModel(response.config.model?.id ?? null)
       setConfiguration(response)
 
       if (onConfigChange) {
-        onConfigChange(agentRole, response.config.engine, response.config.model_id)
+        onConfigChange(agentRole, response.config.engine, response.config.model?.id ?? null)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update agent configuration')

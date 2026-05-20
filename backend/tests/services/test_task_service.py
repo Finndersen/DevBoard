@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from devboard.agents.roles import AgentRoleType
+from devboard.db.models import ParentEntityType
 from devboard.db.models.codebase import MergeMethod
 from devboard.db.models.task import InvalidStatusTransitionError, Task, TaskStatus
 from devboard.services.system_event_emitter import SystemEventEmitter
@@ -200,6 +202,35 @@ class TestCreateTask:
 
         call_kwargs = mock_task_repo.create.call_args.kwargs
         assert call_kwargs["branch_name"] == "custom-branch"
+
+    @pytest.mark.asyncio
+    async def test_create_task_passes_model_id_override_to_conversation_service(
+        self, task_service, mock_task_repo, mock_conversation_service
+    ):
+        """Passes model_id_override through to conversation service."""
+        mock_task = MagicMock(spec=Task)
+        mock_task.id = 1
+        mock_task_repo.create.return_value = mock_task
+        task_service.custom_field_repo.get_mandatory_fields.return_value = []
+
+        with patch(
+            "devboard.services.task_service.TaskGitService.create_task_branch",
+            new_callable=AsyncMock,
+        ):
+            await task_service.create_task(
+                project_id=1,
+                title="My Task",
+                base_branch="main",
+                codebase_id=10,
+                model_id_override="anthropic:claude-opus-4",
+            )
+
+        mock_conversation_service.create_initial_conversation_for_parent_entity.assert_called_once_with(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=mock_task.id,
+            agent_role=AgentRoleType.TASK_PLANNING,
+            model_id_override="anthropic:claude-opus-4",
+        )
 
     @pytest.mark.asyncio
     async def test_create_task_raises_on_missing_mandatory_fields(self, task_service):

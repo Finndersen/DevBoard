@@ -14,7 +14,7 @@ class TestAgentsRouter:
         assert data["agent_role"] == "project"
         assert "config" in data
         assert "engine" in data["config"]
-        assert "model_id" in data["config"]
+        assert "model" in data["config"]
         assert "available_engines" in data
         assert len(data["available_engines"]) > 0
         assert "enabled_mcp_tools" in data
@@ -59,14 +59,14 @@ class TestAgentsRouter:
         data = response.json()
         assert data["agent_role"] == "task_implementation"
         assert data["config"]["engine"] == "claude_code"
-        assert data["config"]["model_id"] == "anthropic:claude-sonnet-4.5"
+        assert data["config"]["model"]["id"] == "anthropic:claude-sonnet-4.5"
 
         # Verify configuration persisted
         response = client.get("/api/agents/task_implementation/configuration")
         assert response.status_code == 200
         data = response.json()
         assert data["config"]["engine"] == "claude_code"
-        assert data["config"]["model_id"] == "anthropic:claude-sonnet-4.5"
+        assert data["config"]["model"]["id"] == "anthropic:claude-sonnet-4.5"
 
     def test_update_agent_configuration_with_specific_model(self, client):
         """Update configuration with specific model ID."""
@@ -81,7 +81,7 @@ class TestAgentsRouter:
 
         data = response.json()
         assert data["config"]["engine"] == "claude_code"
-        assert data["config"]["model_id"] == "anthropic:claude-sonnet-4.5"
+        assert data["config"]["model"]["id"] == "anthropic:claude-sonnet-4.5"
 
     def test_update_agent_configuration_invalid_engine_for_role(self, client):
         """Should reject engine not allowed for role."""

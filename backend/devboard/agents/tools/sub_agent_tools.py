@@ -58,8 +58,8 @@ def create_sub_agent_conversation(
     config = agent_config_service.get_effective_config(role_type)
     if model_type is not None:
         model_id = agent_config_service.get_model_id_for_type(model_type, config.engine)
-    elif config.model_id is not None:
-        model_id = config.model_id
+    elif config.model is not None:
+        model_id = config.model.id
     else:
         recommended_type = RECOMMENDED_AGENT_MODEL_TYPES.get(role_type)
         model_id = (

@@ -135,7 +135,8 @@ class TestAgentConfigService:
             model_id="anthropic:claude-sonnet-4.5",
         )
         result = agent_config_service.update_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION, config)
-        assert result.config.model_id == "anthropic:claude-sonnet-4.5"
+        assert result.config.model is not None
+        assert result.config.model.id == "anthropic:claude-sonnet-4.5"
 
         # Should reject model from unsupported provider for engine
         config = AgentEngineModelInput(
@@ -151,7 +152,7 @@ class TestAgentConfigService:
         project_config = agent_config_service.get_agent_configuration(AgentRoleType.PROJECT)
         assert project_config.agent_role == "project"
         assert project_config.config.engine is not None
-        assert project_config.config.model_id is not None
+        assert project_config.config.model is not None
         assert len(project_config.available_engines) > 0
 
         # PROJECT should allow INTERNAL and CLAUDE_CODE engines
@@ -211,7 +212,7 @@ class TestAgentConfigService:
         )
         result = agent_config_service.update_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION, config)
         assert result.config.engine == AgentEngine.CLAUDE_CODE
-        assert result.config.model_id is None
+        assert result.config.model is None
 
     def test_update_config_with_none_model_for_internal_fails(self, agent_config_service):
         """Update configuration with None model_id for INTERNAL should fail validation."""
@@ -248,7 +249,6 @@ class TestAgentConfigService:
         effective_config = agent_config_service.get_effective_config(AgentRoleType.TASK_IMPLEMENTATION)
         assert effective_config.engine == AgentEngine.CLAUDE_CODE
         assert effective_config.model is None
-        assert effective_config.model_id is None
 
     def test_check_engine_availability_internal_with_configured_providers(self, agent_config_service):
         """INTERNAL engine should be available when LLM providers are configured."""

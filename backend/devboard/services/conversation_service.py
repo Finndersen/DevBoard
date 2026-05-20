@@ -45,6 +45,7 @@ class ConversationService:
         parent_entity_type: ParentEntityType,
         parent_entity_id: int,
         agent_role: AgentRoleType,
+        model_id_override: str | None = None,
     ) -> Conversation:
         """Create initial active conversation for a parent entity.
 
@@ -55,18 +56,20 @@ class ConversationService:
             parent_entity_type: Type of the parent entity (TASK or PROJECT)
             parent_entity_id: ID of the parent entity
             agent_role: Agent role type for the conversation
+            model_id_override: Optional model ID to use instead of the role's effective config model
 
         Returns:
             Created Conversation instance
         """
         config = self.agent_config_service.get_effective_config(agent_role)
+        model_id = model_id_override if model_id_override is not None else (config.model.id if config.model else None)
 
         return self.conversation_repo.create(
             parent_entity_type=parent_entity_type,
             parent_entity_id=parent_entity_id,
             agent_role=agent_role,
             engine=config.engine,
-            model_id=config.model_id,
+            model_id=model_id,
             external_session_id=None,
             is_active=True,
         )
@@ -105,7 +108,7 @@ class ConversationService:
             parent_entity_id=entity_id,
             agent_role=new_agent_role,
             engine=agent_config.config.engine,
-            model_id=agent_config.config.model_id,
+            model_id=agent_config.config.model.id if agent_config.config.model else None,
             external_session_id=None,
         )
 

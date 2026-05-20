@@ -10,10 +10,11 @@ import logfire
 from pydantic import BaseModel, Field
 
 from devboard.agents.engines.claude_code.client import ClaudeClient
+from devboard.agents.language_models import ModelType
 from devboard.services.project_directory import get_devboard_home
 
 
-class TaskTitleResult(BaseModel):
+class TaskGenerationResult(BaseModel):
     """Result from generating a task title and branch name."""
 
     title: str = Field(max_length=80, description="Concise, descriptive task title")
@@ -21,6 +22,12 @@ class TaskTitleResult(BaseModel):
         max_length=40,
         pattern=r"^[a-z0-9-]+$",
         description="Kebab-case branch name",
+    )
+    model_type: ModelType = Field(
+        description="Recommended model type for this task: "
+        "fast (trivial/mechanical: typo fixes, config changes, single-line edits), "
+        "standard (moderate: multi-file changes, feature additions with clear scope), "
+        "advanced (complex: architectural changes, large scope, deep reasoning required)"
     )
 
 
@@ -30,18 +37,19 @@ class ConversationTitleResult(BaseModel):
     title: str = Field(max_length=60, description="Short, descriptive conversation title")
 
 
-async def generate_task_title_and_branch(prompt: str) -> TaskTitleResult:
-    """Generate a task title and branch name from a user prompt.
+async def generate_task_title_and_branch(prompt: str) -> TaskGenerationResult:
+    """Generate a task title, branch name, and recommended model type from a user prompt.
 
     Uses a minimal Haiku agent with structured JSON output to create:
     - A concise, descriptive task title (max 80 characters)
     - A kebab-case branch name (max 40 characters)
+    - A recommended model type (fast/standard/advanced)
 
     Args:
         prompt: The user's task prompt/description
 
     Returns:
-        TaskTitleResult with title and branch_name fields
+        TaskGenerationResult with title, branch_name, and model_type fields
 
     Example:
         >>> result = await generate_task_title_and_branch("Add user authentication to the API")
@@ -49,16 +57,22 @@ async def generate_task_title_and_branch(prompt: str) -> TaskTitleResult:
         "Add user authentication to API"
         >>> print(result.branch_name)
         "add-user-authentication-api"
+        >>> print(result.model_type)
+        "advanced"
     """
-    system_prompt = "You are a task title and branch name generator."
+    system_prompt = "You are a task title, branch name, and model type generator."
 
-    user_message = f"""Generate a task title and branch name from the user prompt below.
+    user_message = f"""Generate a task title, branch name, and model type from the user prompt below.
 
-Guidelines:
-- Title should be concise and descriptive (maximum 80 characters), starting with a verb when possible
+Guidelines for title and branch name:
+- Title should be concise and actionable (maximum 80 characters), starting with a verb when possible
 - Branch name should be lowercase, kebab-case, maximum 40 characters, no prefixes like "feat/" or "fix/"
 - Focus on the main action/outcome, not implementation details
-- Keep both short but informative
+
+Guidelines for model type selection:
+- "fast": Trivial or mechanical changes only. Examples: typo fixes, simple config changes, single-line edits
+- "standard": Moderate complexity. Examples: multi-file changes, feature additions with clear scope, refactoring
+- "advanced": Complex tasks requiring deep reasoning. Examples: architectural changes, large scope, significant refactoring, complex bug fixes
 
 Respond immediately using the structured output tool. Do not include any other text in your response.
 
@@ -73,14 +87,14 @@ Respond immediately using the structured output tool. Do not include any other t
             cwd=str(get_devboard_home()),
             load_settings=False,
             sandbox_enabled=False,
-            output_model=TaskTitleResult,
+            output_model=TaskGenerationResult,
             effort="low",
         )
 
         result = await client.run(user_message)
 
         if result.structured_output is not None:
-            assert isinstance(result.structured_output, TaskTitleResult)
+            assert isinstance(result.structured_output, TaskGenerationResult)
             return result.structured_output
 
         logfire.warn(
@@ -94,7 +108,7 @@ Respond immediately using the structured output tool. Do not include any other t
     # Fallback: generate generic title and branch name
     timestamp = int(time.time())
     fallback_title = prompt[:77] + "..." if len(prompt) > 80 else prompt
-    return TaskTitleResult(title=fallback_title, branch_name=f"task-{timestamp}")
+    return TaskGenerationResult(title=fallback_title, branch_name=f"task-{timestamp}", model_type=ModelType.STANDARD)
 
 
 async def generate_conversation_title(prompt: str) -> str:

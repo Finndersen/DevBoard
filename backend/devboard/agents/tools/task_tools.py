@@ -7,7 +7,10 @@ from typing import Any, Literal
 import toons
 from pydantic_ai import ModelRetry, Tool
 
+from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.execution.registry import get_execution_manager
+from devboard.agents.language_models import ModelType
+from devboard.agents.roles import AgentRoleType
 from devboard.db.models import (
     Codebase,
     CustomFieldDefinition,
@@ -305,6 +308,7 @@ def _build_custom_fields_schema(
 def _build_create_task_json_schema(
     codebase_names: tuple[str, ...],
     custom_field_definitions: list[CustomFieldDefinition],
+    default_model_type: ModelType | None = None,
 ) -> dict[str, Any]:
     """Build the full JSON schema for the create_task tool."""
     properties: dict[str, Any] = {
@@ -327,6 +331,16 @@ def _build_create_task_json_schema(
             "anyOf": [{"type": "string"}, {"type": "null"}],
             "description": "Optional working branch name (auto-generated from title if not provided)",
             "default": None,
+        },
+        "model_type": {
+            "enum": ["fast", "standard", "advanced"],
+            "description": (
+                "Agent model type for task planning conversation. "
+                "fast: trivial/mechanical changes only (e.g. typo fixes, simple config). "
+                "standard: moderate complexity (multi-file changes, feature additions). "
+                "advanced: complex/architectural changes requiring deep reasoning."
+            ),
+            "default": default_model_type.value if default_model_type else "advanced",
         },
         "initial_prompt": {
             "anyOf": [{"type": "string"}, {"type": "null"}],
@@ -587,6 +601,7 @@ def create_edit_own_task_tool(
 def create_create_task_tool(
     project: Project,
     task_service: TaskService,
+    agent_config_service: AgentConfigService,
     conversation_repo: ConversationRepository | None = None,
 ) -> Tool:
     """Create a tool for creating new tasks within a project.
@@ -594,11 +609,16 @@ def create_create_task_tool(
     Args:
         project: The project to create tasks in
         task_service: Service for task creation
+        agent_config_service: Service for agent configuration
         conversation_repo: Optional repository for conversation access (required for initial_prompt)
     """
     # Build codebase name -> Codebase mapping for lookup
     codebase_map: dict[str, Codebase] = {cb.name: cb for cb in project.codebases} if project.codebases else {}
     codebase_names = tuple(codebase_map.keys())
+
+    # Resolve dynamic default model_type from TASK_PLANNING role config
+    config = agent_config_service.get_effective_config(AgentRoleType.TASK_PLANNING)
+    default_model_type = config.model.model_type if config.model else ModelType.ADVANCED
 
     async def create_task(
         title: str,
@@ -606,6 +626,7 @@ def create_create_task_tool(
         specification_content: str | None = None,
         base_branch: str | None = None,
         branch_name: str | None = None,
+        model_type: str = default_model_type.value,
         custom_fields: dict[str, Any] | None = None,
         initial_prompt: str | None = None,
     ) -> str:
@@ -626,6 +647,14 @@ def create_create_task_tool(
 
         resolved_base_branch = base_branch or codebase.default_branch
 
+        # Resolve model_type to model_id
+        try:
+            model_type_enum = ModelType(model_type)
+            engine = config.engine
+            model_id_override = agent_config_service.get_model_id_for_type(model_type_enum, engine)
+        except ValueError as e:
+            raise ModelRetry(f"Invalid model_type: {e}") from e
+
         try:
             task = await task_service.create_task(
                 project_id=project.id,
@@ -635,6 +664,7 @@ def create_create_task_tool(
                 specification_content=specification_content or "",
                 branch_name=branch_name,
                 custom_fields=custom_fields,
+                model_id_override=model_id_override,
             )
         except Exception as e:
             raise ModelRetry(f"Failed to create task: {e}") from e
@@ -666,7 +696,7 @@ def create_create_task_tool(
             result["active_conversation_id"] = active_conversation_id
         return json.dumps(result)
 
-    json_schema = _build_create_task_json_schema(codebase_names, task_service.get_custom_fields())
+    json_schema = _build_create_task_json_schema(codebase_names, task_service.get_custom_fields(), default_model_type)
 
     return Tool.from_schema(
         function=create_task,

@@ -1,7 +1,7 @@
 """Task Pydantic schemas."""
 
 import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, model_validator
 
@@ -36,6 +36,7 @@ class TaskCreateNested(BaseModel):
     base_branch: str | None = None
     custom_fields: dict[str, Any] | None = None
     initial_message: str | None = None
+    model_type: Literal["fast", "standard", "advanced", "auto"] | None = None
 
     @model_validator(mode="after")
     def validate_title_or_initial_message(self):

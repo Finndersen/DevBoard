@@ -71,6 +71,7 @@ class TaskService:
         specification_content: str = "",
         branch_name: str | None = None,
         custom_fields: dict[str, Any] | None = None,
+        model_id_override: str | None = None,
     ) -> Task:
         """Create a new task with initial conversation.
 
@@ -131,6 +132,7 @@ class TaskService:
             parent_entity_type=ParentEntityType.TASK,
             parent_entity_id=task.id,
             agent_role=AgentRoleType.TASK_PLANNING,
+            model_id_override=model_id_override,
         )
 
         self.system_event_emitter.emit_task_created(task)

@@ -7,6 +7,9 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from pydantic_ai import ModelRetry
 
+from devboard.agents.agent_config_service import AgentConfigService
+from devboard.agents.config_types import AgentEngineModelConfig
+from devboard.agents.language_models import ModelType
 from devboard.agents.roles import AgentRoleType
 from devboard.agents.tools.task_tools import create_create_task_tool, create_view_task_details_tool
 from devboard.db.models import Codebase, Conversation, ParentEntityType, Project, Task, TaskStatus
@@ -68,15 +71,32 @@ def mock_conversation_repo():
     return repo
 
 
+@pytest.fixture
+def mock_agent_config_service():
+    service = Mock(spec=AgentConfigService)
+    # Mock config with model and model_type
+    mock_model = Mock()
+    mock_model.model_type = ModelType.ADVANCED
+    mock_config = Mock(spec=AgentEngineModelConfig)
+    mock_config.model = mock_model
+    mock_config.engine = "anthropic"
+    service.get_effective_config.return_value = mock_config
+    service.get_model_id_for_type.return_value = "anthropic:claude-opus-4"
+    return service
+
+
 class TestCreateTaskInitialPrompt:
     """Tests for create_task tool initial_prompt parameter."""
 
     @pytest.mark.asyncio
-    async def test_initial_prompt_without_conversation_repo_raises_model_retry(self, mock_project, mock_task_service):
+    async def test_initial_prompt_without_conversation_repo_raises_model_retry(
+        self, mock_project, mock_task_service, mock_agent_config_service
+    ):
         """initial_prompt without conversation_repo raises ModelRetry before creating task."""
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
             conversation_repo=None,
         )
 
@@ -92,12 +112,13 @@ class TestCreateTaskInitialPrompt:
 
     @pytest.mark.asyncio
     async def test_initial_prompt_starts_execution_with_given_prompt(
-        self, mock_project, mock_task_service, mock_conversation_repo, mock_task
+        self, mock_project, mock_task_service, mock_conversation_repo, mock_task, mock_agent_config_service
     ):
         """initial_prompt starts execution with the provided prompt string."""
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
             conversation_repo=mock_conversation_repo,
         )
 
@@ -117,12 +138,13 @@ class TestCreateTaskInitialPrompt:
 
     @pytest.mark.asyncio
     async def test_initial_prompt_returns_conversation_id(
-        self, mock_project, mock_task_service, mock_conversation_repo, mock_task
+        self, mock_project, mock_task_service, mock_conversation_repo, mock_task, mock_agent_config_service
     ):
         """initial_prompt causes active_conversation_id to be included in response."""
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
             conversation_repo=mock_conversation_repo,
         )
 
@@ -140,12 +162,13 @@ class TestCreateTaskInitialPrompt:
 
     @pytest.mark.asyncio
     async def test_initial_prompt_none_does_not_start_execution(
-        self, mock_project, mock_task_service, mock_conversation_repo
+        self, mock_project, mock_task_service, mock_conversation_repo, mock_agent_config_service
     ):
         """initial_prompt=None (default) does not start any execution."""
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
             conversation_repo=mock_conversation_repo,
         )
 
@@ -163,12 +186,13 @@ class TestCreateTaskInitialPrompt:
 
     @pytest.mark.asyncio
     async def test_initial_prompt_without_specification_content_works(
-        self, mock_project, mock_task_service, mock_conversation_repo
+        self, mock_project, mock_task_service, mock_conversation_repo, mock_agent_config_service
     ):
         """initial_prompt does not require specification_content."""
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
             conversation_repo=mock_conversation_repo,
         )
 
@@ -187,12 +211,13 @@ class TestCreateTaskInitialPrompt:
 
     @pytest.mark.asyncio
     async def test_initial_prompt_with_specification_content_works(
-        self, mock_project, mock_task_service, mock_conversation_repo
+        self, mock_project, mock_task_service, mock_conversation_repo, mock_agent_config_service
     ):
         """initial_prompt and specification_content can be provided together."""
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
             conversation_repo=mock_conversation_repo,
         )
 
@@ -209,11 +234,12 @@ class TestCreateTaskInitialPrompt:
         assert result_data["task_id"] == 42
         assert result_data["active_conversation_id"] == 99
 
-    def test_initial_prompt_field_in_json_schema(self, mock_project, mock_task_service):
+    def test_initial_prompt_field_in_json_schema(self, mock_project, mock_task_service, mock_agent_config_service):
         """initial_prompt field appears in the JSON schema with correct type and default."""
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
         )
         schema = tool.tool_def.parameters_json_schema
         props = schema["properties"]
@@ -230,11 +256,14 @@ class TestCreateTaskBranchCreation:
     """Tests for git branch creation when creating a task via the tool."""
 
     @pytest.mark.asyncio
-    async def test_creates_task_and_returns_task_id(self, mock_project, mock_task_service, mock_task):
+    async def test_creates_task_and_returns_task_id(
+        self, mock_project, mock_task_service, mock_task, mock_agent_config_service
+    ):
         """Branch creation is now handled inside TaskService.create_task."""
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
         )
 
         result = await tool.function(title="New Task", codebase_name="backend")
@@ -244,13 +273,16 @@ class TestCreateTaskBranchCreation:
         assert result_data["task_id"] == mock_task.id
 
     @pytest.mark.asyncio
-    async def test_task_service_failure_raises_model_retry(self, mock_project, mock_task_service):
+    async def test_task_service_failure_raises_model_retry(
+        self, mock_project, mock_task_service, mock_agent_config_service
+    ):
         """Service errors (including branch failures) wrap into ModelRetry."""
         mock_task_service.create_task.side_effect = ValueError("git error")
 
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
         )
 
         with pytest.raises(ModelRetry, match="Failed to create task"):
@@ -265,12 +297,15 @@ class TestCreateTaskMandatoryCustomFields:
     """
 
     @pytest.mark.asyncio
-    async def test_missing_mandatory_fields_raises_model_retry(self, mock_project, mock_task_service):
+    async def test_missing_mandatory_fields_raises_model_retry(
+        self, mock_project, mock_task_service, mock_agent_config_service
+    ):
         mock_task_service.create_task.side_effect = ValueError("Missing required custom fields: priority")
 
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
         )
 
         with pytest.raises(ModelRetry, match="Missing required custom fields: priority"):
@@ -279,10 +314,13 @@ class TestCreateTaskMandatoryCustomFields:
         mock_task_service.create_task.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_provided_mandatory_fields_pass_validation(self, mock_project, mock_task_service):
+    async def test_provided_mandatory_fields_pass_validation(
+        self, mock_project, mock_task_service, mock_agent_config_service
+    ):
         tool = create_create_task_tool(
             project=mock_project,
             task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
         )
 
         result = await tool.function(
@@ -431,3 +469,82 @@ class TestViewTaskDetailsTool:
             assert "[99]" in result
             assert "task_implementation" in result
             assert "task_planning" in result
+
+
+class TestCreateTaskModelType:
+    """Tests for create_task model_type parameter."""
+
+    @pytest.mark.asyncio
+    async def test_model_type_defaults_from_config(self, mock_project, mock_task_service, mock_agent_config_service):
+        """model_type defaults to the value from agent config."""
+        tool = create_create_task_tool(
+            project=mock_project,
+            task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
+        )
+
+        # Verify default is set from config (mock returns ModelType.ADVANCED)
+        schema = tool.tool_def.parameters_json_schema
+        props = schema["properties"]
+        assert props["model_type"]["default"] == "advanced"
+
+    @pytest.mark.asyncio
+    async def test_model_type_resolves_to_model_id(
+        self, mock_project, mock_task_service, mock_agent_config_service, mock_task
+    ):
+        """model_type is resolved to model_id and passed to task_service."""
+        tool = create_create_task_tool(
+            project=mock_project,
+            task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
+        )
+
+        await tool.function(
+            title="New Task",
+            codebase_name="backend",
+            model_type="standard",
+        )
+
+        # Verify that get_model_id_for_type was called with the correct arguments
+        mock_agent_config_service.get_model_id_for_type.assert_called_once()
+        call_args = mock_agent_config_service.get_model_id_for_type.call_args
+        assert call_args[0][0] == ModelType.STANDARD  # model_type enum
+        assert call_args[0][1] == "anthropic"  # engine from config
+
+        # Verify that task_service.create_task was called with model_id_override
+        mock_task_service.create_task.assert_called_once()
+        call_kwargs = mock_task_service.create_task.call_args.kwargs
+        assert call_kwargs["model_id_override"] == "anthropic:claude-opus-4"
+
+    @pytest.mark.asyncio
+    async def test_invalid_model_type_raises_model_retry(
+        self, mock_project, mock_task_service, mock_agent_config_service
+    ):
+        """Invalid model_type value raises ModelRetry."""
+        tool = create_create_task_tool(
+            project=mock_project,
+            task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
+        )
+
+        with pytest.raises(ModelRetry, match="Invalid model_type"):
+            await tool.function(
+                title="New Task",
+                codebase_name="backend",
+                model_type="invalid",
+            )
+
+    def test_model_type_field_in_json_schema(self, mock_project, mock_task_service, mock_agent_config_service):
+        """model_type field appears in JSON schema with correct enum values."""
+        tool = create_create_task_tool(
+            project=mock_project,
+            task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
+        )
+        schema = tool.tool_def.parameters_json_schema
+        props = schema["properties"]
+
+        assert "model_type" in props
+        model_type_schema = props["model_type"]
+        assert model_type_schema["enum"] == ["fast", "standard", "advanced"]
+        assert model_type_schema["default"] == "advanced"

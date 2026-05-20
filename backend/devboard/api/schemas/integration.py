@@ -58,7 +58,7 @@ class AgentEngineModelConfigSchema(BaseModel):
     """Combined engine and model configuration."""
 
     engine: str
-    model_id: str | None
+    model: ModelInfo | None
 
 
 class AgentConfigurationResponse(BaseModel):
@@ -67,6 +67,7 @@ class AgentConfigurationResponse(BaseModel):
     agent_role: str
     config: AgentEngineModelConfigSchema
     available_engines: list[AgentEngineInfo]
+    model_type_display_names: dict[str, str] = {}
 
 
 class UpdateAgentConfigurationRequest(BaseModel):

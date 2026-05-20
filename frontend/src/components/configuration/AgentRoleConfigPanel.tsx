@@ -51,7 +51,7 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
       setConfiguration(configResponse)
       setAvailableModels(modelsResponse)
       setSelectedEngine(configResponse.config.engine)
-      setSelectedModel(configResponse.config.model_id)
+      setSelectedModel(configResponse.config.model?.id ?? null)
       setCustomInstructions(configResponse.custom_instructions || '')
       setCustomInstructionsDirty(false)
       setAssignedTools(configResponse.enabled_mcp_tools)
@@ -125,7 +125,7 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
       const response = await apiClient.updateAgentConfiguration(agentRole, request)
 
       setSelectedEngine(response.config.engine)
-      setSelectedModel(response.config.model_id)
+      setSelectedModel(response.config.model?.id ?? null)
       setConfiguration(response)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update agent configuration')
@@ -143,7 +143,7 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
       setSavingInstructions(true)
       const request: UpdateAgentConfigurationRequest = {
         engine: configuration.config.engine,
-        model_id: configuration.config.model_id,
+        model_id: configuration.config.model?.id ?? null,
         custom_instructions: customInstructions || null
       }
       const response = await apiClient.updateAgentConfiguration(agentRole, request)

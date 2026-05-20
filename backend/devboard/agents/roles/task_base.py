@@ -57,7 +57,9 @@ class TaskAgentRoleBase(AgentRole):
         return [
             create_list_tasks_tool(self.task.project, self.task_service),
             create_view_task_details_tool(self.task.project, self.task_service, self.conversation_repo),
-            create_create_task_tool(self.task.project, self.task_service, self.conversation_repo),
+            create_create_task_tool(
+                self.task.project, self.task_service, self.agent_config_service, self.conversation_repo
+            ),
             create_inspect_conversation_tool(self.conversation_repo),
             create_task_codebase_investigation_tool(
                 self.task,

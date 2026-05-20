@@ -363,34 +363,61 @@ export const handlers = [
       agent_role: 'project',
       config: {
         engine: 'internal',
-        model_id: 'openai:gpt-4'
+        model: {
+          id: 'openai:gpt-4',
+          provider: 'openai',
+          name: 'GPT-4',
+          model_type: 'standard'
+        }
       },
       available_engines: [
         {
           engine: 'internal',
           display_name: 'Internal',
-          description: 'Internal agent framework'
+          description: 'Internal agent framework',
+          requires_model_selection: true,
+          is_available: true,
+          unavailable_reason: null
         }
       ],
-      enabled_mcp_tools: []
+      enabled_mcp_tools: [],
+      model_type_display_names: {
+        fast: 'openai:gpt-3.5-turbo',
+        standard: 'openai:gpt-4',
+        advanced: 'anthropic:claude-opus-4.1'
+      }
     })
   }),
 
   http.put('*/api/agents/:agentRole/configuration', async ({ request }) => {
-    const config = await request.json() as { engine: string; model_id: string }
+    const config = await request.json() as { engine: string; model_id: string | null }
     return HttpResponse.json({
       agent_role: 'project',
       config: {
         engine: config.engine,
-        model_id: config.model_id
+        model: config.model_id ? {
+          id: config.model_id,
+          provider: config.model_id.split(':')[0],
+          name: 'Model Name',
+          model_type: 'standard'
+        } : null
       },
       available_engines: [
         {
           engine: 'internal',
           display_name: 'Internal',
-          description: 'Internal agent framework'
+          description: 'Internal agent framework',
+          requires_model_selection: true,
+          is_available: true,
+          unavailable_reason: null
         }
-      ]
+      ],
+      enabled_mcp_tools: [],
+      model_type_display_names: {
+        fast: 'openai:gpt-3.5-turbo',
+        standard: 'openai:gpt-4',
+        advanced: 'anthropic:claude-opus-4.1'
+      }
     })
   }),
 

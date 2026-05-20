@@ -26,29 +26,6 @@ class AgentEngineModelInput(BaseModel):
     model_id: str | None
 
 
-class AgentEngineModelConfig(BaseModel):
-    """Resolved engine and model configuration.
-
-    Returned by get_effective_config() with the model already resolved from
-    the registry. Consumers can access the full LanguageModel directly.
-
-    Attributes:
-        engine: The agent execution engine (INTERNAL, CLAUDE_CODE, GEMINI_CLI)
-        model: Resolved LanguageModel instance, or None for engines that
-               don't require model selection
-    """
-
-    model_config = {"arbitrary_types_allowed": True}
-
-    engine: AgentEngine
-    model: LanguageModelDB | None = Field(exclude=True)
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def model_id(self) -> str | None:
-        return self.model.model_id if self.model else None
-
-
 class ModelInfo(BaseModel):
     """Information about a language model.
 
@@ -63,6 +40,36 @@ class ModelInfo(BaseModel):
     provider: LLMProvider
     name: str
     model_type: ModelType
+
+
+class AgentEngineModelConfig(BaseModel):
+    """Resolved engine and model configuration.
+
+    Returned by get_effective_config() with the model already resolved from
+    the registry. Consumers can access the full LanguageModel directly.
+
+    Attributes:
+        engine: The agent execution engine (INTERNAL, CLAUDE_CODE, GEMINI_CLI)
+        model_db: Resolved LanguageModel instance, or None for engines that
+                  don't require model selection
+    """
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    engine: AgentEngine
+    model_db: LanguageModelDB | None = Field(exclude=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def model(self) -> ModelInfo | None:
+        if self.model_db is None:
+            return None
+        return ModelInfo(
+            id=self.model_db.model_id,
+            provider=self.model_db.provider,
+            name=self.model_db.name,
+            model_type=self.model_db.model_type,
+        )
 
 
 class AgentEngineInfo(BaseModel):
