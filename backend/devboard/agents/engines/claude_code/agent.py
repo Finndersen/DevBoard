@@ -192,7 +192,7 @@ class ClaudeCodeAgent(BaseAgent):
             model=self.model.display_full_name if self.model else None,
             cwd=self.working_dir,
             include_builtin_system_prompt=self.role.include_builtin_system_prompt,
-            load_settings=self.role.include_claude_md,
+            load_settings=True,
             additional_write_dirs=self._additional_write_dirs,
             effort=self._effort,
             client_mode=self._client_mode,

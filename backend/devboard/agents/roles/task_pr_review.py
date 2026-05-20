@@ -118,8 +118,3 @@ class TaskPRReviewAgentRole(TaskAgentRoleBase):
     def include_builtin_system_prompt(self) -> bool:
         """Include Claude Code's built-in system prompt."""
         return True
-
-    @property
-    def include_claude_md(self) -> bool:
-        """Load CLAUDE.md prompt guidance files."""
-        return True

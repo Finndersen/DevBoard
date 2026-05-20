@@ -65,8 +65,3 @@ class AgentRole(ABC):
     def include_builtin_system_prompt(self) -> bool:
         """Whether to include the built-in system prompt for the engine (e.g. built-in Claude Code prompt)."""
         return False
-
-    @property
-    def include_claude_md(self) -> bool:
-        """Whether to load CLAUDE.md prompt guidance files."""
-        return False

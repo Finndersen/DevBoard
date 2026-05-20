@@ -81,6 +81,7 @@ ALLOWED_ENGINES_BY_AGENT_ROLE: dict[AgentRoleType, list[AgentEngine]] = {
     AgentRoleType.INVESTIGATION: [AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE],
     AgentRoleType.CODE_REVIEW: [AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE],
     AgentRoleType.STEP_EXECUTION: [AgentEngine.CLAUDE_CODE],
+    AgentRoleType.BACKGROUND_AGENT: [AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE],
 }
 
 

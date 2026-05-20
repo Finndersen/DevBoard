@@ -86,7 +86,3 @@ class StepExecutionAgentRole(AgentRole):
     @property
     def include_builtin_system_prompt(self) -> bool:
         return True
-
-    @property
-    def include_claude_md(self) -> bool:
-        return True
