@@ -8,6 +8,7 @@ import { useNotificationStore } from './notificationStore'
 
 export interface StreamState {
   isStreaming: boolean
+  isStopping: boolean
   error: Error | null
   startedAt?: number
   lastEventAt?: number
@@ -70,7 +71,7 @@ interface ConversationStreamActions {
     onFirstEvent?: () => void | Promise<void>,
     onError?: (error: Error) => void,
   ) => Promise<void>
-  stopStream: (conversationId: number) => void
+  stopStream: (conversationId: number) => Promise<void>
   completeStream: (conversationId: number) => void
   addEvent: (conversationId: number, event: ConversationEvent) => void
   setMessages: (conversationId: number, messages: ConversationEvent[], contextUsage?: ContextUsage | null) => void
@@ -155,6 +156,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
           set((draft) => {
             draft.activeStreams.set(runStartedConvId, {
               isStreaming: true,
+              isStopping: false,
               error: null,
               startedAt: Date.now(),
               lastEventAt: Date.now(),
@@ -180,6 +182,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         set((draft) => {
           draft.activeStreams.set(conversationId, {
             isStreaming: true,
+            isStopping: false,
             error: null,
             startedAt: Date.now(),
             lastEventAt: Date.now(),
@@ -273,6 +276,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       set((draft) => {
         draft.activeStreams.set(conversationId, {
           isStreaming: true,
+          isStopping: false,
           error: null,
           startedAt: Date.now(),
           lastEventAt: Date.now(),
@@ -316,36 +320,42 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       // Return immediately — events arrive via handleWebSocketEvent
     },
 
-    stopStream: (conversationId) => {
+    stopStream: async (conversationId) => {
       const stream = get().activeStreams.get(conversationId)
-      if (stream?.isStreaming) {
+      if (!stream?.isStreaming || stream.isStopping) return
+
+      set((draft) => {
+        const s = draft.activeStreams.get(conversationId)
+        if (s) s.isStopping = true
+      })
+
+      try {
+        await apiClient.interruptConversation(conversationId)
+        // Agent confirmed stopped — WebSocket agent_run_completed may already have
+        // called completeStream(); these writes are idempotent.
         set((draft) => {
-          const streamState = draft.activeStreams.get(conversationId)
-          if (streamState) {
-            streamState.isStreaming = false
-            streamState.isQueued = false
+          const s = draft.activeStreams.get(conversationId)
+          if (s) {
+            s.isStreaming = false
+            s.isQueued = false
+            s.isStopping = false
           }
         })
-
-        // Revert the optimistic update if the interrupt request fails
-        apiClient.interruptConversation(conversationId).catch((error) => {
-          console.error('Failed to interrupt conversation:', error)
-          set((draft) => {
-            const streamState = draft.activeStreams.get(conversationId)
-            if (streamState) {
-              streamState.isStreaming = true
-            }
-          })
-          useNotificationStore.getState().addNotification({
-            type: 'system_error',
-            priority: 'high',
-            entityType: null,
-            entityId: null,
-            entityTitle: null,
-            conversationId,
-            message: 'Failed to stop agent. Please try again.',
-            actions: [],
-          })
+      } catch (error) {
+        console.error('Failed to interrupt conversation:', error)
+        set((draft) => {
+          const s = draft.activeStreams.get(conversationId)
+          if (s) s.isStopping = false
+        })
+        useNotificationStore.getState().addNotification({
+          type: 'system_error',
+          priority: 'high',
+          entityType: null,
+          entityId: null,
+          entityTitle: null,
+          conversationId,
+          message: 'Failed to stop agent. Please try again.',
+          actions: [],
         })
       }
     },
@@ -362,6 +372,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         const draftStream = draft.activeStreams.get(conversationId)
         if (draftStream) {
           draftStream.isStreaming = false
+          draftStream.isStopping = false
         }
       })
 
@@ -451,6 +462,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
         if (stream) {
           stream.error = error
           stream.isStreaming = false
+          stream.isStopping = false
           stream.isQueued = false
         }
       })
@@ -505,6 +517,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       set((draft) => {
         draft.activeStreams.set(conversationId, {
           isStreaming: true,
+          isStopping: false,
           error: null,
           startedAt: Date.now(),
           lastEventAt: Date.now(),
@@ -662,6 +675,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       set((draft) => {
         draft.activeStreams.set(conversationId, {
           isStreaming: true,
+          isStopping: false,
           error: null,
           startedAt: Date.now(),
           lastEventAt: Date.now(),

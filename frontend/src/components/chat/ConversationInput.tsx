@@ -13,6 +13,7 @@ interface ConversationInputProps {
   isStreaming?: boolean
   onStopStream?: () => void
   isQueued?: boolean
+  isStopping?: boolean
 }
 
 export default function ConversationInput({
@@ -23,6 +24,7 @@ export default function ConversationInput({
   isStreaming = false,
   onStopStream,
   isQueued = false,
+  isStopping = false,
 }: ConversationInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const cachedLineHeightRef = useRef<number | null>(null)
@@ -128,7 +130,7 @@ export default function ConversationInput({
       </div>
       {isStreaming ? (
         <div className="flex items-center space-x-2 flex-shrink-0">
-          {isQueued && (
+          {isQueued && !isStopping && (
             <div className="flex items-center space-x-1 px-3 py-2 bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-md">
               <ClockIcon className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <span className="text-xs font-medium text-amber-700 dark:text-amber-300">Queued</span>
@@ -136,11 +138,23 @@ export default function ConversationInput({
           )}
           <button
             type="button"
-            onClick={onStopStream}
-            aria-label="Stop streaming"
-            className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            onClick={isStopping ? undefined : onStopStream}
+            disabled={isStopping}
+            aria-label={isStopping ? "Stopping..." : "Stop streaming"}
+            className={`inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 ${
+              isStopping
+                ? 'bg-red-400 cursor-not-allowed'
+                : 'bg-red-600 hover:bg-red-700'
+            }`}
           >
-            <StopIcon className="w-4 h-4" />
+            {isStopping ? (
+              <svg className="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            ) : (
+              <StopIcon className="w-4 h-4" />
+            )}
           </button>
         </div>
       ) : (

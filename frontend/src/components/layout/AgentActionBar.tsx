@@ -33,10 +33,13 @@ export default function AgentActionBar({
   disabledMessage = "Chat is disabled",
   placeholder = "Message the agent...",
   workflowActions,
-  onModelChange
+  onModelChange,
 }: AgentActionBarProps) {
   const isQueued = useConversationStreamStore(
     state => conversationId ? (state.activeStreams.get(conversationId)?.isQueued ?? false) : false
+  )
+  const isStopping = useConversationStreamStore(
+    state => conversationId ? (state.activeStreams.get(conversationId)?.isStopping ?? false) : false
   )
   const setQueued = useConversationStreamStore(state => state.setQueued)
 
@@ -109,6 +112,7 @@ export default function AgentActionBar({
             isStreaming={isStreaming}
             onStopStream={onStopStream}
             isQueued={isQueued}
+            isStopping={isStopping}
           />
         </div>
 
