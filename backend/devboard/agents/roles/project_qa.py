@@ -192,6 +192,8 @@ class ProjectQAAgentRole(AgentRole):
         """List of allowed engine internal tools for this role."""
         return [
             "Read",
+            "Grep",
+            "Glob",
             "Bash",
             "WebFetch",
             "WebSearch",
