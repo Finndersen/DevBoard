@@ -270,133 +270,135 @@ export default function GitDiffViewer({ diff, fileName, stats, defaultExpanded =
   const commentsEnabled = !!reviewContext && !!fileName
 
   return (
-    <div className={`${surfaces.raised} border ${borderColors.default} rounded-lg overflow-hidden ${className}`}>
-      {/* File Header - Clickable to expand/collapse */}
-      <div
-        className={`${surfaces.sunken} px-4 py-2 border-b ${borderColors.default} flex items-center space-x-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        {/* Chevron icon */}
-        {isExpanded ? (
-          <ChevronDownIcon className="w-4 h-4 text-gray-500 dark:text-gray-400 shrink-0" />
-        ) : (
-          <ChevronRightIcon className="w-4 h-4 text-gray-500 dark:text-gray-400 shrink-0" />
-        )}
-        {fileName && (
-          <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-            {fileName}
-          </span>
-        )}
-        {isNewFile && (
-          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${statusColors.success.icon} ${statusColors.success.text} shrink-0`}>
-            New
-          </span>
-        )}
-        {isDeleted && (
-          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${statusColors.error.icon} ${statusColors.error.text} shrink-0`}>
-            Deleted
-          </span>
-        )}
-        {stats && (
-          <span className="text-xs text-gray-600 dark:text-gray-400 shrink-0">
-            <span className="text-green-600 dark:text-green-400">+{stats.additions}</span>
-            {' '}
-            <span className="text-red-600 dark:text-red-400">-{stats.deletions}</span>
-          </span>
+    <div className={`${surfaces.raised} border ${borderColors.default} rounded-lg overflow-hidden flex ${className}`}>
+      {/* Left border stripe for new/deleted files */}
+      {isNewFile && <div className="w-1 bg-green-400 shrink-0" />}
+      {isDeleted && <div className="w-1 bg-red-400 shrink-0" />}
+
+      <div className="flex-1 flex flex-col">
+        {/* File Header - Clickable to expand/collapse */}
+        <div
+          className={`${surfaces.sunken} px-3 py-1.5 border-b ${borderColors.default} flex items-center space-x-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          {/* Chevron icon */}
+          {isExpanded ? (
+            <ChevronDownIcon className="w-4 h-4 text-gray-500 dark:text-gray-400 shrink-0" />
+          ) : (
+            <ChevronRightIcon className="w-4 h-4 text-gray-500 dark:text-gray-400 shrink-0" />
+          )}
+          {fileName && (
+            <span className={`text-xs font-mono truncate ${
+              isNewFile
+                ? 'text-green-700 dark:text-green-400'
+                : isDeleted
+                ? 'text-red-600 dark:text-red-400 line-through'
+                : 'text-gray-900 dark:text-gray-100'
+            }`}>
+              {fileName}
+            </span>
+          )}
+          {stats && (
+            <span className="text-xs text-gray-600 dark:text-gray-400 shrink-0 ml-auto">
+              <span className="text-green-600 dark:text-green-400">+{stats.additions}</span>
+              {' '}
+              <span className="text-red-600 dark:text-red-400">-{stats.deletions}</span>
+            </span>
+          )}
+        </div>
+
+        {/* Diff Content - Only render when expanded */}
+        {isExpanded && (
+          <div ref={scrollContainerRef} className="max-h-[32rem] overflow-auto">
+            <div className="font-mono text-xs min-w-max">
+              {diffLines.map((line, index) => {
+                const lineNumber = getCommentLineNumber(line)
+                const isCommentFormOpen = activeCommentIndex === index && line.type !== 'hunk'
+
+                return (
+                  <Fragment key={index}>
+                    <div
+                      className={`group flex ${getLineStyle(line.type)}`}
+                    >
+                      {/* Line numbers with comment button */}
+                      {line.type !== 'hunk' && (
+                        <div className="flex items-stretch shrink-0 select-none border-r border-gray-300 dark:border-gray-600 sticky left-0 bg-inherit">
+                          <span className="w-10 text-right pr-1 text-gray-500 dark:text-gray-400 bg-inherit flex items-center justify-end">
+                            {formatLineNumber(line.oldLineNum)}
+                          </span>
+                          <span className="w-10 text-right pr-1 text-gray-500 dark:text-gray-400 bg-inherit flex items-center justify-end">
+                            {formatLineNumber(line.newLineNum)}
+                          </span>
+                          {/* Comment button - positioned after line numbers like GitHub */}
+                          {commentsEnabled && fileName ? (
+                            <div className="w-6 flex items-center justify-center bg-inherit">
+                              <DiffLineCommentButton
+                                onClick={() => handleCommentButtonClick(index)}
+                                filePath={fileName}
+                                lineNumber={lineNumber}
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-1 bg-inherit" />
+                          )}
+                        </div>
+                      )}
+                      {/* Hunk header - left aligned with padding to clear line number column */}
+                      {line.type === 'hunk' && (
+                        <div className="flex-1">
+                          <pre className={`py-1 m-0 whitespace-pre ${commentsEnabled ? 'pl-[6.5rem]' : 'pl-[5.25rem]'}`}>
+                            {line.content || ' '}
+                          </pre>
+                        </div>
+                      )}
+                      {/* Content with syntax highlighting */}
+                      {line.type !== 'hunk' && (
+                        <div className="flex-1">
+                          <SyntaxHighlighter
+                            language={language}
+                            style={isDarkMode ? oneDark : oneLight}
+                            customStyle={{
+                              background: 'transparent',
+                              margin: 0,
+                              padding: '0.25rem 1rem',
+                              fontSize: 'inherit',
+                              lineHeight: 'inherit',
+                            }}
+                            codeTagProps={{
+                              style: {
+                                fontFamily: 'inherit',
+                                fontSize: 'inherit',
+                              }
+                            }}
+                            PreTag="div"
+                          >
+                            {line.content || ' '}
+                          </SyntaxHighlighter>
+                        </div>
+                      )}
+                    </div>
+                    {/* Comment form - rendered below the line when active, sticky to stay in viewport */}
+                    {isCommentFormOpen && fileName && (
+                      <div
+                        className="sticky left-0"
+                        style={{ width: containerWidth ? `${containerWidth}px` : '100%' }}
+                      >
+                        <DiffLineCommentForm
+                          filePath={fileName}
+                          lineNumber={lineNumber}
+                          lineContent={line.content}
+                          surroundingLines={getSurroundingLines(index)}
+                          onClose={handleCloseCommentForm}
+                        />
+                      </div>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </div>
+          </div>
         )}
       </div>
-
-      {/* Diff Content - Only render when expanded */}
-      {isExpanded && (
-        <div ref={scrollContainerRef} className="max-h-[32rem] overflow-auto">
-          <div className="font-mono text-xs min-w-max">
-            {diffLines.map((line, index) => {
-              const lineNumber = getCommentLineNumber(line)
-              const isCommentFormOpen = activeCommentIndex === index && line.type !== 'hunk'
-
-              return (
-                <Fragment key={index}>
-                  <div
-                    className={`group flex ${getLineStyle(line.type)}`}
-                  >
-                    {/* Line numbers with comment button */}
-                    {line.type !== 'hunk' && (
-                      <div className="flex items-stretch shrink-0 select-none border-r border-gray-300 dark:border-gray-600 sticky left-0 bg-inherit">
-                        <span className="w-10 text-right pr-1 text-gray-500 dark:text-gray-400 bg-inherit flex items-center justify-end">
-                          {formatLineNumber(line.oldLineNum)}
-                        </span>
-                        <span className="w-10 text-right pr-1 text-gray-500 dark:text-gray-400 bg-inherit flex items-center justify-end">
-                          {formatLineNumber(line.newLineNum)}
-                        </span>
-                        {/* Comment button - positioned after line numbers like GitHub */}
-                        {commentsEnabled && fileName ? (
-                          <div className="w-6 flex items-center justify-center bg-inherit">
-                            <DiffLineCommentButton
-                              onClick={() => handleCommentButtonClick(index)}
-                              filePath={fileName}
-                              lineNumber={lineNumber}
-                            />
-                          </div>
-                        ) : (
-                          <div className="w-1 bg-inherit" />
-                        )}
-                      </div>
-                    )}
-                    {/* Hunk header - left aligned with padding to clear line number column */}
-                    {line.type === 'hunk' && (
-                      <div className="flex-1">
-                        <pre className={`py-1 m-0 whitespace-pre ${commentsEnabled ? 'pl-[6.5rem]' : 'pl-[5.25rem]'}`}>
-                          {line.content || ' '}
-                        </pre>
-                      </div>
-                    )}
-                    {/* Content with syntax highlighting */}
-                    {line.type !== 'hunk' && (
-                      <div className="flex-1">
-                        <SyntaxHighlighter
-                          language={language}
-                          style={isDarkMode ? oneDark : oneLight}
-                          customStyle={{
-                            background: 'transparent',
-                            margin: 0,
-                            padding: '0.25rem 1rem',
-                            fontSize: 'inherit',
-                            lineHeight: 'inherit',
-                          }}
-                          codeTagProps={{
-                            style: {
-                              fontFamily: 'inherit',
-                              fontSize: 'inherit',
-                            }
-                          }}
-                          PreTag="div"
-                        >
-                          {line.content || ' '}
-                        </SyntaxHighlighter>
-                      </div>
-                    )}
-                  </div>
-                  {/* Comment form - rendered below the line when active, sticky to stay in viewport */}
-                  {isCommentFormOpen && fileName && (
-                    <div
-                      className="sticky left-0"
-                      style={{ width: containerWidth ? `${containerWidth}px` : '100%' }}
-                    >
-                      <DiffLineCommentForm
-                        filePath={fileName}
-                        lineNumber={lineNumber}
-                        lineContent={line.content}
-                        surroundingLines={getSurroundingLines(index)}
-                        onClose={handleCloseCommentForm}
-                      />
-                    </div>
-                  )}
-                </Fragment>
-              )
-            })}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -190,7 +190,7 @@ function AllFilesDiffViewerContent({
       </div>
 
       {/* File diffs - flat view based on selected option */}
-      <div className="space-y-3 overflow-y-auto flex-1">
+      <div className="space-y-1 overflow-y-auto flex-1">
         {displayFiles.map((file, fileIndex) => (
           <GitDiffViewer
             key={`file-${fileIndex}-${file.file_path}`}
