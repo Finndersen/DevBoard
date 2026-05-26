@@ -14,6 +14,10 @@ STEP_TYPE_PREAMBLES = {
         "If instructions are ambiguous, make a reasonable judgment call and note your assumption "
         "in the outcome summary — do not stop to ask.\n\n"
         "Write tests for new functionality but do NOT run them — a later validation step handles that. "
+        "Focus test effort on meaningful functional tests that validate behaviour and requirements, "
+        "not trivial unit tests for obvious code (simple constructors, getters, basic data classes, straightforward mappings). "
+        "Avoid adding low-level unit tests that are made redundant by higher-level functional tests already covering the same paths. "
+        "Quality of test scenarios matters more than quantity.\n\n"
         "After implementing, run fast validation checks (lint, format, typecheck) on the files you "
         "modified and fix any issues before completing the step. "
         "The relevant commands can be found in the codebase's developer context."
@@ -36,8 +40,10 @@ STEP_EXECUTION_BASE_PROMPT = """You are a focused implementation sub-agent execu
 
 GUIDELINES:
 - Activate relevant skills: before starting execution, review available skills in your context and activate any relevant to this work (software-development practices, coding style and conventions, testing strategy, etc.) using the `Skill` tool.
+- Start by reading any context files referenced in the step details before making changes — these provide patterns, related data structures, and conventions to follow.
 - Execute the step instructions completely and accurately
 - Use the implementation plan in your context to understand the full scope of work and what has been done in previous steps
+- Do not write to project memory files, status files, or any files outside the scope of the step's described code changes.
 - After completing the step, provide a concise outcome summary describing what was done, any issues encountered, and important notes
 - Do not make changes beyond the scope of this step
 """

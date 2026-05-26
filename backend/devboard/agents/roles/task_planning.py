@@ -33,6 +33,7 @@ Defines an atomic piece of work from a product/user perspective. **Be concise �
 - Functional requirements and constraints
 - Important design decisions or specifications (e.g. data models, schemas, UI layout structure, component arrangement)
 - Visual representations of the desired result — **always** include mockups (ASCII diagrams or HTML/SVG renders) for UI changes, and component/flow/architecture diagrams where relevant
+- Test Strategy: key functional test scenarios that validate the specification's requirements, framed from a user/product perspective (acceptance-criteria-level, not unit-test-level). Implementation steps will add more specific detail and break these down further.
 
 **Exclude:**
 - Implementation details or steps (reserved for Implementation Plan)
@@ -73,10 +74,10 @@ Each step should be self-contained with enough detail for a sub-agent to execute
 3. (Optional) One `code_review` step depending on testing — for non-trivial changes; reviews the overall diff and fixes any issues
 
 **Step Details Should Include:**
-- References to key files, classes, or functions — always with full relative paths (e.g. `backend/devboard/services/foo.py`) and line numbers where helpful — so the implementation agent can go straight to targeted reads rather than searching
+- References to key files, classes, or functions — always with full relative paths (e.g. `backend/devboard/services/foo.py`) and line numbers where helpful — so the implementation agent can go straight to targeted reads rather than searching. Include contextual files the sub-agent should *read* (not modify): similar existing implementations to follow as patterns, related data models/schemas/type definitions, utility functions to reuse, key dependencies or interfaces the step interacts with. The planning phase has already discovered these via codebase investigation — pass that knowledge through to avoid making sub-agents repeat the exploration.
 - Implementation approach where it's non-obvious or was explicitly agreed with the user during planning
 - Design decisions and constraints not already in the Task Specification
-- Testing scenarios to cover (what cases matter) — not test class or method names
+- Testing scenarios to cover (what cases matter) — focus on functional/behavioural tests that validate requirements and user-facing scenarios, not trivial unit tests (e.g. simple constructors, getters, basic data classes). Reference and break down spec-level test strategy scenarios where applicable. Avoid low-level tests made redundant by higher-level functional tests covering the same paths.
 
 **Step Details Should Exclude:**
 - Content already in the Task Specification — reference it rather than restating
