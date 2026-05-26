@@ -603,3 +603,37 @@ describe('conversationStreamStore - historyLoaded flag', () => {
     expect(store.isHistoryLoaded(99999)).toBe(false)
   })
 })
+
+describe('conversationStreamStore - seedInitialMessage', () => {
+  beforeEach(() => {
+    useConversationStreamStore.setState({ activeStreams: new Map(), conversationMessages: new Map() })
+  })
+
+  it('should create a user message event with correct structure', () => {
+    const conversationId = 1
+    const messageText = 'Hello, this is a test message'
+    const store = useConversationStreamStore.getState()
+
+    store.seedInitialMessage(conversationId, messageText)
+
+    const messages = getMessages(conversationId)
+    expect(messages).toHaveLength(1)
+
+    const event = messages[0] as Extract<ConversationEvent, { event_type: 'message' }>
+    expect(event.event_type).toBe('message')
+    expect(event.role).toBe('user')
+    expect(event.text_content).toBe(messageText)
+    expect(typeof event.timestamp).toBe('string')
+    // Verify timestamp is a valid ISO string
+    expect(new Date(event.timestamp).getTime()).not.toBeNaN()
+  })
+
+  it('marks history as loaded so the history hook does not overwrite the seeded message', () => {
+    const conversationId = 2
+    const store = useConversationStreamStore.getState()
+
+    store.seedInitialMessage(conversationId, 'Another test message')
+
+    expect(isHistoryLoaded(conversationId)).toBe(true)
+  })
+})

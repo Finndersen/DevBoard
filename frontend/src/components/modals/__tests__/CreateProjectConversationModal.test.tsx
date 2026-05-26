@@ -319,4 +319,34 @@ describe('CreateProjectConversationModal', () => {
     const updatedState = useUIStore.getState()
     expect(updatedState.modalDrafts[draftId]).toBeUndefined()
   })
+
+  it('calls seedInitialMessage with conversation id and prompt text after creation', async () => {
+    const { useConversationStreamStore } = await import('../../../stores/conversationStreamStore')
+    const user = userEvent.setup()
+    const seedInitialMessageSpy = vi.spyOn(useConversationStreamStore.getState(), 'seedInitialMessage')
+    const testPrompt = 'How should I structure the API design?'
+
+    render(
+      <CreateProjectConversationModal
+        isOpen={true}
+        onClose={vi.fn()}
+      />
+    )
+
+    const projectSelect = screen.getByLabelText('Project')
+    const promptTextarea = screen.getByLabelText('Initial Prompt')
+    const submitButton = screen.getByRole('button', { name: /Create Conversation/i })
+
+    await waitFor(() => expect(screen.getByRole('option', { name: 'DevBoard' })).toBeInTheDocument())
+    await user.selectOptions(projectSelect, '1')
+    await user.type(promptTextarea, testPrompt)
+    await waitFor(() => expect(submitButton).not.toBeDisabled())
+    await user.click(submitButton)
+
+    await waitFor(() => {
+      expect(seedInitialMessageSpy).toHaveBeenCalledWith(mockConversationResponse.id, testPrompt)
+    })
+
+    seedInitialMessageSpy.mockRestore()
+  })
 })

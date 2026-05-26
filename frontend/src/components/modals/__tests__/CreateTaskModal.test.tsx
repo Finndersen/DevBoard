@@ -252,4 +252,56 @@ describe('CreateTaskModal — model type selector', () => {
 
     expect(apiClient.getAgentConfiguration).toHaveBeenCalledTimes(1)
   })
+
+  it('calls seedInitialMessage with conversation id and prompt text after task creation', async () => {
+    const { useConversationStreamStore } = await import('../../../stores/conversationStreamStore')
+    const seedInitialMessageSpy = vi.spyOn(useConversationStreamStore.getState(), 'seedInitialMessage')
+    const user = userEvent.setup()
+    const testPrompt = 'Fix critical bug in auth module'
+
+    render(
+      <CreateTaskModal draftId={TEST_DRAFT_ID} onClose={vi.fn()} projectId={TEST_PROJECT_ID} />
+    )
+
+    await user.type(screen.getByPlaceholderText(/Describe what you want/i), testPrompt)
+    await selectCodebase(user)
+
+    const submitButton = screen.getByRole('button', { name: /Create Task/i })
+    await waitFor(() => expect(submitButton).not.toBeDisabled())
+    await user.click(submitButton)
+
+    await waitFor(() => {
+      expect(seedInitialMessageSpy).toHaveBeenCalledWith(mockCreatedTask.conversation_id, testPrompt)
+    })
+
+    seedInitialMessageSpy.mockRestore()
+  })
+
+  it('does not call seedInitialMessage when no initial prompt is provided', async () => {
+    const { apiClient } = await import('../../../lib/api')
+    const { useConversationStreamStore } = await import('../../../stores/conversationStreamStore')
+    const seedInitialMessageSpy = vi.spyOn(useConversationStreamStore.getState(), 'seedInitialMessage')
+    const user = userEvent.setup()
+
+    render(
+      <CreateTaskModal draftId={TEST_DRAFT_ID} onClose={vi.fn()} projectId={TEST_PROJECT_ID} />
+    )
+
+    // Only provide task title, no prompt
+    await user.type(screen.getByPlaceholderText(/Auto-generated from prompt/i), 'My Task')
+    await selectCodebase(user)
+
+    const submitButton = screen.getByRole('button', { name: /Create Task/i })
+    await waitFor(() => expect(submitButton).not.toBeDisabled())
+    await user.click(submitButton)
+
+    await waitFor(() => {
+      expect(apiClient.createTask).toHaveBeenCalled()
+    })
+
+    // seedInitialMessage should not be called when there's no prompt
+    expect(seedInitialMessageSpy).not.toHaveBeenCalled()
+
+    seedInitialMessageSpy.mockRestore()
+  })
 })

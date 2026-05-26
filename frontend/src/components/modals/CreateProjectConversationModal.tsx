@@ -5,6 +5,7 @@ import Alert from '../ui/Alert'
 import { apiClient } from '../../lib/api'
 import { useProjects } from '../../hooks'
 import { useUIStore } from '../../stores/uiStore'
+import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 
 interface CreateProjectConversationModalProps {
   isOpen: boolean
@@ -25,6 +26,7 @@ export default function CreateProjectConversationModal({
   const navigate = useNavigate()
   const { data: projects } = useProjects()
   const { saveModalDraft, removeModalDraft } = useUIStore()
+  const { seedInitialMessage } = useConversationStreamStore()
 
   const [formData, setFormData] = useState<FormData>({
     projectId: '',
@@ -104,15 +106,19 @@ export default function CreateProjectConversationModal({
   const handleCreateConversation = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
-      if (!formData.projectId || !formData.prompt.trim()) return
+      const trimmedPrompt = formData.prompt.trim()
+      if (!formData.projectId || !trimmedPrompt) return
 
       setIsCreating(true)
       setCreateError(null)
 
       try {
         const conversation = await apiClient.createProjectConversation(formData.projectId, {
-          initial_message: formData.prompt.trim(),
+          initial_message: trimmedPrompt,
         })
+
+        // Seed initial user message into stream store
+        seedInitialMessage(conversation.id, trimmedPrompt)
 
         // Remove draft if it exists
         if (draftId) {
@@ -137,7 +143,7 @@ export default function CreateProjectConversationModal({
         setIsCreating(false)
       }
     },
-    [formData, draftId, removeModalDraft, onClose, navigate]
+    [formData, draftId, removeModalDraft, onClose, navigate, seedInitialMessage]
   )
 
   return (

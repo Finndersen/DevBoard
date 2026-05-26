@@ -27,6 +27,7 @@ export default function ProjectConversationSelector({
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const editInputRef = useRef<HTMLInputElement>(null)
+  const conversationsRef = useRef(conversations)
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -41,12 +42,25 @@ export default function ProjectConversationSelector({
     fetchConversations()
   }, [fetchConversations])
 
+  // Keep ref in sync so effects can read conversations without depending on it
+  useEffect(() => {
+    conversationsRef.current = conversations
+  }, [conversations])
+
   // Refetch when dropdown opens
   useEffect(() => {
     if (isOpen) {
       fetchConversations()
     }
   }, [isOpen, fetchConversations])
+
+  // Refetch once when activeConversationId changes and the conversation isn't in the list.
+  // Uses a ref to avoid re-triggering on every fetch completion (infinite loop).
+  useEffect(() => {
+    if (activeConversationId && !conversationsRef.current.some(c => c.id === activeConversationId)) {
+      fetchConversations()
+    }
+  }, [activeConversationId, fetchConversations])
 
   // Focus edit input when editing starts
   useEffect(() => {

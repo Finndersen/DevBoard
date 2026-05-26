@@ -75,6 +75,7 @@ interface ConversationStreamActions {
   completeStream: (conversationId: number) => void
   addEvent: (conversationId: number, event: ConversationEvent) => void
   setMessages: (conversationId: number, messages: ConversationEvent[], contextUsage?: ContextUsage | null) => void
+  seedInitialMessage: (conversationId: number, text: string) => void
   setError: (conversationId: number, error: Error) => void
   getStreamState: (conversationId: number) => StreamState | undefined
   isConversationStreaming: (conversationId: number) => boolean
@@ -454,6 +455,16 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       set((draft) => {
         draft.conversationMessages.set(conversationId, { messages, historyLoaded: true, contextUsage })
       })
+    },
+
+    seedInitialMessage: (conversationId, text) => {
+      const event: ConversationEvent = {
+        event_type: 'message',
+        role: 'user',
+        text_content: text,
+        timestamp: new Date().toISOString(),
+      }
+      get().setMessages(conversationId, [event])
     },
 
     setError: (conversationId, error) => {
