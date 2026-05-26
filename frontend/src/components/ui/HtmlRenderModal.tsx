@@ -1,6 +1,6 @@
 /**
  * Modal component for rendering HTML content in a sandboxed iframe.
- * Used by the render_html tool to display rich visualizations.
+ * Opened from the Expand button in HtmlPreview for full-screen viewing.
  */
 
 import Modal from './Modal'

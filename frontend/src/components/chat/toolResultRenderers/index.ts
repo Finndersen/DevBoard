@@ -11,7 +11,6 @@ import type { ToolCall, ToolResult } from '../../../lib/api'
 
 import CreateTaskResultRenderer from './CreateTaskResultRenderer'
 import EditTaskResultRenderer from './EditTaskResultRenderer'
-import RenderHtmlToolDisplay from './RenderHtmlToolDisplay'
 import SubAgentResultRenderer from './SubAgentResultRenderer'
 
 /**
@@ -84,7 +83,6 @@ export type CustomToolDisplay = (props: CustomToolDisplayProps) => JSX.Element
  * the standard collapsible ToolCallDisplay entirely.
  */
 const customToolDisplays: Record<string, CustomToolDisplay> = {
-  render_html: RenderHtmlToolDisplay,
 }
 
 /**

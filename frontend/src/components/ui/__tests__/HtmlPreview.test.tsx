@@ -93,4 +93,55 @@ describe('HtmlPreview', () => {
 
     expect(iframe.style.height).toBe('500px')
   })
+
+  describe('Expand Button', () => {
+    it('renders Expand button in the tab bar', () => {
+      renderWithProvider(<HtmlPreview code="<p>Hello</p>" language="html" />)
+      const expandButton = screen.getByTitle('Expand to fullscreen')
+      expect(expandButton).toBeInTheDocument()
+      expect(expandButton).toHaveTextContent('⛶')
+    })
+
+    it('opens modal when Expand button is clicked', async () => {
+      const user = userEvent.setup()
+      renderWithProvider(<HtmlPreview code="<p>Hello</p>" language="html" />)
+
+      const expandButton = screen.getByTitle('Expand to fullscreen')
+      await user.click(expandButton)
+
+      // Modal should be open with correct title
+      const modal = screen.getByText('HTML Preview')
+      expect(modal).toBeInTheDocument()
+    })
+
+    it('closes modal when Close button is clicked', async () => {
+      const user = userEvent.setup()
+      renderWithProvider(<HtmlPreview code="<p>Hello</p>" language="html" />)
+
+      // Open modal
+      const expandButton = screen.getByTitle('Expand to fullscreen')
+      await user.click(expandButton)
+
+      // Find and click close button
+      const closeButton = screen.getByLabelText('Close modal')
+      await user.click(closeButton)
+
+      // Modal should be closed
+      expect(screen.queryByText('HTML Preview')).not.toBeInTheDocument()
+    })
+
+    it('uses correct title for SVG preview in modal', async () => {
+      const user = userEvent.setup()
+      renderWithProvider(
+        <HtmlPreview code='<svg><rect /></svg>' language="svg" />
+      )
+
+      const expandButton = screen.getByTitle('Expand to fullscreen')
+      await user.click(expandButton)
+
+      // Modal should have SVG Preview title
+      const modal = screen.getByText('SVG Preview')
+      expect(modal).toBeInTheDocument()
+    })
+  })
 })

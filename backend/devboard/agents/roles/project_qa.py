@@ -8,7 +8,6 @@ from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import (
     create_document_edit_tool,
     create_inspect_conversation_tool,
-    create_render_html_tool,
     create_set_document_content_tool,
 )
 from devboard.agents.tools.codebase_management_tools import (
@@ -43,8 +42,8 @@ You will have access to the project specification document, which you are able t
 You will also have access to various context sources related to the project, and should use the available tools to query these context sources to obtain the information required to answer the user's questions, or complete tasks.
 
 RICH VISUALIZATIONS:
-- Use the `render_html` tool to generate rich visualizations, dashboards, charts, styled tables, or other interactive read-only content when the user requests something visual or when the content would benefit significantly from rich formatting beyond Markdown.
-- The HTML is rendered in a sandboxed iframe that can execute JavaScript and load external libraries from CDNs (e.g., Chart.js, D3.js, Plotly) but cannot access the parent page.
+- Generate rich visualizations, dashboards, charts, styled tables, or other interactive content using ` ```html ` fenced code blocks in your messages.
+- These blocks are rendered as sandboxed iframes that can execute JavaScript and load external libraries from CDNs (e.g., Chart.js, D3.js, Plotly) but cannot access the parent page.
 - Provide a complete, self-contained HTML document including <html>, <head>, <style>, and <script> tags as needed.
 - This is ideal for project status dashboards, progress charts, architecture diagrams, interactive data tables, or any visual representation of project data.
 
@@ -154,8 +153,6 @@ class ProjectQAAgentRole(AgentRole):
             create_get_task_agent_status_tool(self.project, self.task_service, self.conversation_repo),
             # Conversation analysis tool
             create_inspect_conversation_tool(self.conversation_repo),
-            # HTML rendering tool
-            create_render_html_tool(),
         ]
 
         # Add codebase tools if project has codebases

@@ -21,7 +21,6 @@ from .project_tools import (
     create_view_project_details_tool,
 )
 from .rebase_tools import create_rebase_task_branch_tool
-from .render_html import create_render_html_tool
 from .sub_agent_tools import (
     create_multi_codebase_investigation_tool,
 )
@@ -59,7 +58,6 @@ __all__ = [
     "create_set_project_specification_content_tool",
     "create_view_project_details_tool",
     "create_rebase_task_branch_tool",
-    "create_render_html_tool",
     "create_set_document_content_tool",
     "create_text_search_tool",
     "create_file_read_tool",

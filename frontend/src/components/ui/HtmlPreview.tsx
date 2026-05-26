@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import CodeBlock from './CodeBlock'
+import HtmlRenderModal from './HtmlRenderModal'
 import { borderColors, surfaces, textColors } from '../../styles/designSystem'
 
 interface HtmlPreviewProps {
@@ -34,6 +35,7 @@ function buildSrcdoc(code: string): string {
 export default function HtmlPreview({ code, language }: HtmlPreviewProps) {
   const [activeTab, setActiveTab] = useState<'preview' | 'source'>('preview')
   const [height, setHeight] = useState(DEFAULT_HEIGHT)
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   const handleMessage = useCallback((event: MessageEvent) => {
@@ -82,9 +84,20 @@ export default function HtmlPreview({ code, language }: HtmlPreviewProps) {
         >
           Source
         </button>
-        <span className={`text-xs font-medium ${textColors.muted} ml-auto`}>
-          {language.toUpperCase()}
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className={`text-xs font-medium ${textColors.muted}`}>
+            {language.toUpperCase()}
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+            className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${textColors.muted} hover:text-gray-700 dark:hover:text-gray-300`}
+            title="Expand to fullscreen"
+            aria-label="Expand to fullscreen"
+          >
+            ⛶
+          </button>
+        </div>
       </div>
 
       {activeTab === 'preview' ? (
@@ -99,6 +112,13 @@ export default function HtmlPreview({ code, language }: HtmlPreviewProps) {
       ) : (
         <CodeBlock code={code} language={language} />
       )}
+
+      <HtmlRenderModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={`${language.toUpperCase()} Preview`}
+        html={srcdoc}
+      />
     </div>
   )
 }

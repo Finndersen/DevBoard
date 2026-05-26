@@ -29,8 +29,20 @@ export default function AgentBlockDisplay({ children, isLatest }: AgentBlockDisp
     return () => observer.disconnect()
   }, [isLatest])
 
+  const toggleButton = (
+    <div className="flex justify-center mb-1">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="text-xs font-medium hover:underline text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+      >
+        {isExpanded ? '▲ Show less' : '▼ Show more'}
+      </button>
+    </div>
+  )
+
   return (
     <div className="flex flex-col">
+      {needsExpansion && !isExpanded && toggleButton}
       <div
         className="relative overflow-hidden"
         style={{
@@ -52,16 +64,7 @@ export default function AgentBlockDisplay({ children, isLatest }: AgentBlockDisp
           <div className="absolute top-0 left-0 right-0 h-16 pointer-events-none bg-gradient-to-b from-white dark:from-gray-900 to-transparent" />
         )}
       </div>
-      {needsExpansion && (
-        <div className="flex justify-center mt-1">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-xs font-medium hover:underline text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-          >
-            {isExpanded ? '▲ Show less' : '▼ Show more'}
-          </button>
-        </div>
-      )}
+      {needsExpansion && isExpanded && toggleButton}
     </div>
   )
 }
