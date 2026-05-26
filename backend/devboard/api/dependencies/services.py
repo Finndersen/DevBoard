@@ -6,8 +6,10 @@ from fastapi import Depends
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.engines.agent_engines import agent_engine_registry
+from devboard.agents.execution.background_agent_runner import BackgroundAgentRunner
 from devboard.api.dependencies.repositories import (
     get_agent_role_config_repository,
+    get_background_agent_run_repository,
     get_configuration_repository,
     get_conversation_repository,
     get_custom_field_repository,
@@ -36,6 +38,7 @@ from devboard.db.repositories import (
     TaskRepository,
     WorktreeSlotRepository,
 )
+from devboard.db.repositories.background_agent import BackgroundAgentRunRepository
 from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
 from devboard.services.codebase_investigation import CodebaseInvestigationService
 from devboard.services.config_service import ConfigService
@@ -204,6 +207,14 @@ def get_mcp_service(
 ) -> MCPService:
     """Get MCPService instance."""
     return MCPService(mcp_server_repository=mcp_server_repo, oauth_service=oauth_service)
+
+
+def get_background_agent_runner(
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+    agent_run_repo: BackgroundAgentRunRepository = Depends(get_background_agent_run_repository),
+) -> BackgroundAgentRunner:
+    """Get BackgroundAgentRunner instance."""
+    return BackgroundAgentRunner(conversation_repo=conversation_repo, agent_run_repo=agent_run_repo)
 
 
 @dataclasses.dataclass

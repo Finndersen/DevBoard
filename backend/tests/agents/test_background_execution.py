@@ -7,9 +7,10 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from devboard.agents.events import ConversationEvent, MessageRole, TextMessage
+from devboard.agents.events import AgentRunCompletedEvent, ContextUsage, ConversationEvent, MessageRole, TextMessage
 from devboard.api.dependencies.services import ExecutionServices
-from devboard.db.models import Conversation, Project, Task
+from devboard.db.models import BackgroundAgent, Conversation, Project, Task
+from devboard.db.models.background_agent_run import BackgroundAgentRunStatus
 from devboard.db.models.task import TaskStatus
 
 
@@ -421,3 +422,172 @@ class TestTaskConversationWriteDirs:
             interrupt_event=mock_create_exec.call_args.kwargs["interrupt_event"],
             additional_write_dirs=None,
         )
+
+
+def _make_background_agent_conversation(working_dir: str = "/devboard/agents/my-agent"):
+    """Return (conversation, agent) mocks for a BackgroundAgent conversation."""
+    agent = Mock(spec=BackgroundAgent)
+    agent.id = 7
+    agent.project_id = None
+    agent.state = {"key": "value"}
+
+    conversation = Mock(spec=Conversation)
+    conversation.id = 10
+    conversation.get_parent_entity.return_value = agent
+
+    return conversation, agent, working_dir
+
+
+class TestBackgroundAgentConversationFinalization:
+    """Integration tests for _run_agent_for_conversation with a BackgroundAgent parent."""
+
+    def _base_patches(self, mock_services, conversation, working_dir: str):
+        mock_db = Mock()
+        mock_db.info = {}
+
+        mock_resolver = AsyncMock()
+        mock_resolver.__aenter__ = AsyncMock(return_value=mock_resolver)
+        mock_resolver.__aexit__ = AsyncMock(return_value=None)
+        mock_resolver.run = AsyncMock(return_value=mock_services)
+
+        mock_services.conversation_repo.get_by_id.return_value = conversation
+
+        return (
+            mock_db,
+            mock_resolver,
+            [
+                patch("devboard.agents.execution.manager.SessionLocal", return_value=mock_db),
+                patch("devboard.agents.execution.manager.DependencyResolver", return_value=mock_resolver),
+                patch(
+                    "devboard.agents.execution.manager.create_agent_role_for_conversation",
+                    new_callable=AsyncMock,
+                ),
+                patch(
+                    "devboard.agents.execution.manager._resolve_background_agent_working_dir",
+                    return_value=working_dir,
+                ),
+            ],
+        )
+
+    @pytest.mark.asyncio
+    async def test_finalizes_run_on_success(self, mock_services):
+        """On success, BackgroundAgentRun is updated with COMPLETED status, tokens, and state_after."""
+        conversation, agent, working_dir = _make_background_agent_conversation()
+        mock_db, _mock_resolver, patches = self._base_patches(mock_services, conversation, working_dir)
+
+        usage = ContextUsage(input_tokens=100, output_tokens=50, cache_read_tokens=10, cache_write_tokens=5)
+        completed_event = AgentRunCompletedEvent(
+            status="completed",
+            usage=usage,
+            timestamp=datetime.datetime.now(datetime.UTC),
+        )
+
+        async def stream_with_usage():
+            yield completed_event
+
+        mock_run = Mock()
+        mock_run_repo = Mock()
+        mock_run_repo.get_by_conversation_id.return_value = mock_run
+
+        exec_service = _make_mock_exec_service(stream_with_usage)
+
+        with ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
+            stack.enter_context(
+                patch("devboard.agents.execution.manager.create_agent_execution_service", return_value=exec_service)
+            )
+            stack.enter_context(
+                patch(
+                    "devboard.agents.execution.manager.BackgroundAgentRunRepository",
+                    return_value=mock_run_repo,
+                )
+            )
+
+            from devboard.agents.execution.manager import _run_agent_for_conversation
+
+            await _run_agent_for_conversation(
+                asyncio.Queue(), asyncio.Event(), conversation_id=10, message_or_approvals="go"
+            )
+
+        mock_run_repo.get_by_conversation_id.assert_called_once_with(10)
+        assert mock_run.status == BackgroundAgentRunStatus.COMPLETED
+        assert mock_run.error is None
+        assert mock_run.input_tokens == 100
+        assert mock_run.output_tokens == 50
+        assert mock_run.state_after == agent.state
+
+    @pytest.mark.asyncio
+    async def test_finalizes_run_on_failure(self, mock_services):
+        """On failure, BackgroundAgentRun is updated with FAILED status and error message."""
+        conversation, _agent, working_dir = _make_background_agent_conversation()
+        mock_db, _mock_resolver, patches = self._base_patches(mock_services, conversation, working_dir)
+
+        async def failing_stream():
+            raise RuntimeError("something went wrong")
+            yield  # make it an async generator
+
+        mock_run = Mock()
+        mock_run_repo = Mock()
+        mock_run_repo.get_by_conversation_id.return_value = mock_run
+
+        exec_service = _make_mock_exec_service(failing_stream)
+
+        with ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
+            stack.enter_context(
+                patch("devboard.agents.execution.manager.create_agent_execution_service", return_value=exec_service)
+            )
+            stack.enter_context(
+                patch(
+                    "devboard.agents.execution.manager.BackgroundAgentRunRepository",
+                    return_value=mock_run_repo,
+                )
+            )
+
+            from devboard.agents.execution.manager import _run_agent_for_conversation
+
+            with pytest.raises(RuntimeError, match="something went wrong"):
+                await _run_agent_for_conversation(
+                    asyncio.Queue(), asyncio.Event(), conversation_id=10, message_or_approvals="go"
+                )
+
+        mock_run_repo.get_by_conversation_id.assert_called_once_with(10)
+        assert mock_run.status == BackgroundAgentRunStatus.FAILED
+        assert mock_run.error == "something went wrong"
+
+    @pytest.mark.asyncio
+    async def test_skips_finalization_if_run_not_found(self, mock_services):
+        """If BackgroundAgentRun lookup returns None, finalization is skipped without error."""
+        conversation, _agent, working_dir = _make_background_agent_conversation()
+        mock_db, _mock_resolver, patches = self._base_patches(mock_services, conversation, working_dir)
+
+        async def empty_stream():
+            return
+            yield
+
+        mock_run_repo = Mock()
+        mock_run_repo.get_by_conversation_id.return_value = None
+
+        exec_service = _make_mock_exec_service(empty_stream)
+
+        with ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
+            stack.enter_context(
+                patch("devboard.agents.execution.manager.create_agent_execution_service", return_value=exec_service)
+            )
+            stack.enter_context(
+                patch(
+                    "devboard.agents.execution.manager.BackgroundAgentRunRepository",
+                    return_value=mock_run_repo,
+                )
+            )
+
+            from devboard.agents.execution.manager import _run_agent_for_conversation
+
+            # Should not raise even though the run was not found
+            await _run_agent_for_conversation(
+                asyncio.Queue(), asyncio.Event(), conversation_id=10, message_or_approvals="go"
+            )

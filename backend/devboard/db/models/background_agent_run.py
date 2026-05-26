@@ -23,6 +23,7 @@ class BackgroundAgentRunStatus(StrEnum):
 if TYPE_CHECKING:
     from .background_agent import BackgroundAgent
     from .conversation import Conversation
+    from .log_entry import LogEntry
 
 
 class BackgroundAgentRun(Base):
@@ -35,7 +36,9 @@ class BackgroundAgentRun(Base):
     conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), nullable=False)
 
     triggered_by: Mapped[str] = mapped_column(String(255))
-    trigger_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    trigger_event_id: Mapped[int | None] = mapped_column(
+        ForeignKey("log_entries.id", ondelete="SET NULL"), nullable=True
+    )
 
     started_at: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
     completed_at: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
@@ -50,3 +53,4 @@ class BackgroundAgentRun(Base):
 
     agent: Mapped["BackgroundAgent"] = relationship(back_populates="runs")
     conversation: Mapped["Conversation"] = relationship()
+    trigger_event: Mapped["LogEntry | None"] = relationship()

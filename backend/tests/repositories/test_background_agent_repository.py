@@ -383,6 +383,18 @@ class TestBackgroundAgentRunRepositoryUpdate:
         assert refreshed.error == "Revised"
 
 
+class TestBackgroundAgentRunRepositoryGetByConversationId:
+    def test_get_existing(self, run_repo: BackgroundAgentRunRepository, agent: BackgroundAgent, conversation) -> None:
+        run = make_run(run_repo, agent, conversation)
+        result = run_repo.get_by_conversation_id(conversation.id)
+        assert result is not None
+        assert result.id == run.id
+        assert result.conversation_id == conversation.id
+
+    def test_get_missing(self, run_repo: BackgroundAgentRunRepository) -> None:
+        assert run_repo.get_by_conversation_id(99999) is None
+
+
 class TestBackgroundAgentRunRepositoryGetStats:
     def test_empty_stats(self, run_repo: BackgroundAgentRunRepository, agent: BackgroundAgent) -> None:
         stats = run_repo.get_stats(agent.id)

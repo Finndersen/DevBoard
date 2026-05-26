@@ -6,10 +6,16 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from devboard.agents.events import AgentRunCompletedEvent, AgentRunStartedEvent, MessageRole, TextMessage
+from devboard.agents.events import AgentRunCompletedEvent, AgentRunStartedEvent, ContextUsage, MessageRole, TextMessage
 from devboard.agents.exceptions import AgentInterruptedError
-from devboard.agents.execution.manager import ConversationExecutionManager
+from devboard.agents.execution.manager import (
+    ConversationExecutionManager,
+    _drain_events,
+    _map_execution_status_to_run_status,
+    _resolve_background_agent_working_dir,
+)
 from devboard.agents.execution.types import ConversationExecution, ExecutionStatus
+from devboard.db.models.background_agent_run import BackgroundAgentRunStatus
 
 
 async def _async_gen(*events):
@@ -217,3 +223,127 @@ class TestRunSubAgentExecution:
         assert isinstance(started, AgentRunStartedEvent)
         assert isinstance(completed, AgentRunCompletedEvent)
         assert completed.status == "interrupted"
+
+
+class TestDrainEvents:
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_completed_event(self):
+        started = _make_started_event()
+        queue: asyncio.Queue[tuple[int, object]] = asyncio.Queue()
+        db = Mock()
+        db.begin = Mock()
+
+        with patch("devboard.agents.execution.manager.commit_with_lock"):
+            result = await _drain_events(_async_gen(started), db, queue, 42)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_completed_event(self):
+        usage = ContextUsage(input_tokens=100, output_tokens=50, cache_read_tokens=10, cache_write_tokens=5)
+        completed = AgentRunCompletedEvent(
+            status="completed", usage=usage, timestamp=datetime.datetime.now(datetime.UTC)
+        )
+        queue: asyncio.Queue[tuple[int, object]] = asyncio.Queue()
+        db = Mock()
+
+        with patch("devboard.agents.execution.manager.commit_with_lock"):
+            result = await _drain_events(_async_gen(completed), db, queue, 42)
+
+        assert result is completed
+
+    @pytest.mark.asyncio
+    async def test_returns_completed_event_even_when_no_usage(self):
+        completed = AgentRunCompletedEvent(
+            status="completed", usage=None, timestamp=datetime.datetime.now(datetime.UTC)
+        )
+        queue: asyncio.Queue[tuple[int, object]] = asyncio.Queue()
+        db = Mock()
+
+        with patch("devboard.agents.execution.manager.commit_with_lock"):
+            result = await _drain_events(_async_gen(completed), db, queue, 42)
+
+        assert result is completed
+
+    @pytest.mark.asyncio
+    async def test_all_events_put_on_queue(self):
+        started = _make_started_event()
+        completed = _make_completed_event()
+        queue: asyncio.Queue[tuple[int, object]] = asyncio.Queue()
+        db = Mock()
+
+        with patch("devboard.agents.execution.manager.commit_with_lock"):
+            await _drain_events(_async_gen(started, completed), db, queue, 42)
+
+        assert queue.qsize() == 2
+
+
+class TestMapExecutionStatusToRunStatus:
+    def test_completed_maps_to_completed(self):
+        assert _map_execution_status_to_run_status(ExecutionStatus.COMPLETED) == BackgroundAgentRunStatus.COMPLETED
+
+    def test_interrupted_maps_to_cancelled(self):
+        assert _map_execution_status_to_run_status(ExecutionStatus.INTERRUPTED) == BackgroundAgentRunStatus.CANCELLED
+
+    def test_failed_maps_to_failed(self):
+        assert _map_execution_status_to_run_status(ExecutionStatus.FAILED) == BackgroundAgentRunStatus.FAILED
+
+
+class TestResolveBackgroundAgentWorkingDir:
+    def _make_agent(self, project_id: int | None = None) -> Mock:
+        agent = Mock()
+        agent.id = 1
+        agent.name = "My Agent"
+        agent.project_id = project_id
+        return agent
+
+    def test_global_agent_uses_background_agent_directory(self):
+        agent = self._make_agent(project_id=None)
+        db = Mock()
+
+        with patch(
+            "devboard.agents.execution.manager.ensure_background_agent_directory",
+            return_value="/home/user/.devboard/background_agents/my-agent",
+        ) as mock_ensure:
+            result = _resolve_background_agent_working_dir(agent, db)
+
+        mock_ensure.assert_called_once_with(agent)
+        assert result == "/home/user/.devboard/background_agents/my-agent"
+
+    def test_project_with_codebases_uses_first_codebase_path(self):
+        agent = self._make_agent(project_id=5)
+        codebase = Mock()
+        codebase.local_path = "/repos/my-project"
+        project = Mock()
+        project.codebases = [codebase]
+        db = Mock()
+        db.get.return_value = project
+
+        result = _resolve_background_agent_working_dir(agent, db)
+
+        assert result == "/repos/my-project"
+        db.get.assert_called_once()
+
+    def test_project_without_codebases_uses_project_directory(self):
+        agent = self._make_agent(project_id=5)
+        project = Mock()
+        project.codebases = []
+        db = Mock()
+        db.get.return_value = project
+
+        with patch(
+            "devboard.agents.execution.manager.ensure_project_directory",
+            return_value="/home/user/.devboard/projects/my-project",
+        ) as mock_ensure:
+            result = _resolve_background_agent_working_dir(agent, db)
+
+        mock_ensure.assert_called_once_with(project)
+        assert result == "/home/user/.devboard/projects/my-project"
+
+    def test_missing_project_raises_value_error(self):
+        agent = self._make_agent(project_id=99)
+        db = Mock()
+        db.get.return_value = None
+
+        with pytest.raises(ValueError, match="Project 99 not found"):
+            _resolve_background_agent_working_dir(agent, db)

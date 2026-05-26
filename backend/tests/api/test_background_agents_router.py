@@ -1,6 +1,29 @@
 """Tests for background agents and background agent runs API endpoints."""
 
+import datetime
+from unittest.mock import Mock
+
 import pytest
+
+from devboard.db.models.background_agent_run import BackgroundAgentRunStatus
+
+
+def _make_mock_run(run_id: int = 42, conversation_id: int = 100, agent_id: int = 1) -> Mock:
+    run = Mock()
+    run.id = run_id
+    run.agent_id = agent_id
+    run.conversation_id = conversation_id
+    run.triggered_by = "manual"
+    run.trigger_event_id = None
+    run.started_at = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
+    run.completed_at = None
+    run.status = BackgroundAgentRunStatus.RUNNING
+    run.state_before = {}
+    run.state_after = None
+    run.input_tokens = None
+    run.output_tokens = None
+    run.error = None
+    return run
 
 
 @pytest.fixture
@@ -245,15 +268,67 @@ class TestDeleteBackgroundAgent:
 
 
 class TestManualTrigger:
-    """POST /api/background-agents/{agent_id}/trigger — manual trigger placeholder."""
+    """POST /api/background-agents/{agent_id}/trigger — manual trigger endpoint."""
 
-    def test_trigger_returns_conversation_id(self, client, created_agent):
+    def test_trigger_returns_run_response(self, client, created_agent):
+        """Test trigger returns serialized BackgroundAgentRun with conversation_id and id."""
+        from devboard.api.dependencies.services import get_background_agent_runner
+
         agent_id = created_agent["id"]
-        resp = client.post(f"/api/background-agents/{agent_id}/trigger")
-        assert resp.status_code == 201
-        data = resp.json()
-        assert "conversation_id" in data
-        assert isinstance(data["conversation_id"], int)
+        mock_runner = Mock()
+        mock_runner.trigger.return_value = _make_mock_run(run_id=42, conversation_id=100, agent_id=agent_id)
+
+        client.app.dependency_overrides[get_background_agent_runner] = lambda: mock_runner
+        try:
+            resp = client.post(f"/api/background-agents/{agent_id}/trigger")
+            assert resp.status_code == 201
+            data = resp.json()
+            assert data["id"] == 42
+            assert data["conversation_id"] == 100
+            assert data["triggered_by"] == "manual"
+            assert data["status"] == "running"
+            call_args = mock_runner.trigger.call_args
+            assert call_args[0][0].id == agent_id
+            assert call_args[1]["triggered_by"] == "manual"
+            assert call_args[1]["input_message"] is None
+        finally:
+            del client.app.dependency_overrides[get_background_agent_runner]
+
+    def test_trigger_passes_input_message(self, client, created_agent):
+        """Test trigger forwards input_message to runner."""
+        from devboard.api.dependencies.services import get_background_agent_runner
+
+        agent_id = created_agent["id"]
+        mock_runner = Mock()
+        mock_runner.trigger.return_value = _make_mock_run(agent_id=agent_id)
+
+        client.app.dependency_overrides[get_background_agent_runner] = lambda: mock_runner
+        try:
+            resp = client.post(
+                f"/api/background-agents/{agent_id}/trigger",
+                json={"input_message": "Test input"},
+            )
+            assert resp.status_code == 201
+            call_args = mock_runner.trigger.call_args
+            assert call_args[1]["input_message"] == "Test input"
+        finally:
+            del client.app.dependency_overrides[get_background_agent_runner]
+
+    def test_trigger_returns_409_when_conversation_busy(self, client, created_agent):
+        """Test trigger returns 409 when ConversationBusyError is raised."""
+        from devboard.agents.exceptions import ConversationBusyError
+        from devboard.api.dependencies.services import get_background_agent_runner
+
+        agent_id = created_agent["id"]
+        mock_runner = Mock()
+        mock_runner.trigger.side_effect = ConversationBusyError(99)
+
+        client.app.dependency_overrides[get_background_agent_runner] = lambda: mock_runner
+        try:
+            resp = client.post(f"/api/background-agents/{agent_id}/trigger")
+            assert resp.status_code == 409
+        finally:
+            del client.app.dependency_overrides[get_background_agent_runner]
 
     def test_trigger_not_found(self, client):
         resp = client.post("/api/background-agents/999999/trigger")

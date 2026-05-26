@@ -108,7 +108,7 @@ class BackgroundAgentRunResponse(BaseModel):
     agent_id: int
     conversation_id: int
     triggered_by: str
-    trigger_event_id: str | None
+    trigger_event_id: int | None
     started_at: datetime.datetime
     completed_at: datetime.datetime | None
     status: BackgroundAgentRunStatus
@@ -131,7 +131,7 @@ class BackgroundAgentRunStatsResponse(BaseModel):
     avg_output_tokens: float | None
 
 
-class ManualTriggerResponse(BaseModel):
-    """Response for manual trigger endpoint."""
+class ManualTriggerRequest(BaseModel):
+    """Request for manual trigger endpoint."""
 
-    conversation_id: int
+    input_message: str | None = None

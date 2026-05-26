@@ -235,7 +235,7 @@ class BackgroundAgentRunRepository(BaseRepository[BackgroundAgentRun]):
         started_at: datetime.datetime | None = None,
         completed_at: datetime.datetime | None = None,
         state_after: dict[str, Any] | None = None,
-        trigger_event_id: str | None = None,
+        trigger_event_id: int | None = None,
         input_tokens: int | None = None,
         output_tokens: int | None = None,
         error: str | None = None,

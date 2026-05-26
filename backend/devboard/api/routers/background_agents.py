@@ -1,15 +1,16 @@
 """Background agents API endpoints."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import select as sa_select
 
-from devboard.agents.roles import AgentRoleType
+from devboard.agents.exceptions import ConversationBusyError
+from devboard.agents.execution.background_agent_runner import BackgroundAgentRunner
 from devboard.api.dependencies.repositories import (
     get_background_agent_or_404,
     get_background_agent_repository,
     get_background_agent_run_repository,
-    get_conversation_repository,
 )
+from devboard.api.dependencies.services import get_background_agent_runner
 from devboard.api.schemas.background_agent import (
     BackgroundAgentCreate,
     BackgroundAgentEventTriggerResponse,
@@ -19,14 +20,12 @@ from devboard.api.schemas.background_agent import (
     BackgroundAgentScheduleTriggerResponse,
     BackgroundAgentStateUpdate,
     BackgroundAgentUpdate,
-    ManualTriggerResponse,
+    ManualTriggerRequest,
 )
 from devboard.db.models.background_agent import BackgroundAgent
 from devboard.db.models.background_agent_run import BackgroundAgentRunStatus
-from devboard.db.models.enums import EntityType
 from devboard.db.models.mcp_server import MCPTool
 from devboard.db.repositories.background_agent import BackgroundAgentRepository, BackgroundAgentRunRepository
-from devboard.db.repositories.conversation import ConversationRepository
 
 router = APIRouter()
 
@@ -166,24 +165,27 @@ async def delete_background_agent(
     repo.delete_by_id(agent.id)
 
 
-@router.post("/{agent_id}/trigger", response_model=ManualTriggerResponse, status_code=201)
+@router.post("/{agent_id}/trigger", response_model=BackgroundAgentRunResponse, status_code=201)
 async def trigger_background_agent(
     agent: BackgroundAgent = Depends(get_background_agent_or_404),
-    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
-) -> ManualTriggerResponse:
-    """Manually trigger a background agent run (placeholder — returns conversation_id).
+    runner: BackgroundAgentRunner = Depends(get_background_agent_runner),
+    request: ManualTriggerRequest | None = Body(default=None),
+) -> BackgroundAgentRunResponse:
+    """Manually trigger a background agent run.
 
-    Creates a conversation for the agent and returns its ID.
-    Actual execution is wired in a later task.
+    Creates a conversation and starts execution as a background task.
+    Returns the created BackgroundAgentRun record.
     """
-    conversation = conversation_repo.create(
-        parent_entity_type=EntityType.BACKGROUND_AGENT,
-        parent_entity_id=agent.id,
-        agent_role=AgentRoleType.BACKGROUND_AGENT,
-        engine=agent.engine,
-        model_id=agent.model_id,
-    )
-    return ManualTriggerResponse(conversation_id=conversation.id)
+    input_message = request.input_message if request else None
+    try:
+        run = runner.trigger(
+            agent,
+            triggered_by="manual",
+            input_message=input_message,
+        )
+    except ConversationBusyError as err:
+        raise HTTPException(status_code=409, detail="An execution is already active for this conversation") from err
+    return BackgroundAgentRunResponse.model_validate(run)
 
 
 @router.get("/{agent_id}/runs", response_model=list[BackgroundAgentRunResponse])

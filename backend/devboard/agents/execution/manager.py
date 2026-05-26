@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.events import (
+    AgentRunCompletedEvent,
     ConversationEvent,
     SystemEvent,
     SystemEventType,
@@ -26,9 +27,19 @@ from devboard.api.dependencies.resolver import DependencyResolver
 from devboard.api.dependencies.services import ExecutionServices, get_execution_services
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.database import SessionLocal, get_db
-from devboard.db.models import Codebase, Conversation, Project, Task, TaskStatus
+from devboard.db.models import (
+    BackgroundAgent,
+    BackgroundAgentRunStatus,
+    Codebase,
+    Conversation,
+    Project,
+    Task,
+    TaskStatus,
+)
 from devboard.db.repositories import ConversationRepository, LogEntryRepository
+from devboard.db.repositories.background_agent import BackgroundAgentRunRepository
 from devboard.db.session_lock import commit_with_lock
+from devboard.services.background_agent_directory import ensure_background_agent_directory
 from devboard.services.project_directory import ensure_project_directory
 from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_git.service import TaskBranchNotFoundException
@@ -255,8 +266,11 @@ async def _drain_events(
     db: Session,
     broadcast_queue: asyncio.Queue[tuple[int, ConversationEvent]],
     conversation_id: int,
-) -> None:
+) -> AgentRunCompletedEvent | None:
+    completed_event: AgentRunCompletedEvent | None = None
     async for event in stream:
+        if isinstance(event, AgentRunCompletedEvent):
+            completed_event = event
         t0 = time.monotonic()
         await asyncio.to_thread(commit_with_lock, db)
         commit_ms = (time.monotonic() - t0) * 1000
@@ -267,6 +281,7 @@ async def _drain_events(
                 commit_ms=f"{commit_ms:.0f}",
             )
         await broadcast_queue.put((conversation_id, event))
+    return completed_event
 
 
 async def _create_agent_stream(
@@ -324,6 +339,30 @@ async def _emit_stream_error(
             ),
         )
     )
+
+
+def _resolve_background_agent_working_dir(agent: BackgroundAgent, db: Session) -> str:
+    """Resolve the working directory for a background agent execution."""
+    if agent.project_id is not None:
+        project = db.get(Project, agent.project_id)
+        if project is None:
+            raise ValueError(f"Project {agent.project_id} not found for background agent {agent.id}")
+        if project.codebases:
+            return project.codebases[0].local_path
+        return str(ensure_project_directory(project))
+    return str(ensure_background_agent_directory(agent))
+
+
+def _map_execution_status_to_run_status(status: ExecutionStatus) -> BackgroundAgentRunStatus:
+    match status:
+        case ExecutionStatus.COMPLETED:
+            return BackgroundAgentRunStatus.COMPLETED
+        case ExecutionStatus.INTERRUPTED:
+            return BackgroundAgentRunStatus.CANCELLED
+        case ExecutionStatus.FAILED:
+            return BackgroundAgentRunStatus.FAILED
+        case _:
+            raise ValueError(f"Unhandled execution status: {status}")
 
 
 async def _run_task_agent(
@@ -427,6 +466,8 @@ async def _run_agent_for_conversation(
     db = SessionLocal()
     status: ExecutionStatus = ExecutionStatus.COMPLETED
     error: str | None = None
+    completed_event: AgentRunCompletedEvent | None = None
+    conversation_parent: Task | Project | Codebase | BackgroundAgent | None = None
 
     async with DependencyResolver(dependency_overrides={get_db: lambda: db}) as resolver:
         services = await resolver.run(get_execution_services)
@@ -465,12 +506,18 @@ async def _run_agent_for_conversation(
                     services, conversation, message_or_approvals, interrupt_event, working_dir=working_dir
                 )
                 await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
-            elif isinstance(conversation_parent, Codebase):  # pyright: ignore[reportUnnecessaryIsInstance]
+            elif isinstance(conversation_parent, Codebase):
                 working_dir = conversation_parent.local_path
                 agent_stream = await _create_agent_stream(
                     services, conversation, message_or_approvals, interrupt_event, working_dir=working_dir
                 )
                 await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
+            elif isinstance(conversation_parent, BackgroundAgent):  # pyright: ignore[reportUnnecessaryIsInstance]
+                working_dir = _resolve_background_agent_working_dir(conversation_parent, db)
+                agent_stream = await _create_agent_stream(
+                    services, conversation, message_or_approvals, interrupt_event, working_dir=working_dir
+                )
+                completed_event = await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
             else:
                 raise ValueError(f"Unsupported parent entity type: {type(conversation_parent).__name__}")
         except AgentInterruptedError:
@@ -493,5 +540,23 @@ async def _run_agent_for_conversation(
             )
         except Exception:
             logfire.exception(f"Failed to emit agent_run.completed for conversation {conversation_id}")
+        if isinstance(conversation_parent, BackgroundAgent):
+            try:
+                run = BackgroundAgentRunRepository(db).get_by_conversation_id(conversation_id)
+                if run is not None:
+                    db.refresh(conversation_parent)
+                    run.completed_at = datetime.datetime.now(datetime.UTC)
+                    run.status = _map_execution_status_to_run_status(status)
+                    run.error = error
+                    if completed_event is not None and completed_event.usage is not None:
+                        run.input_tokens = completed_event.usage.input_tokens
+                        run.output_tokens = completed_event.usage.output_tokens
+                    run.state_after = conversation_parent.state
+                else:
+                    logfire.warning(
+                        f"BackgroundAgentRun not found for conversation {conversation_id} during finalization"
+                    )
+            except Exception:
+                logfire.exception(f"Failed to finalize BackgroundAgentRun for conversation {conversation_id}")
         await asyncio.to_thread(commit_with_lock, db)
         await asyncio.to_thread(db.close)
