@@ -18,16 +18,32 @@ from devboard.agents.tools import (
     create_view_project_details_tool,
     create_view_task_details_tool,
 )
+from devboard.agents.tools.background_agent_tools import (
+    create_query_agent_runs_tool,
+    create_read_agent_state_tool,
+    create_read_state_tool,
+    create_update_state_tool,
+)
 from devboard.agents.tools.codebase_management_tools import create_view_codebase_details_tool
+from devboard.agents.tools.event_tools import (
+    create_create_event_tool,
+    create_query_events_tool,
+)
 from devboard.agents.tools.sub_agent_tools import (
     CodebaseInvestigationContext,
     create_multi_codebase_investigation_tool,
 )
 from devboard.db.models.background_agent import BackgroundAgent
-from devboard.db.repositories import ConversationRepository, DocumentRepository
+from devboard.db.repositories import (
+    BackgroundAgentRepository,
+    BackgroundAgentRunRepository,
+    ConversationRepository,
+    DocumentRepository,
+)
 from devboard.db.repositories.codebase import CodebaseRepository
 from devboard.db.repositories.project import ProjectRepository
 from devboard.services.integration_service import IntegrationService
+from devboard.services.log_entry_service import LogEntryService
 from devboard.services.task_service import TaskService
 
 
@@ -46,6 +62,9 @@ class BackgroundAgentRole(AgentRole):
         codebase_repo: CodebaseRepository,
         background_agent: BackgroundAgent,
         conversation_id: int | None,
+        log_entry_service: LogEntryService,
+        background_agent_repo: BackgroundAgentRepository,
+        agent_run_repo: BackgroundAgentRunRepository,
     ):
         if not system_prompt:
             raise ValueError("system_prompt cannot be empty")
@@ -59,6 +78,9 @@ class BackgroundAgentRole(AgentRole):
         self.codebase_repo = codebase_repo
         self.background_agent = background_agent
         self.conversation_id = conversation_id
+        self.log_entry_service = log_entry_service
+        self.background_agent_repo = background_agent_repo
+        self.agent_run_repo = agent_run_repo
 
     def get_system_prompt(self) -> str:
         return self.system_prompt
@@ -83,6 +105,20 @@ class BackgroundAgentRole(AgentRole):
             create_view_project_details_tool(self.project_repo, self.task_service),
             create_edit_project_specification_tool(self.project_repo, self.document_repo),
             create_set_project_specification_content_tool(self.project_repo, self.document_repo),
+            # Event tools
+            create_query_events_tool(self.log_entry_service, self.background_agent),
+            create_create_event_tool(
+                self.log_entry_service,
+                self.background_agent,
+                self.agent_run_repo,
+                self.conversation_id,
+            ),
+            # State tools
+            create_read_state_tool(self.background_agent),
+            create_update_state_tool(self.background_agent_repo, self.background_agent),
+            create_read_agent_state_tool(self.background_agent_repo),
+            # Agent run tools
+            create_query_agent_runs_tool(self.agent_run_repo, self.background_agent),
         ]
 
         codebases = self.codebase_repo.get_all()

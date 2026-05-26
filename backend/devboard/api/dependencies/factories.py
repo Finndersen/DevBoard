@@ -20,12 +20,20 @@ from devboard.agents.roles.task_planning import TaskPlanningAgentRole
 from devboard.agents.roles.task_pr_review import TaskPRReviewAgentRole
 from devboard.db.models import Conversation, Project, Task
 from devboard.db.models.background_agent import BackgroundAgent
-from devboard.db.repositories import ConversationRepository, DocumentRepository
+from devboard.db.repositories import (
+    BackgroundAgentRepository,
+    BackgroundAgentRunRepository,
+    ConversationRepository,
+    DocumentRepository,
+    LogEntryRepository,
+    TaskRepository,
+)
 from devboard.db.repositories.codebase import CodebaseRepository
 from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
 from devboard.db.repositories.project import ProjectRepository
 from devboard.integrations.github import GitHubIntegration
 from devboard.services.integration_service import IntegrationService
+from devboard.services.log_entry_service import LogEntryService
 from devboard.services.oauth_service import OAuthService
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
@@ -114,6 +122,11 @@ async def create_agent_role_for_conversation(
         if conversation.agent_role == AgentRoleType.BACKGROUND_AGENT:
             agent_config = agent_config_service.get_agent_configuration(conversation.agent_role)
             system_prompt = agent_config.custom_instructions or parent_entity.prompt
+            log_entry_repo = LogEntryRepository(conversation_repo.db)
+            task_repo = TaskRepository(conversation_repo.db)
+            background_agent_repo = BackgroundAgentRepository(conversation_repo.db)
+            agent_run_repo = BackgroundAgentRunRepository(conversation_repo.db)
+            log_entry_service = LogEntryService(log_entry_repo, task_repo)
             return BackgroundAgentRole(
                 system_prompt=system_prompt,
                 task_service=task_service,
@@ -125,6 +138,9 @@ async def create_agent_role_for_conversation(
                 codebase_repo=CodebaseRepository(conversation_repo.db),
                 background_agent=parent_entity,
                 conversation_id=parent_conversation_id,
+                log_entry_service=log_entry_service,
+                background_agent_repo=background_agent_repo,
+                agent_run_repo=agent_run_repo,
             )
         else:
             raise HTTPException(

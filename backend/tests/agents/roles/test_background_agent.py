@@ -8,10 +8,16 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.background_agent import BackgroundAgentRole
 from devboard.db.models.background_agent import BackgroundAgent
 from devboard.db.models.codebase import Codebase
-from devboard.db.repositories import ConversationRepository, DocumentRepository
+from devboard.db.repositories import (
+    BackgroundAgentRepository,
+    BackgroundAgentRunRepository,
+    ConversationRepository,
+    DocumentRepository,
+)
 from devboard.db.repositories.codebase import CodebaseRepository
 from devboard.db.repositories.project import ProjectRepository
 from devboard.services.integration_service import IntegrationService
+from devboard.services.log_entry_service import LogEntryService
 from devboard.services.task_service import TaskService
 
 
@@ -51,8 +57,30 @@ def mock_background_agent():
 
 
 @pytest.fixture
+def mock_log_entry_service():
+    return Mock(spec=LogEntryService)
+
+
+@pytest.fixture
+def mock_background_agent_repo():
+    return Mock(spec=BackgroundAgentRepository)
+
+
+@pytest.fixture
+def mock_agent_run_repo():
+    return Mock(spec=BackgroundAgentRunRepository)
+
+
+@pytest.fixture
 def background_role(
-    mock_conversation_repo, mock_task_service, mock_codebase_repo, mock_project_repo, mock_background_agent
+    mock_conversation_repo,
+    mock_task_service,
+    mock_codebase_repo,
+    mock_project_repo,
+    mock_background_agent,
+    mock_log_entry_service,
+    mock_background_agent_repo,
+    mock_agent_run_repo,
 ):
     return BackgroundAgentRole(
         system_prompt="Evaluate agent performance and suggest improvements.",
@@ -65,6 +93,9 @@ def background_role(
         codebase_repo=mock_codebase_repo,
         background_agent=mock_background_agent,
         conversation_id=None,
+        log_entry_service=mock_log_entry_service,
+        background_agent_repo=mock_background_agent_repo,
+        agent_run_repo=mock_agent_run_repo,
     )
 
 
@@ -75,7 +106,15 @@ class TestBackgroundAgentRole:
         assert prompt == "Evaluate agent performance and suggest improvements."
 
     def test_get_system_prompt_returns_custom_string(
-        self, mock_conversation_repo, mock_task_service, mock_codebase_repo, mock_project_repo, mock_background_agent
+        self,
+        mock_conversation_repo,
+        mock_task_service,
+        mock_codebase_repo,
+        mock_project_repo,
+        mock_background_agent,
+        mock_log_entry_service,
+        mock_background_agent_repo,
+        mock_agent_run_repo,
     ):
         custom_prompt = "You are a custom background agent with specific instructions."
         role = BackgroundAgentRole(
@@ -89,6 +128,9 @@ class TestBackgroundAgentRole:
             codebase_repo=mock_codebase_repo,
             background_agent=mock_background_agent,
             conversation_id=None,
+            log_entry_service=mock_log_entry_service,
+            background_agent_repo=mock_background_agent_repo,
+            agent_run_repo=mock_agent_run_repo,
         )
 
         assert role.get_system_prompt() == custom_prompt
@@ -107,14 +149,27 @@ class TestBackgroundAgentRole:
         assert "view_project_details" in tool_names
         assert "edit_project_specification" in tool_names
         assert "set_project_specification_content" in tool_names
+        assert "query_events" in tool_names
+        assert "create_event" in tool_names
+        assert "read_state" in tool_names
+        assert "update_state" in tool_names
+        assert "read_agent_state" in tool_names
+        assert "query_agent_runs" in tool_names
 
-    def test_get_tools_returns_eleven_tools_without_codebases(self, background_role):
+    def test_get_tools_returns_seventeen_tools_without_codebases(self, background_role):
         tools = background_role.get_tools()
 
-        assert len(tools) == 11
+        assert len(tools) == 17
 
     def test_get_tools_includes_codebase_tools_when_codebases_exist(
-        self, mock_conversation_repo, mock_task_service, mock_project_repo, mock_background_agent
+        self,
+        mock_conversation_repo,
+        mock_task_service,
+        mock_project_repo,
+        mock_background_agent,
+        mock_log_entry_service,
+        mock_background_agent_repo,
+        mock_agent_run_repo,
     ):
         mock_codebase = Mock(spec=Codebase)
         mock_codebase.name = "test-codebase"
@@ -132,6 +187,9 @@ class TestBackgroundAgentRole:
             codebase_repo=mock_codebase_repo,
             background_agent=mock_background_agent,
             conversation_id=42,
+            log_entry_service=mock_log_entry_service,
+            background_agent_repo=mock_background_agent_repo,
+            agent_run_repo=mock_agent_run_repo,
         )
 
         with patch("devboard.agents.roles.background_agent.get_execution_manager") as mock_get_mgr:
@@ -141,7 +199,7 @@ class TestBackgroundAgentRole:
         tool_names = [t.name for t in tools]
         assert "view_codebase_details" in tool_names
         assert "investigate_codebase" in tool_names
-        assert len(tools) == 13
+        assert len(tools) == 19
 
     @pytest.mark.asyncio
     async def test_get_context_content_returns_non_empty_string(self, background_role):

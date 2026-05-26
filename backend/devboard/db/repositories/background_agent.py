@@ -324,6 +324,18 @@ class BackgroundAgentRunRepository(BaseRepository[BackgroundAgentRun]):
             stmt = stmt.limit(limit)
         return list(self.db.execute(stmt).scalars().all())
 
+    def get_by_conversation_id(self, conversation_id: int) -> BackgroundAgentRun | None:
+        """Get a run by its associated conversation ID.
+
+        Args:
+            conversation_id: Conversation ID to look up
+
+        Returns:
+            BackgroundAgentRun or None if not found
+        """
+        stmt = select(BackgroundAgentRun).where(BackgroundAgentRun.conversation_id == conversation_id)
+        return self.db.execute(stmt).scalar_one_or_none()
+
     def get_latest_run(self, agent_id: int) -> BackgroundAgentRun | None:
         """Get the most recent run for a background agent.
 
