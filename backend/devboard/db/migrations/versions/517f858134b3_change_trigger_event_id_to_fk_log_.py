@@ -20,30 +20,29 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.alter_column(
-        "background_agent_runs",
-        "trigger_event_id",
-        existing_type=sa.VARCHAR(length=255),
-        type_=sa.Integer(),
-        existing_nullable=True,
-    )
-    op.create_foreign_key(
-        "fk_background_agent_runs_trigger_event_id",
-        "background_agent_runs",
-        "log_entries",
-        ["trigger_event_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    with op.batch_alter_table("background_agent_runs") as batch_op:
+        batch_op.alter_column(
+            "trigger_event_id",
+            existing_type=sa.VARCHAR(length=255),
+            type_=sa.Integer(),
+            existing_nullable=True,
+        )
+        batch_op.create_foreign_key(
+            "fk_background_agent_runs_trigger_event_id",
+            "log_entries",
+            ["trigger_event_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_constraint("fk_background_agent_runs_trigger_event_id", "background_agent_runs", type_="foreignkey")
-    op.alter_column(
-        "background_agent_runs",
-        "trigger_event_id",
-        existing_type=sa.Integer(),
-        type_=sa.VARCHAR(length=255),
-        existing_nullable=True,
-    )
+    with op.batch_alter_table("background_agent_runs") as batch_op:
+        batch_op.drop_constraint("fk_background_agent_runs_trigger_event_id", type_="foreignkey")
+        batch_op.alter_column(
+            "trigger_event_id",
+            existing_type=sa.Integer(),
+            type_=sa.VARCHAR(length=255),
+            existing_nullable=True,
+        )
