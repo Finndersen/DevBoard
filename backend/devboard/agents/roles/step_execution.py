@@ -20,7 +20,8 @@ STEP_TYPE_PREAMBLES = {
         "Quality of test scenarios matters more than quantity.\n\n"
         "After implementing, run fast validation checks (lint, format, typecheck) on the files you "
         "modified and fix any issues before completing the step. "
-        "The relevant commands can be found in the codebase's developer context."
+        "The relevant commands can be found in the codebase's developer context.\n\n"
+        "Do NOT create any git commits — committing is handled by a later step in the workflow."
     ),
     ImplementationStepType.DOCUMENTATION: (
         "You are updating documentation as part of a larger implementation plan. Focus on accuracy and completeness."
@@ -92,3 +93,7 @@ class StepExecutionAgentRole(AgentRole):
     @property
     def include_builtin_system_prompt(self) -> bool:
         return True
+
+    @property
+    def load_extra_mcp_servers(self) -> bool:
+        return False

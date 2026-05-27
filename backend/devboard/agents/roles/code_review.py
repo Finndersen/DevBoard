@@ -137,5 +137,9 @@ class CodeReviewAgentRole(AgentRole):
     def allowed_builtin_tools(self) -> list[str]:
         return ["Skill", "Read", "Grep", "Glob"]
 
+    @property
+    def load_extra_mcp_servers(self) -> bool:
+        return False
+
     async def get_context_content(self) -> str:
         return build_task_context(self._task, working_dir=self._working_dir, include_step_outcomes=True)

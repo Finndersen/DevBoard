@@ -196,6 +196,7 @@ class ClaudeCodeAgent(BaseAgent):
             additional_write_dirs=self._additional_write_dirs,
             effort=self._effort,
             client_mode=self._client_mode,
+            load_extra_mcp_servers=self.role.load_extra_mcp_servers,
         )
 
     def _build_system_prompt(self) -> str:

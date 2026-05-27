@@ -65,3 +65,11 @@ class AgentRole(ABC):
     def include_builtin_system_prompt(self) -> bool:
         """Whether to include the built-in system prompt for the engine (e.g. built-in Claude Code prompt)."""
         return False
+
+    @property
+    def load_extra_mcp_servers(self) -> bool:
+        """Whether to load Claude.ai connector plugins and user-level MCP servers.
+
+        Sub-agent roles should override to False for a controlled, minimal tool environment.
+        """
+        return True

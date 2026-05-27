@@ -112,6 +112,7 @@ class ClaudeClient:
         output_model: type[BaseModel] | None = None,
         effort: Literal["low", "medium", "high", "max"] | None = None,
         client_mode: ClientMode = ClientMode.SDK,
+        load_extra_mcp_servers: bool = True,
     ):
         """Initialize Claude Code client.
 
@@ -130,6 +131,9 @@ class ClaudeClient:
                 from the model and used to request structured output from Claude. The response is validated
                 and parsed into an instance of this model, available as ClaudeCodeResult.structured_output.
             effort: Optional effort level for thinking ("low", "medium", "high", "max")
+            load_extra_mcp_servers: Whether to load Claude.ai connector plugins and user-level MCP
+                servers. Set to False for sub-agents that should run in a minimal, controlled
+                environment (disables ENABLE_CLAUDEAI_MCP_SERVERS and passes --strict-mcp-config).
         """
         self._output_model = output_model
         self._client_mode = client_mode
@@ -166,6 +170,8 @@ class ClaudeClient:
 
         # Load environment variables from user settings
         env_vars = load_env_from_settings()
+        if not load_extra_mcp_servers:
+            env_vars["ENABLE_CLAUDEAI_MCP_SERVERS"] = "false"
         # Set model name when using AWS Bedrock
         if model and env_vars.get("CLAUDE_CODE_USE_BEDROCK") == "1":
             region_prefix = env_vars.get("AWS_REGION", "us-west-1").split("-")[0]
@@ -187,6 +193,7 @@ class ClaudeClient:
             permission_mode="bypassPermissions",
             setting_sources=["local", "project", "user"] if load_settings else None,
             env=env_vars,
+            extra_args={"strict-mcp-config": None} if not load_extra_mcp_servers else {},
             stderr=lambda line: logfire.warning("Claude CLI stderr: {line}", line=line),
             sandbox=SandboxSettings(enabled=True, allowUnsandboxedCommands=False) if sandbox_enabled else None,  # type: ignore[misc]
             output_format=output_format,

@@ -350,6 +350,7 @@ def create_inspect_conversation_tool(conversation_repo: ConversationRepository) 
             cwd=str(Path.home() / ".devboard"),
             load_settings=False,
             effort=effort,
+            load_extra_mcp_servers=False,
         )
 
         result = await client.run(user_message)

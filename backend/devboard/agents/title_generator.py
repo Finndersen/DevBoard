@@ -89,6 +89,7 @@ Respond immediately using the structured output tool. Do not include any other t
             sandbox_enabled=False,
             output_model=TaskGenerationResult,
             effort="low",
+            load_extra_mcp_servers=False,
         )
 
         result = await client.run(user_message)
@@ -148,6 +149,7 @@ Respond immediately using the structured output tool. Do not include any other t
             sandbox_enabled=False,
             output_model=ConversationTitleResult,
             effort="low",
+            load_extra_mcp_servers=False,
         )
 
         result = await client.run(prompt)
