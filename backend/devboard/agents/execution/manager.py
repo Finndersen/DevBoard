@@ -91,10 +91,14 @@ class ConversationExecutionManager:
                     execution.error = str(e)
                     logfire.exception(f"Execution failed for conversation {conversation_id}: {e}")
                 finally:
-                    execution.completed_at = datetime.datetime.now(datetime.UTC)
-                    self._executions.pop(conversation_id, None)
+                    self._finalize_execution(conversation_id)
         finally:
             otel_context.detach(token)
+
+    def _finalize_execution(self, conversation_id: int) -> None:
+        execution = self._executions.pop(conversation_id, None)
+        if execution is not None:
+            execution.completed_at = datetime.datetime.now(datetime.UTC)
 
     def get_execution(self, conversation_id: int) -> ConversationExecution | None:
         return self._executions.get(conversation_id)
@@ -183,57 +187,67 @@ class ConversationExecutionManager:
             started_at=datetime.datetime.now(datetime.UTC),
             is_sub_agent=True,
         )
-        parent_execution = self._executions.get(conversation_id)
         self._executions[conversation_id] = execution
         logfire.info(
             f"Starting sub-agent execution for conversation {conversation_id}",
             conversation_id=conversation_id,
             is_sub_agent=True,
-            has_parent_execution=parent_execution is not None,
         )
         try:
             with logfire.span("sub_agent_execution", conversation_id=conversation_id, is_sub_agent=True):
-                execution_service = create_agent_execution_service(
-                    conversation=conversation,
-                    role=role,
-                    conversation_repo=conversation_repo,
-                    agent_config_service=agent_config_service,
-                    working_dir=working_dir,
-                    interrupt_event=interrupt_event,
-                    effort=effort,
-                )
-                last_text_message: TextMessage | None = None
-                async for event in execution_service.stream_events_for_message_or_approval(prompt):
+                try:
+                    execution_service = create_agent_execution_service(
+                        conversation=conversation,
+                        role=role,
+                        conversation_repo=conversation_repo,
+                        agent_config_service=agent_config_service,
+                        working_dir=working_dir,
+                        interrupt_event=interrupt_event,
+                        effort=effort,
+                    )
+                    last_text_message: TextMessage | None = None
+                    async for event in execution_service.stream_events_for_message_or_approval(prompt):
+                        conversation_repo.commit()
+                        await self.broadcast_queue.put((conversation_id, event))
+                        if isinstance(event, TextMessage):
+                            last_text_message = event
                     conversation_repo.commit()
-                    await self.broadcast_queue.put((conversation_id, event))
-                    if isinstance(event, TextMessage):
-                        last_text_message = event
-                conversation_repo.commit()
-                result_text = last_text_message.text_content if last_text_message else ""
+                    result_text = last_text_message.text_content if last_text_message else ""
 
-                # Check for rate-limit responses: both conditions must be met
-                if (
-                    last_text_message is not None
-                    and last_text_message.model == "<synthetic>"
-                    and "You've hit your limit" in result_text
-                ):
-                    raise SubAgentRateLimitError(f"Sub-agent hit rate limit: {result_text}")
+                    # Check for rate-limit responses: both conditions must be met
+                    if (
+                        last_text_message is not None
+                        and last_text_message.model == "<synthetic>"
+                        and "You've hit your limit" in result_text
+                    ):
+                        raise SubAgentRateLimitError(f"Sub-agent hit rate limit: {result_text}")
 
-                logfire.info(
-                    f"Sub-agent execution completed for conversation {conversation_id}",
-                    conversation_id=conversation_id,
-                    is_sub_agent=True,
-                )
-                return SubAgentResult(result=result_text, conversation_id=conversation_id)
+                    execution.status = ExecutionStatus.COMPLETED
+                    logfire.info(
+                        f"Sub-agent execution completed for conversation {conversation_id}",
+                        conversation_id=conversation_id,
+                        is_sub_agent=True,
+                    )
+                    return SubAgentResult(result=result_text, conversation_id=conversation_id)
+                except AgentInterruptedError:
+                    execution.status = ExecutionStatus.INTERRUPTED
+                    logfire.info(
+                        f"Sub-agent execution interrupted for conversation {conversation_id}",
+                        conversation_id=conversation_id,
+                        is_sub_agent=True,
+                    )
+                    raise
+                except Exception as e:
+                    execution.status = ExecutionStatus.FAILED
+                    execution.error = str(e)
+                    logfire.exception(
+                        f"Sub-agent execution failed for conversation {conversation_id}: {e}",
+                        conversation_id=conversation_id,
+                        is_sub_agent=True,
+                    )
+                    raise
         finally:
-            if parent_execution is not None:
-                self._executions[conversation_id] = parent_execution
-                logfire.info(
-                    f"Restored parent execution for conversation {conversation_id}",
-                    conversation_id=conversation_id,
-                )
-            else:
-                self._executions.pop(conversation_id, None)
+            self._finalize_execution(conversation_id)
 
     async def broadcast_event(
         self,

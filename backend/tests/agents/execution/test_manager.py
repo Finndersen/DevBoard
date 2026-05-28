@@ -14,7 +14,7 @@ from devboard.agents.execution.manager import (
     _map_execution_status_to_run_status,
     _resolve_background_agent_working_dir,
 )
-from devboard.agents.execution.types import ConversationExecution, ExecutionStatus
+from devboard.agents.execution.types import ExecutionStatus
 from devboard.db.models.background_agent_run import BackgroundAgentRunStatus
 
 
@@ -106,69 +106,6 @@ class TestRunSubAgentExecution:
         assert mock_conversation_repo.commit.call_count == 4
         assert result.result == "done"
         assert result.conversation_id == 42
-
-    @pytest.mark.asyncio
-    async def test_stale_completed_entry_restored_after_sub_agent_completes(
-        self, manager, mock_conversation, mock_execution_service
-    ):
-        """A previous non-running entry for the conversation is restored after the sub-agent finishes."""
-        stale_exec = ConversationExecution(
-            conversation_id=42,
-            interrupt_requested=asyncio.Event(),
-            asyncio_task=Mock(),
-            status=ExecutionStatus.COMPLETED,
-            started_at=datetime.datetime.now(datetime.UTC),
-        )
-        manager._executions[42] = stale_exec
-        started = _make_started_event()
-        completed = _make_completed_event()
-        mock_execution_service.stream_events_for_message_or_approval = Mock(return_value=_async_gen(started, completed))
-
-        with self._patch_create_service(mock_execution_service):
-            await manager.run_sub_agent_execution(
-                conversation=mock_conversation,
-                role=Mock(),
-                prompt="do the thing",
-                conversation_repo=Mock(),
-                agent_config_service=Mock(),
-                working_dir="/tmp",
-            )
-
-        assert manager._executions[42] is stale_exec
-
-    @pytest.mark.asyncio
-    async def test_stale_entry_restored_when_agent_interrupted(
-        self, manager, mock_conversation, mock_execution_service
-    ):
-        """A previous non-running entry is restored even when AgentInterruptedError propagates."""
-        stale_exec = ConversationExecution(
-            conversation_id=42,
-            interrupt_requested=asyncio.Event(),
-            asyncio_task=Mock(),
-            status=ExecutionStatus.COMPLETED,
-            started_at=datetime.datetime.now(datetime.UTC),
-        )
-        manager._executions[42] = stale_exec
-
-        async def interrupted_stream():
-            yield _make_started_event()
-            yield _make_completed_event(status="interrupted")
-            raise AgentInterruptedError()
-
-        mock_execution_service.stream_events_for_message_or_approval = Mock(return_value=interrupted_stream())
-
-        with self._patch_create_service(mock_execution_service):
-            with pytest.raises(AgentInterruptedError):
-                await manager.run_sub_agent_execution(
-                    conversation=mock_conversation,
-                    role=Mock(),
-                    prompt="do the thing",
-                    conversation_repo=Mock(),
-                    agent_config_service=Mock(),
-                    working_dir="/tmp",
-                )
-
-        assert manager._executions[42] is stale_exec
 
     @pytest.mark.asyncio
     async def test_no_prior_entry_removed_on_completion(self, manager, mock_conversation, mock_execution_service):
