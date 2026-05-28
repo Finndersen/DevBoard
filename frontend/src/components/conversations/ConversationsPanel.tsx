@@ -7,6 +7,7 @@ import {
   ChatBubbleLeftRightIcon,
   ExclamationCircleIcon,
   PlusIcon,
+  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline'
 import { useConversations } from '../../hooks/useConversations'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
@@ -16,7 +17,7 @@ import type { ConversationResponse, GitHubPRStatusResponse } from '../../lib/api
 import { apiClient } from '../../lib/api'
 import { textColors, surfaces, borderColors, hoverColors } from '../../styles/designSystem'
 import { useViewStreamStatus } from '../../hooks/useViewStreamStatus'
-import { getStatusInfo, getReviewInfo } from '../github/prStatusUtils'
+import { StatusIndicator } from '../github/PRStatusComponents'
 
 const AGENT_ROLE_LABELS: Record<string, string> = {
   project: 'Project',
@@ -412,8 +413,6 @@ export default function ConversationsPanel() {
               const hasDraft = draftKeys.has(`conversation:${item.id}`)
               const isPRReview = item.agent_role === 'task_pr_review'
               const prStatus = isPRReview ? prStatusMap.get(item.parent_entity_id) ?? null : null
-              const ciInfo = prStatus ? getStatusInfo(prStatus.mergeable_state, prStatus.ci_status) : null
-              const reviewInfo = prStatus ? getReviewInfo(prStatus.review_decision) : null
               const isTaskConversation = item.parent_entity_type.toUpperCase() === 'TASK'
               const primaryLabel = !isTaskConversation && item.title ? item.title : item.parent_entity_name
               const secondaryLabel = isTaskConversation ? item.project_name : item.parent_entity_name
@@ -439,15 +438,12 @@ export default function ConversationsPanel() {
                     <span className={`text-sm truncate flex-1 ${textColors.primary}`}>
                       {primaryLabel}
                     </span>
-                    {ciInfo && (
-                      <span className={`shrink-0 text-xs font-bold leading-none ${ciInfo.colorClass}`} title={ciInfo.tooltip}>
-                        {ciInfo.icon}
-                      </span>
-                    )}
-                    {reviewInfo && (
-                      <span className={`shrink-0 text-xs font-bold leading-none ${reviewInfo.colorClass}`} title={reviewInfo.tooltip}>
-                        {reviewInfo.icon}
-                      </span>
+                    {prStatus && (
+                      <StatusIndicator
+                        mergeableState={prStatus.mergeable_state}
+                        ciStatus={prStatus.ci_status}
+                        reviewDecision={prStatus.review_decision}
+                      />
                     )}
                     {hasDraft && (
                       <span className="shrink-0 text-xs" title="Has draft">✏️</span>
@@ -471,9 +467,27 @@ export default function ConversationsPanel() {
                   {secondaryLabel && (
                     <div className={`text-xs mt-0.5 ml-6 truncate ${textColors.muted}`}>
                       {isTaskConversation && (
-                        <span className="shrink-0 mr-1">#{item.parent_entity_id}</span>
+                        <span className="shrink-0 mr-1">Task #{item.parent_entity_id}</span>
                       )}
-                      {secondaryLabel}
+                      {isTaskConversation && prStatus?.pr_number && (
+                        <span className="shrink-0 mx-1">•</span>
+                      )}
+                      {prStatus?.pr_number && (
+                        <a
+                          href={prStatus.pr_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`flex items-center gap-1 shrink-0 hover:underline ${textColors.accent}`}
+                          onClick={e => e.stopPropagation()}
+                          title="Open PR in GitHub"
+                        >
+                          PR #{prStatus.pr_number}
+                          <ArrowTopRightOnSquareIcon className="w-2.5 h-2.5 flex-shrink-0 opacity-60 hover:opacity-100" />
+                        </a>
+                      )}
+                      {secondaryLabel && (
+                        <span className="shrink-0 ml-1">{secondaryLabel}</span>
+                      )}
                     </div>
                   )}
                 </button>

@@ -1,8 +1,16 @@
 import { statusColors } from '../../styles/designSystem'
 import { getStatusInfo } from './prStatusUtils'
 
-export function StatusIndicator({ mergeableState, ciStatus }: { mergeableState: string | null; ciStatus: string | null }) {
-  const { icon, colorClass, tooltip } = getStatusInfo(mergeableState, ciStatus)
+export function StatusIndicator({
+  mergeableState,
+  ciStatus,
+  reviewDecision,
+}: {
+  mergeableState: string | null
+  ciStatus: string | null
+  reviewDecision?: string | null
+}) {
+  const { icon, colorClass, tooltip } = getStatusInfo(mergeableState, ciStatus, reviewDecision)
   return (
     <span className={`text-sm font-bold flex-shrink-0 leading-none ${colorClass}`} title={tooltip}>
       {icon}

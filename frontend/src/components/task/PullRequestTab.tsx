@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowPathIcon, WrenchScrewdriverIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, WrenchScrewdriverIcon, ChevronDownIcon, ChevronRightIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { TaskStatus } from '../../lib/api'
 import type { GitHubPRStatusResponse, PRFeedbackResponse, PRDetailResponse, PRCheckItem } from '../../lib/api'
 import { textColors, surfaces, borderColors, statusColors, loadingSpinner } from '../../styles/designSystem'
@@ -95,9 +95,11 @@ function StatusOverviewBar({
             href={prStatus.pr_url}
             target="_blank"
             rel="noopener noreferrer"
-            className={`text-sm font-medium ${textColors.accent}`}
+            className={`flex items-center gap-1 text-sm font-medium ${textColors.accent} hover:opacity-80 transition-opacity`}
+            title="Open PR in GitHub"
           >
             #{prStatus.pr_number}
+            <ArrowTopRightOnSquareIcon className="w-3 h-3 flex-shrink-0 opacity-60 hover:opacity-100" />
           </a>
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
             prStatus.merged
@@ -109,6 +111,7 @@ function StatusOverviewBar({
           <StatusIndicator
             mergeableState={prStatus.mergeable_state}
             ciStatus={prStatus.ci_status}
+            reviewDecision={prStatus.review_decision}
           />
           <ReviewBadge decision={prStatus.review_decision} />
         </div>

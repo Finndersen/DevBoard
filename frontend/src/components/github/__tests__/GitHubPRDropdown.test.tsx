@@ -159,12 +159,41 @@ describe('GitHubPRDropdown', () => {
     render(<GitHubPRDropdown {...defaultProps} />)
     openDropdown()
 
-    // First PR: CLEAN + SUCCESS -> "Ready to merge"
+    // First PR: CLEAN + SUCCESS + APPROVED -> "Ready to merge"
     const readyIndicator = screen.getByTitle('Ready to merge')
     expect(readyIndicator).toBeInTheDocument()
     expect(readyIndicator.className).toContain('text-green-500')
 
-    // Second PR: DIRTY -> "Has merge conflicts" (takes priority over CI failure)
+    // Second PR: FAILURE + DIRTY + CHANGES_REQUESTED -> "CI checks failing" (CI failure takes priority)
+    const failingIndicator = screen.getByTitle('CI checks failing')
+    expect(failingIndicator).toBeInTheDocument()
+    expect(failingIndicator.className).toContain('text-red-500')
+  })
+
+  it('shows merge conflicts indicator when mergeable state is dirty', () => {
+    const dirtyData: OpenPRsResponse = {
+      prs: [
+        {
+          pr_number: 4,
+          title: 'PR with merge conflicts',
+          repo_full_name: 'owner/DevBoard',
+          codebase_id: 10,
+          pr_url: 'https://github.com/owner/DevBoard/pull/4',
+          mergeable_state: 'DIRTY',
+          task_id: null,
+          task_title: null,
+          review_decision: 'APPROVED',
+          ci_status: 'SUCCESS',
+          comment_count: 0,
+          updated_at: '2026-03-01T12:00:00Z',
+        },
+      ],
+      errors: [],
+    }
+
+    render(<GitHubPRDropdown data={dirtyData} loading={false} refetch={mockRefetch} />)
+    openDropdown()
+
     const conflictIndicator = screen.getByTitle('Has merge conflicts')
     expect(conflictIndicator).toBeInTheDocument()
     expect(conflictIndicator.className).toContain('text-red-500')

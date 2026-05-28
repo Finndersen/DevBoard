@@ -63,7 +63,7 @@ describe('PullRequestTab', () => {
   describe('Status Overview Bar', () => {
     it('renders PR number as link', () => {
       render(<PullRequestTab {...defaultProps} />)
-      const link = screen.getByRole('link', { name: '#42' })
+      const link = screen.getByRole('link', { name: /#42/ })
       expect(link).toHaveAttribute('href', 'https://github.com/owner/repo/pull/42')
       expect(link).toHaveAttribute('target', '_blank')
     })

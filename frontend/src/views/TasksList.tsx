@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { PlusIcon, ListBulletIcon, FunnelIcon, ChatBubbleLeftIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, ListBulletIcon, FunnelIcon, ChatBubbleLeftIcon, ArrowPathIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { useAllTasks, useProjects, useRefetchOnViewActivation } from '../hooks'
 import { useOpenPRs } from '../hooks/useGitHubPRs'
 import { Button, Card, ErrorMessage } from '../components/ui'
@@ -193,15 +193,21 @@ export default function TasksList() {
                     </div>
                     {pr && (
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        <StatusIndicator mergeableState={pr.mergeable_state} ciStatus={pr.ci_status} />
+                        <StatusIndicator
+                          mergeableState={pr.mergeable_state}
+                          ciStatus={pr.ci_status}
+                          reviewDecision={pr.review_decision}
+                        />
                         <a
                           href={pr.pr_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={e => e.stopPropagation()}
-                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                          className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                          title="Open PR in GitHub"
                         >
                           #{pr.pr_number}
+                          <ArrowTopRightOnSquareIcon className="w-2.5 h-2.5 flex-shrink-0 opacity-60 hover:opacity-100" />
                         </a>
                         <ReviewBadge decision={pr.review_decision} />
                         {pr.comment_count > 0 && (

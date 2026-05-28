@@ -140,7 +140,11 @@ export default function GitHubPRDropdown({ data, loading, refetch }: GitHubPRDro
                     <div className="flex items-start gap-2">
                       {/* Combined status indicator */}
                       <div className="flex-shrink-0 mt-0.5">
-                        <StatusIndicator mergeableState={pr.mergeable_state} ciStatus={pr.ci_status} />
+                        <StatusIndicator
+                          mergeableState={pr.mergeable_state}
+                          ciStatus={pr.ci_status}
+                          reviewDecision={pr.review_decision}
+                        />
                       </div>
 
                       {/* PR info */}
