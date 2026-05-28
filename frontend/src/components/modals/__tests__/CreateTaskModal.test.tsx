@@ -6,6 +6,15 @@ import CreateTaskModal from '../CreateTaskModal'
 import { useUIStore } from '../../../stores/uiStore'
 import type { Task, AgentConfigurationResponse, Codebase } from '../../../lib/api'
 
+// Mock react-router-dom
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom')
+  return {
+    ...actual,
+    useNavigate: vi.fn(),
+  }
+})
+
 const TEST_DRAFT_ID = 'test-draft-id'
 const TEST_PROJECT_ID = '1'
 
@@ -303,5 +312,141 @@ describe('CreateTaskModal — model type selector', () => {
     expect(seedInitialMessageSpy).not.toHaveBeenCalled()
 
     seedInitialMessageSpy.mockRestore()
+  })
+})
+
+describe('CreateTaskModal — non-blocking submission', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const { apiClient } = await import('../../../lib/api')
+    vi.mocked(apiClient.getProjectCodebases).mockResolvedValue(mockCodabases)
+    vi.mocked(apiClient.getCustomFieldDefinitions).mockResolvedValue([])
+    vi.mocked(apiClient.getAgentConfiguration).mockResolvedValue(mockAgentConfig)
+    vi.mocked(apiClient.getProjectTasks).mockResolvedValue([])
+
+    // Open the modal via the store with an initial draft
+    useUIStore.setState({
+      openModalDraft: TEST_DRAFT_ID,
+      modalDrafts: {
+        [TEST_DRAFT_ID]: {
+          type: 'task',
+          formData: {},
+          previewLabel: 'Test Task',
+          createdAt: Date.now()
+        }
+      }
+    })
+  })
+
+  async function selectCodebase(user: ReturnType<typeof userEvent.setup>) {
+    await screen.findByRole('option', { name: 'Test Codebase' })
+    const [codebaseSelect] = screen.getAllByRole('combobox')
+    await user.selectOptions(codebaseSelect, '1')
+  }
+
+  it('closes modal immediately on submit without waiting for API response', async () => {
+    const { apiClient } = await import('../../../lib/api')
+    vi.mocked(apiClient.createTask).mockImplementation(
+      () => new Promise(resolve => setTimeout(() => resolve(mockCreatedTask), 100))
+    )
+
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <CreateTaskModal draftId={TEST_DRAFT_ID} onClose={onClose} projectId={TEST_PROJECT_ID} />
+    )
+
+    await user.type(screen.getByPlaceholderText(/Describe what you want/i), 'Add feature')
+    await selectCodebase(user)
+
+    const submitButton = screen.getByRole('button', { name: /Create Task/i })
+    await waitFor(() => expect(submitButton).not.toBeDisabled())
+    await user.click(submitButton)
+
+    // Modal should close immediately (onClose called synchronously)
+    expect(onClose).toHaveBeenCalled()
+
+    // Modal should not be visible
+    expect(screen.queryByText(/Create New Task/i)).not.toBeInTheDocument()
+  })
+
+  it('marks task creation as in-progress in store and removes on success', async () => {
+    const { apiClient } = await import('../../../lib/api')
+    vi.mocked(apiClient.createTask).mockImplementation(
+      () => new Promise(resolve => setTimeout(() => resolve(mockCreatedTask), 100))
+    )
+
+    const user = userEvent.setup()
+
+    render(
+      <CreateTaskModal draftId={TEST_DRAFT_ID} onClose={vi.fn()} projectId={TEST_PROJECT_ID} />
+    )
+
+    await user.type(screen.getByPlaceholderText(/Describe what you want/i), 'Add feature')
+    await selectCodebase(user)
+
+    const submitButton = screen.getByRole('button', { name: /Create Task/i })
+    await waitFor(() => expect(submitButton).not.toBeDisabled())
+
+    // Before submit, draft should exist and not be creating
+    let state = useUIStore.getState()
+    expect(state.modalDrafts[TEST_DRAFT_ID]).toBeDefined()
+
+    await user.click(submitButton)
+
+    // Right after submit, draft should be marked as creating
+    state = useUIStore.getState()
+    expect(state.modalDrafts[TEST_DRAFT_ID]?.isCreating).toBe(true)
+
+    // Wait for async API call to complete - draft should be removed
+    await waitFor(() => {
+      state = useUIStore.getState()
+      expect(state.modalDrafts[TEST_DRAFT_ID]).toBeUndefined()
+    })
+
+    // Verify API was called
+    expect(apiClient.createTask).toHaveBeenCalled()
+  })
+
+  it('handles API failure by setting error state in draft', async () => {
+    const { apiClient } = await import('../../../lib/api')
+    const testError = new Error('Network error')
+    vi.mocked(apiClient.createTask).mockRejectedValue(testError)
+
+    // Reset store for this test
+    const testDraftId = 'test-draft-error'
+    useUIStore.setState({
+      openModalDraft: testDraftId,
+      modalDrafts: {
+        [testDraftId]: {
+          type: 'task',
+          formData: {},
+          previewLabel: 'Error Test',
+          createdAt: Date.now()
+        }
+      }
+    })
+
+    const user = userEvent.setup()
+
+    render(
+      <CreateTaskModal draftId={testDraftId} onClose={vi.fn()} projectId={TEST_PROJECT_ID} />
+    )
+
+    await user.type(screen.getByPlaceholderText(/Describe what you want/i), 'Add feature')
+    await selectCodebase(user)
+
+    const submitButton = screen.getByRole('button', { name: /Create Task/i })
+    await waitFor(() => expect(submitButton).not.toBeDisabled())
+    await user.click(submitButton)
+
+    // Wait for async error handling
+    await waitFor(() => {
+      const state = useUIStore.getState()
+      const draft = state.modalDrafts[testDraftId]
+      expect(draft?.creationError).toBe('Network error')
+      expect(draft?.isCreating).toBe(false)
+    })
   })
 })

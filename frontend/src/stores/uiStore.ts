@@ -25,6 +25,8 @@ export interface ModalDraft {
   formData: Record<string, unknown>
   previewLabel: string
   createdAt: number
+  isCreating?: boolean
+  creationError?: string | null
 }
 
 const MAX_CACHED_VIEWS = 12
@@ -66,6 +68,10 @@ interface UIActions {
   removeModalDraft: (draftId: string) => void
   setOpenModalDraft: (draftId: string | null) => void
   createAndOpenDraft: (type: 'task' | 'project_conversation', initialFormData?: Record<string, unknown>) => string
+  startTaskCreation: (draftId: string) => void
+  completeTaskCreation: (draftId: string) => void
+  failTaskCreation: (draftId: string, error: string) => void
+  openExistingDraft: (draftId: string) => void
 
   // Create task modal (deprecated, kept for compatibility with draft system)
   openCreateTaskModal: () => void
@@ -253,7 +259,13 @@ export const useUIStore = create<UIStore>()(
       // Modal drafts
       saveModalDraft: (draftId, draft) => {
         set((state) => {
-          state.modalDrafts[draftId] = draft
+          // Replace form data but preserve creation-state fields managed by dedicated actions
+          const existing = state.modalDrafts[draftId]
+          state.modalDrafts[draftId] = {
+            ...draft,
+            isCreating: existing?.isCreating,
+            creationError: existing?.creationError,
+          }
         })
       },
 
@@ -291,6 +303,46 @@ export const useUIStore = create<UIStore>()(
         })
 
         return draftId
+      },
+
+      startTaskCreation: (draftId) => {
+        set((state) => {
+          const draft = state.modalDrafts[draftId]
+          if (draft) {
+            draft.isCreating = true
+            draft.creationError = null
+          }
+        })
+      },
+
+      completeTaskCreation: (draftId) => {
+        set((state) => {
+          delete state.modalDrafts[draftId]
+          if (state.openModalDraft === draftId) {
+            state.openModalDraft = null
+          }
+        })
+      },
+
+      failTaskCreation: (draftId, error) => {
+        set((state) => {
+          const draft = state.modalDrafts[draftId]
+          if (draft) {
+            draft.isCreating = false
+            draft.creationError = error
+          }
+        })
+      },
+
+      openExistingDraft: (draftId) => {
+        set((state) => {
+          state.openModalDraft = draftId
+          const draft = state.modalDrafts[draftId]
+          if (draft) {
+            draft.isCreating = false
+            draft.creationError = null
+          }
+        })
       },
 
       openCreateTaskModal: () => {
@@ -414,7 +466,14 @@ export const useUIStore = create<UIStore>()(
       partialize: (state) => ({
         navigationCompactMode: state.navigationCompactMode,
         draftMessages: state.draftMessages,
-        modalDrafts: state.modalDrafts,
+        // Strip in-flight creation state so a page reload doesn't leave
+        // unresolvable spinning ghost entries
+        modalDrafts: Object.fromEntries(
+          Object.entries(state.modalDrafts).map(([id, draft]) => [
+            id,
+            { ...draft, isCreating: undefined, creationError: undefined },
+          ])
+        ),
         conversationsPanelCollapsed: state.conversationsPanelCollapsed,
         expandedPanel: state.expandedPanel,
       }),

@@ -8,6 +8,7 @@ import {
   ExclamationCircleIcon,
   PlusIcon,
   ArrowTopRightOnSquareIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { useConversations } from '../../hooks/useConversations'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
@@ -90,7 +91,7 @@ export default function ConversationsPanel() {
   const conversationsPanelCollapsed = useUIStore(s => s.conversationsPanelCollapsed)
   const clearUnreadConversations = useUIStore(s => s.clearUnreadConversations)
   const removeUnreadConversation = useUIStore(s => s.removeUnreadConversation)
-  const { modalDrafts, setOpenModalDraft, createAndOpenDraft } = useUIStore()
+  const { modalDrafts, setOpenModalDraft, createAndOpenDraft, removeModalDraft } = useUIStore()
 
   // Dropdown state for the "+" button
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -129,6 +130,11 @@ export default function ConversationsPanel() {
       return bStreaming - aStreaming
     })
   }, [conversations, streamingConversationIds])
+
+  const pendingCreations = useMemo(
+    () => Object.entries(modalDrafts).filter(([, draft]) => draft.isCreating === true),
+    [modalDrafts]
+  )
 
   // PR status cache: taskId -> status (null = error/not found)
   const [prStatusMap, setPrStatusMap] = useState<Map<number, GitHubPRStatusResponse | null>>(new Map())
@@ -374,7 +380,7 @@ export default function ConversationsPanel() {
 
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto">
-        {loading && !conversations && (
+        {loading && !conversations && pendingCreations.length === 0 && (
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
           </div>
@@ -387,16 +393,39 @@ export default function ConversationsPanel() {
           </div>
         )}
 
-        {conversations && conversations.length === 0 && (
-          <div className="text-center py-8 px-4">
-            <ChatBubbleLeftRightIcon className="w-10 h-10 mx-auto text-gray-400 dark:text-gray-600 mb-3" />
-            <p className={`text-sm ${textColors.secondary}`}>No active conversations</p>
-          </div>
-        )}
-
-        {conversations && conversations.length > 0 && (
+        {(pendingCreations.length > 0 || (conversations && conversations.length > 0)) && (
           <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
-            {displayConversations!.map(item => {
+            {pendingCreations.map(([draftId, draft]) => (
+              <div
+                key={draftId}
+                className="px-3 py-2.5 border-l-2 border-l-blue-500/50 bg-blue-50/30 dark:bg-blue-900/10"
+                data-testid="ghost-entry"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-4 h-4 shrink-0 animate-spin rounded-full border-b-2 border-blue-500" />
+                  <span className={`text-sm flex-1 truncate ${textColors.primary}`}>
+                    Initialising task…
+                  </span>
+                  <button
+                    onClick={() => removeModalDraft(draftId)}
+                    className={`shrink-0 ${textColors.muted} hover:text-gray-700 dark:hover:text-gray-300`}
+                    aria-label="Dismiss initialising task"
+                  >
+                    <XMarkIcon className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="mt-1.5 ml-6 space-y-1.5">
+                  <div className="h-2.5 bg-gray-200 dark:bg-gray-600 rounded animate-pulse w-3/4" />
+                  <div className="h-2.5 bg-gray-200 dark:bg-gray-600 rounded animate-pulse w-1/2" />
+                </div>
+                {draft.previewLabel && (
+                  <div className={`text-xs mt-0.5 ml-6 truncate ${textColors.muted}`}>
+                    {draft.previewLabel}
+                  </div>
+                )}
+              </div>
+            ))}
+            {displayConversations?.map(item => {
               const EntityIcon = getEntityIcon(item.parent_entity_type)
               const isActive = streamingConversationIds.has(item.id)
               const needsAttention = needsAttentionIds.has(item.id)
@@ -493,6 +522,13 @@ export default function ConversationsPanel() {
                 </button>
               )
             })}
+          </div>
+        )}
+
+        {conversations && conversations.length === 0 && pendingCreations.length === 0 && (
+          <div className="text-center py-8 px-4">
+            <ChatBubbleLeftRightIcon className="w-10 h-10 mx-auto text-gray-400 dark:text-gray-600 mb-3" />
+            <p className={`text-sm ${textColors.secondary}`}>No active conversations</p>
           </div>
         )}
       </div>

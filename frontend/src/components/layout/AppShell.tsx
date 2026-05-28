@@ -8,6 +8,7 @@ import GitHubPRDropdown from '../github/GitHubPRDropdown'
 import ConversationsPanel from '../conversations/ConversationsPanel'
 import CreateTaskModal from '../modals/CreateTaskModal'
 import CreateProjectConversationModal from '../modals/CreateProjectConversationModal'
+import TaskCreationErrorToast from '../modals/TaskCreationErrorToast'
 import { useUIStore } from '../../stores/uiStore'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { useStreamBootstrap } from '../../hooks/useStreamBootstrap'
@@ -135,6 +136,7 @@ export default function AppShell() {
       {createProjectConversationModalOpen && openModalDraft && (
         <CreateProjectConversationModal isOpen={true} onClose={closeModal} draftId={openModalDraft} />
       )}
+      <TaskCreationErrorToast />
     </div>
   )
 }

@@ -20,7 +20,7 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
   const navigate = useNavigate()
   const { data: projects } = useProjects()
   const { setTask, fetchProjectTasks } = useDataStore()
-  const { modalDrafts, openModalDraft, saveModalDraft, removeModalDraft, setOpenModalDraft } = useUIStore()
+  const { modalDrafts, openModalDraft, saveModalDraft, removeModalDraft, setOpenModalDraft, startTaskCreation, completeTaskCreation, failTaskCreation } = useUIStore()
   const { seedInitialMessage } = useConversationStreamStore()
 
   const isOpen = openModalDraft === draftId
@@ -44,8 +44,6 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
   }, [currentDraft?.formData, projectId])
 
   const [formData, setFormData] = useState(initializeFormData)
-  const [isCreating, setIsCreating] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
 
   // Fetch codebases for selected project
   const { data: codebases, loading: codebasesLoading, refetch: refetchCodebases } = useProjectCodebases(formData.selectedProjectId || '0')
@@ -132,14 +130,6 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
         .finally(() => setAgentConfigLoading(false))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen])
-
-  // Reset error state when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      setIsCreating(false)
-      setCreateError(null)
-    }
   }, [isOpen])
 
   const handleProjectChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -231,73 +221,86 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
     onClose()
   }, [draftId, removeModalDraft, onClose])
 
-  const handleCreateTask = useCallback(async (e: React.FormEvent) => {
+  const handleCreateTask = useCallback((e: React.FormEvent) => {
     e.preventDefault()
     if (!effectiveProjectId) return
-    setIsCreating(true)
-    setCreateError(null)
-    try {
-      const customFields: Record<string, unknown> = {}
-      Object.entries(formData.customFieldValues).forEach(([name, value]) => {
-        if (value !== '' && value !== null && value !== undefined) {
-          customFields[name] = value
+
+    // Build taskData exactly as before
+    const customFields: Record<string, unknown> = {}
+    Object.entries(formData.customFieldValues).forEach(([name, value]) => {
+      if (value !== '' && value !== null && value !== undefined) {
+        customFields[name] = value
+      }
+    })
+
+    const taskData: Record<string, unknown> = {
+      codebase_id: formData.codebase_id,
+      specification_content: null,
+      custom_fields: Object.keys(customFields).length > 0 ? customFields : null
+    }
+
+    // Only include title if provided
+    if (formData.title?.trim()) {
+      taskData.title = formData.title.trim()
+    }
+
+    // Include initial_message if provided
+    if (formData.initial_message?.trim()) {
+      taskData.initial_message = formData.initial_message.trim()
+    }
+
+    if (formData.working_branch.trim()) {
+      taskData.branch_name = formData.working_branch.trim()
+    }
+
+    if (formData.base_branch.trim()) {
+      taskData.base_branch = formData.base_branch.trim()
+    }
+
+    // Include model_type based on auto-select setting
+    if (formData.autoSelectModel && formData.initial_message?.trim()) {
+      taskData.model_type = 'auto'
+    } else if (formData.model_type) {
+      taskData.model_type = formData.model_type
+    }
+
+    // Mark creation as started
+    startTaskCreation(draftId)
+
+    // Close modal immediately - user is unblocked
+    setOpenModalDraft(null)
+    onClose()
+
+    // API call continues in background (not awaited here)
+    apiClient.createTask(effectiveProjectId, taskData)
+      .then(createdTask => {
+        // Check before acting — user may have dismissed the ghost entry while waiting
+        const draftStillExists = !!useUIStore.getState().modalDrafts[draftId]
+
+        // Update data stores
+        setTask(createdTask)
+        fetchProjectTasks(effectiveProjectId).catch(err => console.error('Failed to fetch tasks:', err))
+
+        // Seed initial user message into stream store if provided
+        if (formData.initial_message?.trim() && createdTask.conversation_id) {
+          seedInitialMessage(createdTask.conversation_id, formData.initial_message.trim())
+        }
+
+        // Remove the draft on success
+        completeTaskCreation(draftId)
+
+        // Only navigate if the user didn't dismiss the ghost entry
+        if (draftStillExists) {
+          navigate(`/tasks/${createdTask.id}`)
         }
       })
-
-      const taskData: Record<string, unknown> = {
-        codebase_id: formData.codebase_id,
-        specification_content: null,
-        custom_fields: Object.keys(customFields).length > 0 ? customFields : null
-      }
-
-      // Only include title if provided
-      if (formData.title?.trim()) {
-        taskData.title = formData.title.trim()
-      }
-
-      // Include initial_message if provided
-      if (formData.initial_message?.trim()) {
-        taskData.initial_message = formData.initial_message.trim()
-      }
-
-      if (formData.working_branch.trim()) {
-        taskData.branch_name = formData.working_branch.trim()
-      }
-
-      if (formData.base_branch.trim()) {
-        taskData.base_branch = formData.base_branch.trim()
-      }
-
-      // Include model_type based on auto-select setting
-      if (formData.autoSelectModel && formData.initial_message?.trim()) {
-        taskData.model_type = 'auto'
-      } else if (formData.model_type) {
-        taskData.model_type = formData.model_type
-      }
-
-      const createdTask = await apiClient.createTask(effectiveProjectId, taskData)
-
-      setTask(createdTask)
-      await fetchProjectTasks(effectiveProjectId)
-
-      // Seed initial user message into stream store if provided
-      if (formData.initial_message?.trim() && createdTask.conversation_id) {
-        seedInitialMessage(createdTask.conversation_id, formData.initial_message.trim())
-      }
-
-      // Remove the draft and close modal on success
-      removeModalDraft(draftId)
-      onClose()
-
-      // Navigate to task details
-      navigate(`/tasks/${createdTask.id}`)
-    } catch (error) {
-      console.error('Failed to create task:', error)
-      setCreateError(error instanceof Error ? error.message : 'Failed to create task')
-    } finally {
-      setIsCreating(false)
-    }
-  }, [formData, effectiveProjectId, navigate, onClose, setTask, fetchProjectTasks, draftId, removeModalDraft, seedInitialMessage])
+      .catch(error => {
+        console.error('Failed to create task:', error)
+        const errorMessage = error instanceof Error ? error.message : 'Failed to create task'
+        // Set error state in draft; error toast will be handled by ConversationsPanel
+        failTaskCreation(draftId, errorMessage)
+      })
+  }, [formData, effectiveProjectId, navigate, onClose, draftId, setOpenModalDraft, startTaskCreation, completeTaskCreation, failTaskCreation, setTask, fetchProjectTasks, seedInitialMessage])
 
   return (
     <Modal
@@ -319,7 +322,7 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
           </button>
         </div>
       }
-      maxWidth="xl"
+      maxWidth="3xl"
     >
       <form onSubmit={handleCreateTask} className="space-y-4">
         <div>
@@ -513,22 +516,18 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
           loading={customFieldsLoading}
         />
 
-        {createError && <Alert variant="error">{createError}</Alert>}
-
         <div className="flex justify-end space-x-3 pt-4">
           <Button
             type="button"
             variant="secondary"
             onClick={handleClose}
-            disabled={isCreating}
           >
             Cancel
           </Button>
           <Button
             type="submit"
             variant="primary"
-            loading={isCreating}
-            disabled={(!formData.title.trim() && !formData.initial_message.trim()) || !formData.codebase_id || !formData.selectedProjectId || isCreating || !areMandatoryFieldsFilled()}
+            disabled={(!formData.title.trim() && !formData.initial_message.trim()) || !formData.codebase_id || !formData.selectedProjectId || !areMandatoryFieldsFilled()}
           >
             Create Task
           </Button>
