@@ -210,6 +210,126 @@ class TestBackgroundAgentRepositoryUpdateState:
         assert result is None
 
 
+class TestBackgroundAgentRepositoryHasActiveRun:
+    def test_has_active_run_true(
+        self,
+        agent_repo: BackgroundAgentRepository,
+        run_repo: BackgroundAgentRunRepository,
+        agent: BackgroundAgent,
+        conversation,
+    ) -> None:
+        """Returns True when agent has a running run."""
+        make_run(run_repo, agent, conversation, status=BackgroundAgentRunStatus.RUNNING)
+        assert agent_repo.has_active_run(agent.id) is True
+
+    def test_has_active_run_false_completed(
+        self,
+        agent_repo: BackgroundAgentRepository,
+        run_repo: BackgroundAgentRunRepository,
+        agent: BackgroundAgent,
+        conversation,
+    ) -> None:
+        """Returns False when agent has only completed runs."""
+        make_run(run_repo, agent, conversation, status=BackgroundAgentRunStatus.COMPLETED)
+        assert agent_repo.has_active_run(agent.id) is False
+
+    def test_has_active_run_false_failed(
+        self,
+        agent_repo: BackgroundAgentRepository,
+        run_repo: BackgroundAgentRunRepository,
+        agent: BackgroundAgent,
+        conversation,
+    ) -> None:
+        """Returns False when agent has only failed runs."""
+        make_run(run_repo, agent, conversation, status=BackgroundAgentRunStatus.FAILED)
+        assert agent_repo.has_active_run(agent.id) is False
+
+    def test_has_active_run_false_no_runs(self, agent_repo: BackgroundAgentRepository, agent: BackgroundAgent) -> None:
+        """Returns False when agent has no runs."""
+        assert agent_repo.has_active_run(agent.id) is False
+
+    def test_has_active_run_multiple_runs(
+        self,
+        agent_repo: BackgroundAgentRepository,
+        run_repo: BackgroundAgentRunRepository,
+        agent: BackgroundAgent,
+        conversation,
+    ) -> None:
+        """Returns True when agent has one running run among multiple runs."""
+        make_run(run_repo, agent, conversation, status=BackgroundAgentRunStatus.COMPLETED)
+        make_run(run_repo, agent, conversation, status=BackgroundAgentRunStatus.RUNNING)
+        make_run(run_repo, agent, conversation, status=BackgroundAgentRunStatus.FAILED)
+        assert agent_repo.has_active_run(agent.id) is True
+
+
+class TestBackgroundAgentRepositoryGetRunningAgentIds:
+    def test_no_runs_returns_empty_set(self, agent_repo: BackgroundAgentRepository) -> None:
+        assert agent_repo.get_running_agent_ids() == set()
+
+    def test_no_running_runs(
+        self,
+        agent_repo: BackgroundAgentRepository,
+        run_repo: BackgroundAgentRunRepository,
+        agent: BackgroundAgent,
+        conversation,
+    ) -> None:
+        make_run(run_repo, agent, conversation, status=BackgroundAgentRunStatus.COMPLETED)
+        assert agent_repo.get_running_agent_ids() == set()
+
+    def test_running_agent_included(
+        self,
+        agent_repo: BackgroundAgentRepository,
+        run_repo: BackgroundAgentRunRepository,
+        agent: BackgroundAgent,
+        conversation,
+    ) -> None:
+        make_run(run_repo, agent, conversation, status=BackgroundAgentRunStatus.RUNNING)
+        assert agent_repo.get_running_agent_ids() == {agent.id}
+
+    def test_mixed_agents(
+        self,
+        agent_repo: BackgroundAgentRepository,
+        run_repo: BackgroundAgentRunRepository,
+        db_session: Session,
+        conversation,
+    ) -> None:
+        """Only agent IDs with a running run are returned."""
+        agent_running = agent_repo.create(name="Running", prompt="p", engine=AgentEngine.INTERNAL)
+        agent_idle = agent_repo.create(name="Idle", prompt="p", engine=AgentEngine.INTERNAL)
+        conv_repo = ConversationRepository(db_session)
+        conv2 = conv_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=conversation.parent_entity_id,
+            agent_role=AgentRoleType.TASK_PLANNING,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        make_run(run_repo, agent_running, conversation, status=BackgroundAgentRunStatus.RUNNING)
+        make_run(run_repo, agent_idle, conv2, status=BackgroundAgentRunStatus.COMPLETED)
+        assert agent_repo.get_running_agent_ids() == {agent_running.id}
+
+    def test_distinct_deduplicates_multiple_running_rows(
+        self,
+        agent_repo: BackgroundAgentRepository,
+        run_repo: BackgroundAgentRunRepository,
+        db_session: Session,
+        conversation,
+    ) -> None:
+        """Agent with multiple running rows appears only once in result set."""
+        agent = agent_repo.create(name="Multi-run", prompt="p", engine=AgentEngine.INTERNAL)
+        conv_repo = ConversationRepository(db_session)
+        conv2 = conv_repo.create(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=conversation.parent_entity_id,
+            agent_role=AgentRoleType.TASK_PLANNING,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        make_run(run_repo, agent, conversation, status=BackgroundAgentRunStatus.RUNNING)
+        make_run(run_repo, agent, conv2, status=BackgroundAgentRunStatus.RUNNING)
+        assert agent_repo.get_running_agent_ids() == {agent.id}
+
+
 class TestBackgroundAgentRepositoryTriggerCrud:
     def test_add_event_trigger(
         self, agent_repo: BackgroundAgentRepository, agent: BackgroundAgent, db_session: Session

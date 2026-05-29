@@ -953,6 +953,7 @@ export interface BackgroundAgent {
   project_id: number | null
   created_at: string
   updated_at: string
+  has_active_run: boolean
   mcp_tool_ids: number[]
   event_triggers: BackgroundAgentEventTrigger[]
   schedule_triggers: BackgroundAgentScheduleTrigger[]
@@ -989,7 +990,7 @@ export interface BackgroundAgentRun {
   agent_id: number
   conversation_id: number
   triggered_by: string
-  trigger_event_id: string | null
+  trigger_event_id: number | null
   started_at: string
   completed_at: string | null
   status: BackgroundAgentRunStatus
@@ -1006,10 +1007,6 @@ export interface BackgroundAgentRunStats {
   failed: number
   avg_input_tokens: number | null
   avg_output_tokens: number | null
-}
-
-export interface ManualTriggerResponse {
-  conversation_id: number
 }
 
 // Active Executions
@@ -1739,9 +1736,10 @@ export class ApiClient {
     })
   }
 
-  async triggerBackgroundAgent(id: number | string): Promise<ManualTriggerResponse> {
-    return this.request<ManualTriggerResponse>(`/api/background-agents/${id}/trigger`, {
+  async triggerBackgroundAgent(id: number | string, body?: { input_message?: string | null }): Promise<BackgroundAgentRun> {
+    return this.request<BackgroundAgentRun>(`/api/background-agents/${id}/trigger`, {
       method: 'POST',
+      body: JSON.stringify(body || {}),
     })
   }
 

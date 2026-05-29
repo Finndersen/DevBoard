@@ -23,6 +23,7 @@ const mockAgents: BackgroundAgent[] = [
     mcp_tool_ids: [],
     event_triggers: [],
     schedule_triggers: [{ id: 1, agent_id: 1, cron_expression: '0 9 * * *', last_triggered_at: null, created_at: '2026-01-01T00:00:00Z' }],
+    has_active_run: false,
   },
   {
     id: 2,
@@ -39,6 +40,7 @@ const mockAgents: BackgroundAgent[] = [
     mcp_tool_ids: [],
     event_triggers: [{ id: 1, agent_id: 2, event_type_pattern: 'github.pr.*', created_at: '2026-01-02T00:00:00Z' }],
     schedule_triggers: [],
+    has_active_run: false,
   },
   {
     id: 3,
@@ -55,6 +57,7 @@ const mockAgents: BackgroundAgent[] = [
     mcp_tool_ids: [],
     event_triggers: [],
     schedule_triggers: [{ id: 2, agent_id: 3, cron_expression: '0 10 * * 1', last_triggered_at: null, created_at: '2026-01-03T00:00:00Z' }],
+    has_active_run: false,
   },
 ]
 
@@ -221,6 +224,41 @@ describe('BackgroundAgentsList', () => {
       // ErrorMessage component renders
       expect(screen.getByRole('alert')).toBeInTheDocument()
     })
+  })
+
+  it('shows "Running now" badge when agent has active run', async () => {
+    const agentWithRun: BackgroundAgent[] = [
+      { ...mockAgents[0], has_active_run: true },
+    ]
+    setupHandlers(agentWithRun)
+    renderList()
+    await waitFor(() => {
+      expect(screen.getByTestId('running-badge-1')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Running now')).toBeInTheDocument()
+    expect(screen.queryByTestId('toggle-1')).not.toBeInTheDocument()
+  })
+
+  it('shows toggle when agent does not have active run', async () => {
+    renderList()
+    await waitFor(() => {
+      expect(screen.getByTestId('toggle-1')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('running-badge-1')).not.toBeInTheDocument()
+  })
+
+  it('shows toggle for one agent and running badge for another', async () => {
+    const mixedAgents: BackgroundAgent[] = [
+      { ...mockAgents[0], has_active_run: false },
+      { ...mockAgents[1], has_active_run: true },
+    ]
+    setupHandlers(mixedAgents)
+    renderList()
+    await waitFor(() => {
+      expect(screen.getByTestId('toggle-1')).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('running-badge-2')).toBeInTheDocument()
+    expect(screen.queryByTestId('toggle-2')).not.toBeInTheDocument()
   })
 })
 

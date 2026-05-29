@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { surfaces, borderColors, textColors } from '../../styles/designSystem'
+import { surfaces, borderColors, textColors, statusColors } from '../../styles/designSystem'
 import {
   HomeIcon,
   Cog6ToothIcon,
@@ -15,6 +15,7 @@ import {
   CpuChipIcon,
 } from '@heroicons/react/24/outline'
 import { useUIStore } from '../../stores/uiStore'
+import { useActiveAgentRuns } from '../../hooks/useActiveAgentRuns'
 
 interface NavigationSection {
   icon: typeof HomeIcon
@@ -41,6 +42,7 @@ export default function NavigationMenu() {
     toggleNavigationCompactMode,
     createAndOpenDraft,
   } = useUIStore()
+  const { hasAnyRunning } = useActiveAgentRuns()
 
   const isCompact = navigationCompactMode
   const panelWidth = isCompact ? 'w-16' : 'w-40'
@@ -68,18 +70,24 @@ export default function NavigationMenu() {
         {navigationSections.map((section) => {
           const isActive = location.pathname === section.route ||
             (section.route !== '/' && location.pathname.startsWith(section.route))
+          const isAgentsSection = section.label === 'Agents'
           return (
             <Link
               key={section.route}
               to={section.route}
-              className={`flex items-center ${isCompact ? 'justify-center' : 'gap-3'} px-2 py-2 rounded-md transition-colors ${
+              className={`flex items-center ${isCompact ? 'justify-center' : 'gap-3'} px-2 py-2 rounded-md transition-colors relative ${
                 isActive
                   ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
                   : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
               }`}
               title={isCompact ? section.label : undefined}
             >
-              <section.icon className="w-5 h-5 shrink-0" />
+              <div className="relative">
+                <section.icon className="w-5 h-5 shrink-0" />
+                {isAgentsSection && hasAnyRunning && (
+                  <div className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full animate-pulse ${statusColors.success.bg}`} />
+                )}
+              </div>
               {!isCompact && (
                 <span className="font-medium text-sm flex-1">{section.label}</span>
               )}

@@ -91,6 +91,7 @@ class BackgroundAgentResponse(BaseModel):
     mcp_tool_ids: list[int]
     event_triggers: list[BackgroundAgentEventTriggerResponse]
     schedule_triggers: list[BackgroundAgentScheduleTriggerResponse]
+    has_active_run: bool
 
     model_config = {"from_attributes": True}
 

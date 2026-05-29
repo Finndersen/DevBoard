@@ -419,6 +419,8 @@ class ConversationRepository(BaseRepository[Conversation]):
                     & (TaskAlias.status == TaskStatus.COMPLETE)
                 )
             )
+            # Exclude BACKGROUND_AGENT conversations (managed by agents view, not global conversations)
+            .where(Conversation.parent_entity_type != ParentEntityType.BACKGROUND_AGENT)
             .order_by(Conversation.last_activity_at.desc().nullslast())
         )
 

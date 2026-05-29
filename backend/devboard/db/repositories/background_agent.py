@@ -150,6 +150,31 @@ class BackgroundAgentRepository(BaseRepository[BackgroundAgent]):
         )
         return list(self.db.execute(stmt).unique().scalars().all())
 
+    def get_running_agent_ids(self) -> set[int]:
+        """Return IDs of all agents that currently have a running execution."""
+        stmt = (
+            select(BackgroundAgentRun.agent_id)
+            .where(BackgroundAgentRun.status == BackgroundAgentRunStatus.RUNNING)
+            .distinct()
+        )
+        return set(self.db.execute(stmt).scalars().all())
+
+    def has_active_run(self, agent_id: int) -> bool:
+        """Check if an agent currently has a running execution.
+
+        Args:
+            agent_id: ID of the agent to check
+
+        Returns:
+            True if the agent has any run with status='running', False otherwise
+        """
+        stmt = select(func.count(BackgroundAgentRun.id)).where(
+            BackgroundAgentRun.agent_id == agent_id,
+            BackgroundAgentRun.status == BackgroundAgentRunStatus.RUNNING,
+        )
+        count = self.db.execute(stmt).scalar_one()
+        return count > 0
+
     def update_state(self, agent_id: int, state_patch: dict[str, Any]) -> BackgroundAgent | None:
         """Partially merge state_patch into the agent's current state.
 

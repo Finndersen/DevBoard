@@ -216,4 +216,111 @@ describe('BackgroundAgentDetail component', () => {
       expect(screen.queryByText('Daily Standup Summariser')).not.toBeInTheDocument()
     })
   })
+
+  it('opens trigger modal when Trigger Run button is clicked', async () => {
+    setupHandlers()
+    render(<BackgroundAgentDetail id="1" />)
+    await waitFor(() => {
+      expect(screen.getByText('Daily Standup Summariser')).toBeInTheDocument()
+    })
+    const triggerButton = screen.getByRole('button', { name: /Trigger Run/ })
+    fireEvent.click(triggerButton)
+    const textarea = await screen.findByPlaceholderText(/Add a message to this run/)
+    expect(textarea).toBeInTheDocument()
+  })
+
+  it('closes modal when Cancel button is clicked', async () => {
+    setupHandlers()
+    render(<BackgroundAgentDetail id="1" />)
+    await waitFor(() => {
+      expect(screen.getByText('Daily Standup Summariser')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Trigger Run/ }))
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/Add a message to this run/)).toBeInTheDocument()
+    })
+    const cancelButton = screen.getByRole('button', { name: 'Cancel' })
+    fireEvent.click(cancelButton)
+    expect(screen.queryByPlaceholderText(/Add a message to this run/)).not.toBeInTheDocument()
+  })
+
+  it('submits trigger with input message', async () => {
+    const newRun: BackgroundAgentRun = { ...mockRun, id: 100 }
+    let triggerRequestBody: unknown
+    server.use(
+      http.get('*/api/background-agents/1', () => HttpResponse.json(mockAgent)),
+      http.get('*/api/background-agents/1/runs', () => HttpResponse.json([mockRun])),
+      http.get('*/api/background-agents/1/runs/stats', () => HttpResponse.json(mockStats)),
+      http.post('*/api/background-agents/1/trigger', async ({ request }) => {
+        triggerRequestBody = await request.json()
+        return HttpResponse.json(newRun)
+      }),
+    )
+    render(<BackgroundAgentDetail id="1" />)
+    await waitFor(() => {
+      expect(screen.getByText('Daily Standup Summariser')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Trigger Run/ }))
+    const textarea = await screen.findByPlaceholderText(/Add a message to this run/)
+    fireEvent.change(textarea, { target: { value: 'Test message' } })
+    const triggerButton = screen.getByRole('button', { name: 'Trigger' })
+    fireEvent.click(triggerButton)
+    await waitFor(() => {
+      expect(triggerRequestBody).toEqual({ input_message: 'Test message' })
+    })
+  })
+
+  it('submits trigger without input message', async () => {
+    const newRun: BackgroundAgentRun = { ...mockRun, id: 101 }
+    let triggerRequestBody: unknown
+    server.use(
+      http.get('*/api/background-agents/1', () => HttpResponse.json(mockAgent)),
+      http.get('*/api/background-agents/1/runs', () => HttpResponse.json([mockRun])),
+      http.get('*/api/background-agents/1/runs/stats', () => HttpResponse.json(mockStats)),
+      http.post('*/api/background-agents/1/trigger', async ({ request }) => {
+        triggerRequestBody = await request.json()
+        return HttpResponse.json(newRun)
+      }),
+    )
+    render(<BackgroundAgentDetail id="1" />)
+    await waitFor(() => {
+      expect(screen.getByText('Daily Standup Summariser')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Trigger Run/ }))
+    await screen.findByPlaceholderText(/Add a message to this run/)
+    const triggerButton = screen.getByRole('button', { name: 'Trigger' })
+    fireEvent.click(triggerButton)
+    // Wait for modal to close (confirms the trigger request completed)
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText(/Add a message to this run/)).not.toBeInTheDocument()
+    })
+    expect(triggerRequestBody).toEqual({})
+  })
+
+  it('keeps modal open when trigger fails, allowing retry', async () => {
+    server.use(
+      http.get('*/api/background-agents/1', () => HttpResponse.json(mockAgent)),
+      http.get('*/api/background-agents/1/runs', () => HttpResponse.json([mockRun])),
+      http.get('*/api/background-agents/1/runs/stats', () => HttpResponse.json(mockStats)),
+      http.post('*/api/background-agents/1/trigger', () =>
+        HttpResponse.json({ detail: 'Agent is disabled' }, { status: 400 })
+      ),
+    )
+    render(<BackgroundAgentDetail id="1" />)
+    await waitFor(() => {
+      expect(screen.getByText('Daily Standup Summariser')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Trigger Run/ }))
+    const textarea = await screen.findByPlaceholderText(/Add a message to this run/)
+    fireEvent.change(textarea, { target: { value: 'Test' } })
+    const triggerButton = screen.getAllByRole('button', { name: 'Trigger' })[0]
+    fireEvent.click(triggerButton)
+    // After error, modal should remain open with textarea intact
+    await waitFor(
+      () => {
+        expect(screen.getByDisplayValue('Test')).toBeInTheDocument()
+      },
+      { timeout: 2000 }
+    )
+  })
 })

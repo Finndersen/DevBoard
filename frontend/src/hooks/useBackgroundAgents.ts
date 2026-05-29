@@ -7,7 +7,6 @@ import type {
   BackgroundAgentRunStatus,
   BackgroundAgentUpdate,
   ConversationResponse,
-  ManualTriggerResponse,
 } from '../lib/api'
 import { useApi, useMutation } from './useApi'
 
@@ -72,7 +71,7 @@ export function useDeleteBackgroundAgent() {
 }
 
 export function useTriggerBackgroundAgent() {
-  return useMutation<ManualTriggerResponse, [number | string]>(
-    (id) => apiClient.triggerBackgroundAgent(id),
+  return useMutation<BackgroundAgentRun, [number | string, { input_message?: string | null } | undefined]>(
+    (id, body) => apiClient.triggerBackgroundAgent(id, body),
   )
 }

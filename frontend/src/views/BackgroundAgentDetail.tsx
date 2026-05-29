@@ -7,7 +7,7 @@ import {
   useTriggerBackgroundAgent,
 } from '../hooks/useBackgroundAgents'
 import { useUIStore } from '../stores/uiStore'
-import { ErrorMessage } from '../components/ui'
+import { ErrorMessage, Modal, Textarea, Alert } from '../components/ui'
 import { loadingSpinner, textColors, borderColors, surfaces } from '../styles/designSystem'
 import type { BackgroundAgentRun, BackgroundAgentRunStatus, MCPToolSummary } from '../lib/api'
 import { useApi } from '../hooks'
@@ -104,6 +104,9 @@ export default function BackgroundAgentDetail({ id }: Props) {
   const { data: availableTools } = useApi<MCPToolSummary[]>(() => apiClient.getAvailableMCPTools())
 
   const [activeTab, setActiveTab] = useState<Tab>('history')
+  const [showTriggerModal, setShowTriggerModal] = useState(false)
+  const [inputMessage, setInputMessage] = useState('')
+  const [triggerError, setTriggerError] = useState<string | null>(null)
 
   const handleBack = useCallback(() => {
     navigateTo({ type: 'background-agents-list', entityId: '', title: 'Agents' })
@@ -114,10 +117,29 @@ export default function BackgroundAgentDetail({ id }: Props) {
     navigateTo({ type: 'background-agent-edit', entityId: String(agent.id), title: `Edit ${agent.name}` })
   }, [navigateTo, agent])
 
-  const handleTrigger = useCallback(async () => {
-    await triggerAgent(id)
-    refetchRuns()
-  }, [triggerAgent, id, refetchRuns])
+  const handleTrigger = useCallback(() => {
+    setShowTriggerModal(true)
+    setTriggerError(null)
+  }, [])
+
+  const handleCloseTriggerModal = useCallback(() => {
+    setShowTriggerModal(false)
+    setInputMessage('')
+    setTriggerError(null)
+  }, [])
+
+  const handleConfirmTrigger = useCallback(async () => {
+    try {
+      setTriggerError(null)
+      const run = await triggerAgent(id, inputMessage ? { input_message: inputMessage } : undefined)
+      setShowTriggerModal(false)
+      setInputMessage('')
+      navigateTo({ type: 'background-agent-run', entityId: String(run.id), title: `Run #${run.id}` })
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to trigger run'
+      setTriggerError(errorMsg)
+    }
+  }, [triggerAgent, id, inputMessage, navigateTo])
 
   const handleClickRun = useCallback((run: BackgroundAgentRun) => {
     navigateTo({ type: 'background-agent-run', entityId: String(run.id), title: `Run #${run.id}` })
@@ -340,6 +362,55 @@ export default function BackgroundAgentDetail({ id }: Props) {
           </div>
         )}
       </div>
+
+      {/* Trigger Modal */}
+      <Modal
+        isOpen={showTriggerModal}
+        onClose={handleCloseTriggerModal}
+        title="Trigger Run"
+        maxWidth="md"
+        scrollable={false}
+      >
+        <div className="flex flex-col gap-4">
+          {triggerError && (
+            <Alert variant="error" title="Trigger Failed">
+              {triggerError}
+            </Alert>
+          )}
+          <Textarea
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            placeholder="Add a message to this run… (optional)"
+            rows={4}
+          />
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={handleCloseTriggerModal}
+              disabled={triggering}
+              className="px-3 py-1.5 rounded-md text-sm font-medium border border-gray-600 text-gray-400 hover:border-gray-400 hover:text-gray-200 disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmTrigger}
+              disabled={triggering}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-green-900/50 text-green-400 border border-green-700/50 hover:bg-green-900/70 disabled:opacity-50 transition-colors"
+            >
+              {triggering ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+                  Triggering…
+                </>
+              ) : (
+                <>
+                  <PlayIcon className="w-3.5 h-3.5" />
+                  Trigger
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

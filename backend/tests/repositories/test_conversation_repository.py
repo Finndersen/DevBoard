@@ -527,6 +527,28 @@ class TestGetAllTopLevel:
         assert len(matching) == 1
         assert matching[0]["parent_entity_name"] == "Active Task"
 
+    def test_excludes_background_agent_conversations(self, repo: ConversationRepository, db_session: Session):
+        """Background agent conversations are excluded from top-level list."""
+        from devboard.db.models.background_agent import BackgroundAgent
+
+        # Create a background agent conversation
+        agent = BackgroundAgent(name="Test Agent", prompt="Test", engine=AgentEngine.INTERNAL)
+        db_session.add(agent)
+        db_session.flush()
+
+        conv = repo.create(
+            parent_entity_type=ParentEntityType.BACKGROUND_AGENT,
+            parent_entity_id=agent.id,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id=None,
+        )
+        db_session.flush()
+
+        result = repo.get_all_top_level()
+        conversation_ids = [r["conversation"].id for r in result]
+        assert conv.id not in conversation_ids
+
     def test_enriches_entity_name_for_all_types(
         self, repo: ConversationRepository, project: Project, db_session: Session, test_codebase
     ):

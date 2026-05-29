@@ -1,10 +1,11 @@
-import { describe, it, expect } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { screen, waitFor, act } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { render } from '../../test/utils'
 import { server } from '../../test/setup'
 import type { BackgroundAgent, BackgroundAgentRun, ConversationResponse } from '../../lib/api'
 import BackgroundAgentRunDetail from '../BackgroundAgentRunDetail'
+import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 
 const mockAgent: BackgroundAgent = {
   id: 1,
@@ -59,10 +60,12 @@ function setupHandlers(overrides?: Partial<{
   run: BackgroundAgentRun | null
   conversation: ConversationResponse | null
   messages: unknown[]
+  hasActive: boolean
 }>) {
   const run = overrides?.run !== undefined ? overrides.run : mockRun
   const conversation = overrides?.conversation !== undefined ? overrides.conversation : mockConversation
   const messages = overrides?.messages ?? []
+  const hasActive = overrides?.hasActive ?? false
 
   server.use(
     http.get('*/api/background-agent-runs/42', () =>
@@ -75,14 +78,24 @@ function setupHandlers(overrides?: Partial<{
     http.get('*/api/conversations/10/messages', () =>
       HttpResponse.json({ messages, context_usage: null })
     ),
+    http.get('*/api/executions/active', () =>
+      HttpResponse.json({ executions: hasActive ? [{ conversation_id: 10 }] : [] })
+    ),
   )
 }
 
 describe('BackgroundAgentRunDetail', () => {
+  beforeEach(() => {
+    // Reset stream store between tests
+    useConversationStreamStore.setState({
+      activeStreams: new Map(),
+      conversationMessages: new Map(),
+    })
+  })
+
   it('shows loading spinner initially', () => {
     setupHandlers()
     render(<BackgroundAgentRunDetail id="42" />)
-    // During loading, no metadata bar is visible
     expect(screen.queryByTestId('run-meta-bar')).not.toBeInTheDocument()
   })
 
@@ -124,6 +137,106 @@ describe('BackgroundAgentRunDetail', () => {
     })
   })
 
+  it('renders messages from the stream store', async () => {
+    setupHandlers({ messages: [] })
+    render(<BackgroundAgentRunDetail id="42" />)
+
+    // Wait for conversation to resolve and history to load
+    await waitFor(() => {
+      expect(screen.getByTestId('run-meta-bar')).toBeInTheDocument()
+    })
+
+    // Inject a message directly into the store (simulates WS event arriving)
+    act(() => {
+      useConversationStreamStore.getState().addEvent(10, {
+        event_type: 'message',
+        role: 'assistant',
+        text_content: 'Hello from the agent',
+        timestamp: new Date().toISOString(),
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Hello from the agent')).toBeInTheDocument()
+    })
+  })
+
+  it('shows streaming footer and cursor when isStreaming=true', async () => {
+    setupHandlers({ messages: [] })
+    render(<BackgroundAgentRunDetail id="42" />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('run-meta-bar')).toBeInTheDocument()
+    })
+
+    // Simulate an active stream in the store
+    act(() => {
+      useConversationStreamStore.setState(state => {
+        const updated = new Map(state.activeStreams)
+        updated.set(10, {
+          isStreaming: true,
+          isStopping: false,
+          error: null,
+          startedAt: Date.now(),
+          lastEventAt: Date.now(),
+          pendingToolRequests: [],
+          isQueued: false,
+        })
+        return { activeStreams: updated }
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('streaming-footer')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Streaming live')).toBeInTheDocument()
+    expect(screen.getByLabelText('Agent is streaming')).toBeInTheDocument()
+  })
+
+  it('shows live token count in footer when contextUsage is available', async () => {
+    setupHandlers({ messages: [] })
+    render(<BackgroundAgentRunDetail id="42" />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('run-meta-bar')).toBeInTheDocument()
+    })
+
+    act(() => {
+      useConversationStreamStore.setState(state => {
+        const updatedStreams = new Map(state.activeStreams)
+        updatedStreams.set(10, {
+          isStreaming: true,
+          isStopping: false,
+          error: null,
+          startedAt: Date.now(),
+          lastEventAt: Date.now(),
+          pendingToolRequests: [],
+          isQueued: false,
+        })
+        const updatedMessages = new Map(state.conversationMessages)
+        updatedMessages.set(10, {
+          messages: [],
+          historyLoaded: true,
+          contextUsage: { input_tokens: 500, output_tokens: 150 },
+        })
+        return { activeStreams: updatedStreams, conversationMessages: updatedMessages }
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('650 tokens')).toBeInTheDocument()
+    })
+  })
+
+  it('hides streaming footer when run is not streaming', async () => {
+    setupHandlers()
+    render(<BackgroundAgentRunDetail id="42" />)
+    await waitFor(() => {
+      expect(screen.getByTestId('run-meta-bar')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('streaming-footer')).not.toBeInTheDocument()
+  })
+
   it('shows error state when run fails to load', async () => {
     setupHandlers({ run: null })
     render(<BackgroundAgentRunDetail id="42" />)
@@ -155,6 +268,24 @@ describe('BackgroundAgentRunDetail', () => {
     render(<BackgroundAgentRunDetail id="42" />)
     await waitFor(() => {
       expect(screen.getByText(/Schedule/)).toBeInTheDocument()
+    })
+  })
+
+  it('reconnects stream when active execution exists', async () => {
+    const runningRun: BackgroundAgentRun = {
+      ...mockRun,
+      status: 'running',
+      completed_at: null,
+      input_tokens: null,
+      output_tokens: null,
+    }
+    setupHandlers({ run: runningRun, hasActive: true })
+    render(<BackgroundAgentRunDetail id="42" />)
+
+    await waitFor(() => {
+      // Stream store should have marked conversation 10 as streaming
+      const state = useConversationStreamStore.getState()
+      expect(state.isConversationStreaming(10)).toBe(true)
     })
   })
 })

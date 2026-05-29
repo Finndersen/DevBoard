@@ -30,7 +30,7 @@ from devboard.db.repositories.background_agent import BackgroundAgentRepository,
 router = APIRouter()
 
 
-def _agent_to_response(agent: BackgroundAgent) -> BackgroundAgentResponse:
+def _agent_to_response(agent: BackgroundAgent, has_active_run: bool = False) -> BackgroundAgentResponse:
     return BackgroundAgentResponse(
         id=agent.id,
         name=agent.name,
@@ -46,6 +46,7 @@ def _agent_to_response(agent: BackgroundAgent) -> BackgroundAgentResponse:
         mcp_tool_ids=[t.id for t in agent.enabled_mcp_tools],
         event_triggers=[BackgroundAgentEventTriggerResponse.model_validate(t) for t in agent.event_triggers],
         schedule_triggers=[BackgroundAgentScheduleTriggerResponse.model_validate(t) for t in agent.schedule_triggers],
+        has_active_run=has_active_run,
     )
 
 
@@ -74,7 +75,8 @@ async def create_background_agent(
     # Re-fetch with triggers loaded
     agent = repo.get_by_id(agent.id, with_triggers=True)
     assert agent is not None
-    return _agent_to_response(agent)
+    has_active = repo.has_active_run(agent.id)
+    return _agent_to_response(agent, has_active_run=has_active)
 
 
 @router.get("/", response_model=list[BackgroundAgentResponse])
@@ -84,15 +86,18 @@ async def list_background_agents(
 ) -> list[BackgroundAgentResponse]:
     """List background agents, optionally filtered by enabled status."""
     agents = repo.get_all(enabled=enabled)
-    return [_agent_to_response(a) for a in agents]
+    running_ids = repo.get_running_agent_ids()
+    return [_agent_to_response(a, has_active_run=a.id in running_ids) for a in agents]
 
 
 @router.get("/{agent_id}", response_model=BackgroundAgentResponse)
 async def get_background_agent(
     agent: BackgroundAgent = Depends(get_background_agent_or_404),
+    repo: BackgroundAgentRepository = Depends(get_background_agent_repository),
 ) -> BackgroundAgentResponse:
     """Get a background agent by ID."""
-    return _agent_to_response(agent)
+    has_active = repo.has_active_run(agent.id)
+    return _agent_to_response(agent, has_active_run=has_active)
 
 
 @router.put("/{agent_id}", response_model=BackgroundAgentResponse)
@@ -139,7 +144,8 @@ async def update_background_agent(
     repo.db.expire(agent)
     updated = repo.get_by_id(agent.id, with_triggers=True)
     assert updated is not None
-    return _agent_to_response(updated)
+    has_active = repo.has_active_run(updated.id)
+    return _agent_to_response(updated, has_active_run=has_active)
 
 
 @router.patch("/{agent_id}/state", response_model=BackgroundAgentResponse)
@@ -153,7 +159,8 @@ async def update_background_agent_state(
     repo.db.expire(agent)
     updated = repo.get_by_id(agent.id, with_triggers=True)
     assert updated is not None
-    return _agent_to_response(updated)
+    has_active = repo.has_active_run(updated.id)
+    return _agent_to_response(updated, has_active_run=has_active)
 
 
 @router.delete("/{agent_id}", status_code=204)

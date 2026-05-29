@@ -1,8 +1,9 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useBackgroundAgentRun, useBackgroundAgent, useBackgroundAgentRunConversation } from '../hooks/useBackgroundAgents'
-import { useApi } from '../hooks/useApi'
 import { apiClient } from '../lib/api'
 import { useUIStore } from '../stores/uiStore'
+import { useConversationStreamStore } from '../stores/conversationStreamStore'
+import { useEventHandlerRegistryForStream } from '../hooks/useConversationEventHandlers'
 import { ErrorMessage } from '../components/ui'
 import { loadingSpinner, textColors, borderColors } from '../styles/designSystem'
 import ConversationMessageList from '../components/chat/ConversationMessageList'
@@ -12,15 +13,17 @@ import {
   formatRelativeTime,
   statusBadgeClass,
 } from './backgroundAgentUtils'
-import type { BackgroundAgentRunStatus } from '../lib/api'
+import type { BackgroundAgentRunStatus, ConversationEvent } from '../lib/api'
+
+const EMPTY_MESSAGES: ConversationEvent[] = []
 
 interface Props {
   id: string
 }
 
-function StatusBadge({ status }: { status: BackgroundAgentRunStatus }) {
+function StatusBadge({ status, pulse }: { status: BackgroundAgentRunStatus; pulse?: boolean }) {
   return (
-    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${statusBadgeClass(status)}`}>
+    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${statusBadgeClass(status)} ${pulse ? 'animate-pulse' : ''}`}>
       {status}
     </span>
   )
@@ -34,10 +37,66 @@ export default function BackgroundAgentRunDetail({ id }: Props) {
   const { data: conversation, loading: convLoading } = useBackgroundAgentRunConversation(id)
 
   const conversationId = conversation?.id ?? null
-  const { data: messagesResponse, loading: messagesLoading } = useApi(
-    () => apiClient.getConversationMessages(conversationId!),
-    { immediate: conversationId !== null }
+
+  // Store subscriptions (null-safe: conversationId may not be resolved yet)
+  const messages = useConversationStreamStore(
+    state => conversationId !== null
+      ? (state.conversationMessages.get(conversationId)?.messages ?? EMPTY_MESSAGES)
+      : EMPTY_MESSAGES
   )
+  const historyLoaded = useConversationStreamStore(
+    state => conversationId !== null
+      ? (state.conversationMessages.get(conversationId)?.historyLoaded ?? false)
+      : false
+  )
+  const isStreaming = useConversationStreamStore(
+    state => conversationId !== null
+      ? (state.activeStreams.get(conversationId)?.isStreaming ?? false)
+      : false
+  )
+  const contextUsage = useConversationStreamStore(
+    state => conversationId !== null
+      ? state.conversationMessages.get(conversationId)?.contextUsage
+      : undefined
+  )
+
+  const setMessages = useConversationStreamStore(state => state.setMessages)
+  const reconnectStream = useConversationStreamStore(state => state.reconnectStream)
+  const updateEventHandlerRegistry = useConversationStreamStore(state => state.updateEventHandlerRegistry)
+  const eventHandlerRegistry = useEventHandlerRegistryForStream()
+
+  // Register event handler registry so streaming events are dispatched correctly
+  useEffect(() => {
+    if (conversationId !== null) {
+      updateEventHandlerRegistry(conversationId, eventHandlerRegistry)
+    }
+  }, [conversationId, eventHandlerRegistry, updateEventHandlerRegistry])
+
+  // Seed history once per conversationId, then reconnect if an execution is still active
+  const historyFetchedRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (conversationId === null || historyLoaded) return
+    if (historyFetchedRef.current === conversationId) return
+    historyFetchedRef.current = conversationId
+
+    const load = async () => {
+      try {
+        const { messages: data, context_usage } = await apiClient.getConversationMessages(conversationId)
+        setMessages(conversationId, data, context_usage)
+      } catch {
+        setMessages(conversationId, [])
+      }
+      try {
+        const hasActive = await apiClient.hasActiveExecution(conversationId)
+        if (hasActive && !useConversationStreamStore.getState().isConversationStreaming(conversationId)) {
+          reconnectStream(conversationId)
+        }
+      } catch {
+        // Silently ignore
+      }
+    }
+    load()
+  }, [conversationId, historyLoaded, setMessages, reconnectStream])
 
   const handleBack = useCallback(() => {
     if (run) {
@@ -66,8 +125,7 @@ export default function BackgroundAgentRunDetail({ id }: Props) {
   const { icon: triggerIcon, label: triggerLabel } = formatTriggeredBy(run.triggered_by)
   const duration = formatDuration(run.started_at, run.completed_at)
   const startedAt = formatRelativeTime(run.started_at)
-  const messages = messagesResponse?.messages ?? []
-  const isLoadingContent = convLoading || messagesLoading
+  const isLoadingContent = convLoading || (conversationId !== null && !historyLoaded)
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -90,7 +148,7 @@ export default function BackgroundAgentRunDetail({ id }: Props) {
         className={`flex items-center gap-4 px-6 py-3 border-b bg-gray-800/50 text-xs text-gray-400 flex-shrink-0 ${borderColors.default}`}
         data-testid="run-meta-bar"
       >
-        <StatusBadge status={run.status} />
+        <StatusBadge status={run.status} pulse={isStreaming} />
         <span>
           {triggerIcon} {triggerLabel} — {startedAt}
         </span>
@@ -114,15 +172,42 @@ export default function BackgroundAgentRunDetail({ id }: Props) {
             <div className={loadingSpinner} />
           </div>
         ) : (
-          <ConversationMessageList
-            messages={messages}
-            pendingMessage={null}
-            onRetryMessage={() => {}}
-            emptyStateMessage="No messages in this run"
-            showEmptyState={messages.length === 0}
-          />
+          <>
+            <ConversationMessageList
+              messages={messages}
+              pendingMessage={null}
+              onRetryMessage={() => {}}
+              emptyStateMessage="No messages in this run"
+              showEmptyState={messages.length === 0 && !isStreaming}
+            />
+            {isStreaming && (
+              <div className="flex items-center gap-1 mt-3 px-1" aria-label="Agent is streaming">
+                <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
+                <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse [animation-delay:150ms]" />
+                <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse [animation-delay:300ms]" />
+              </div>
+            )}
+          </>
         )}
       </div>
+
+      {/* Footer: live streaming indicator */}
+      {isStreaming && (
+        <div
+          className={`flex items-center gap-3 px-6 py-2 border-t ${borderColors.default} text-xs flex-shrink-0`}
+          data-testid="streaming-footer"
+        >
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+            <span className="text-green-400 font-medium">Streaming live</span>
+          </div>
+          {contextUsage != null && (
+            <span className="text-gray-400">
+              {contextUsage.input_tokens + contextUsage.output_tokens} tokens
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
