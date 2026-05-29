@@ -10,15 +10,16 @@ import type {
 } from '../../lib/api'
 import { apiClient } from '../../lib/api'
 import { MCPToolSelectorModal } from './MCPToolSelectorModal'
-import { textColors, surfaces, borderColors } from '../../styles/designSystem'
+import { textColors, surfaces, borderColors, hoverColors, statusColors } from '../../styles/designSystem'
 
 interface AgentRoleConfigPanelProps {
   agentRole: string
   agentName: string
   agentDescription: string
+  globalDefaultEngine?: string | null
 }
 
-export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }: AgentRoleConfigPanelProps) {
+export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription, globalDefaultEngine }: AgentRoleConfigPanelProps) {
   const [configuration, setConfiguration] = useState<AgentConfigurationResponse | null>(null)
   const [availableModels, setAvailableModels] = useState<AvailableModelsByEngineResponse | null>(null)
   const [assignedTools, setAssignedTools] = useState<MCPToolSummary[]>([])
@@ -50,7 +51,7 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
 
       setConfiguration(configResponse)
       setAvailableModels(modelsResponse)
-      setSelectedEngine(configResponse.config.engine)
+      setSelectedEngine(configResponse.config.stored_engine)
       setSelectedModel(configResponse.config.model?.id ?? null)
       setCustomInstructions(configResponse.custom_instructions || '')
       setCustomInstructionsDirty(false)
@@ -85,8 +86,14 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
     }
   }, [isEngineOpen, isModelOpen])
 
-  const handleEngineChange = async (engine: string) => {
+  const handleEngineChange = async (engine: string | null) => {
     if (saving || !availableModels || !configuration) return
+
+    // Handle "Global Default" (null engine)
+    if (engine === null) {
+      await handleConfigChange(null, null)
+      return
+    }
 
     const engineInfo = configuration.available_engines.find(e => e.engine === engine)
     if (!engineInfo) {
@@ -114,17 +121,17 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
   }
 
   const handleModelChange = async (modelId: string | null) => {
-    if (saving || !selectedEngine) return
+    if (saving || selectedEngine === null || selectedEngine === undefined) return
     await handleConfigChange(selectedEngine, modelId)
   }
 
-  const handleConfigChange = async (engine: string, modelId: string | null) => {
+  const handleConfigChange = async (engine: string | null, modelId: string | null) => {
     try {
       setSaving(true)
       const request: UpdateAgentConfigurationRequest = { engine, model_id: modelId }
       const response = await apiClient.updateAgentConfiguration(agentRole, request)
 
-      setSelectedEngine(response.config.engine)
+      setSelectedEngine(response.config.stored_engine)
       setSelectedModel(response.config.model?.id ?? null)
       setConfiguration(response)
     } catch (err) {
@@ -142,8 +149,8 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
     try {
       setSavingInstructions(true)
       const request: UpdateAgentConfigurationRequest = {
-        engine: configuration.config.engine,
-        model_id: configuration.config.model?.id ?? null,
+        engine: selectedEngine,
+        model_id: selectedModel,
         custom_instructions: customInstructions || null
       }
       const response = await apiClient.updateAgentConfiguration(agentRole, request)
@@ -245,6 +252,9 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
 
   const selectedEngineInfo = getSelectedEngineInfo()
   const availableModelsForEngine = getAvailableModelsForSelectedEngine()
+  const globalDefaultEngineName = globalDefaultEngine
+    ? configuration.available_engines.find(e => e.engine === globalDefaultEngine)?.display_name ?? globalDefaultEngine
+    : null
 
   return (
     <div className="space-y-6">
@@ -273,7 +283,11 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
                   }`}
               >
                 <span className="block truncate">
-                  {selectedEngineInfo ? getEngineDisplayName(selectedEngineInfo) : selectedEngine}
+                  {selectedEngine === null || selectedEngine === undefined
+                    ? `Global Default${globalDefaultEngineName ? ` (${globalDefaultEngineName})` : ''}`
+                    : selectedEngineInfo
+                      ? getEngineDisplayName(selectedEngineInfo)
+                      : selectedEngine}
                 </span>
                 <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
                   {saving ? (
@@ -286,6 +300,25 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
 
               {isEngineOpen && (
                 <div className="absolute z-10 mt-1 w-full bg-white dark:bg-white/[0.06] shadow-lg max-h-60 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
+                  {/* Global Default Option */}
+                  <button
+                    type="button"
+                    onClick={() => handleEngineChange(null)}
+                    className={`w-full text-left px-3 py-2 ${hoverColors.default} cursor-pointer ${(selectedEngine === null || selectedEngine === undefined)
+                      ? `${statusColors.info.bg} ${statusColors.info.text}`
+                      : textColors.primary
+                    }`}
+                  >
+                    <div>
+                      <div className="font-medium">
+                        Global Default{globalDefaultEngineName ? ` (${globalDefaultEngineName})` : ''}
+                      </div>
+                      <div className={`text-xs ${textColors.secondary}`}>
+                        Use the global default engine
+                      </div>
+                    </div>
+                  </button>
+
                   {configuration.available_engines.map((engine) => {
                     const isUnavailable = !engine.is_available
                     return (
@@ -296,18 +329,18 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
                         disabled={isUnavailable}
                         className={`w-full text-left px-3 py-2 ${isUnavailable
                             ? 'opacity-50 cursor-not-allowed'
-                            : 'hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer'
+                            : `${hoverColors.default} cursor-pointer`
                           } ${selectedEngine === engine.engine && !isUnavailable
-                            ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                            : 'text-gray-900 dark:text-gray-100'
+                            ? `${statusColors.info.bg} ${statusColors.info.text}`
+                            : textColors.primary
                           }`}
                       >
                         <div>
                           <div className="font-medium">
                             {getEngineDisplayName(engine)}
-                            {isUnavailable && <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(Unavailable)</span>}
+                            {isUnavailable && <span className={`ml-2 text-xs ${textColors.secondary}`}>(Unavailable)</span>}
                           </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                          <div className={`text-xs ${textColors.secondary}`}>
                             {isUnavailable && engine.unavailable_reason
                               ? engine.unavailable_reason
                               : engine.description}
@@ -330,8 +363,8 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
               <button
                 type="button"
                 onClick={() => setIsModelOpen(!isModelOpen)}
-                disabled={saving}
-                className={`relative w-64 bg-white dark:bg-white/[0.06] border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${saving ? 'opacity-50 cursor-not-allowed' : ''
+                disabled={saving || selectedEngine === null || selectedEngine === undefined}
+                className={`relative w-64 bg-white dark:bg-white/[0.06] border border-gray-300 dark:border-gray-600 rounded-md pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 dark:text-white ${(saving || selectedEngine === null || selectedEngine === undefined) ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
               >
                 <span className="block truncate">
@@ -352,14 +385,14 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
                     <button
                       type="button"
                       onClick={() => handleModelChange(null)}
-                      className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 ${selectedModel === null
-                          ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                          : 'text-gray-900 dark:text-gray-100'
+                      className={`w-full text-left px-3 py-2 ${hoverColors.default} ${selectedModel === null
+                          ? `${statusColors.info.bg} ${statusColors.info.text}`
+                          : textColors.primary
                         }`}
                     >
                       <div>
                         <div className="font-medium">Default</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                        <div className={`text-xs ${textColors.secondary}`}>
                           Use engine's default model
                         </div>
                       </div>
@@ -370,14 +403,14 @@ export function AgentRoleConfigPanel({ agentRole, agentName, agentDescription }:
                       key={model.id}
                       type="button"
                       onClick={() => handleModelChange(model.id)}
-                      className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 ${selectedModel === model.id
-                          ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                          : 'text-gray-900 dark:text-gray-100'
+                      className={`w-full text-left px-3 py-2 ${hoverColors.default} ${selectedModel === model.id
+                          ? `${statusColors.info.bg} ${statusColors.info.text}`
+                          : textColors.primary
                         }`}
                     >
                       <div>
                         <div className="font-medium">{getModelDisplayName(model)}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 capitalize">
+                        <div className={`text-xs ${textColors.secondary} capitalize`}>
                           {model.model_type}
                         </div>
                       </div>

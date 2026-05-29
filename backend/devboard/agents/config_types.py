@@ -17,12 +17,12 @@ class AgentEngineModelInput(BaseModel):
     Used when creating or updating agent configuration via API or service calls.
 
     Attributes:
-        engine: The agent execution engine (INTERNAL, CLAUDE_CODE, GEMINI_CLI)
+        engine: The agent execution engine, or None to use the global default engine.
         model_id: Model identifier in "provider:model" format (e.g., "anthropic:claude-sonnet-4")
                   or None to use engine's default model
     """
 
-    engine: AgentEngine
+    engine: AgentEngine | None
     model_id: str | None
 
 
@@ -49,7 +49,8 @@ class AgentEngineModelConfig(BaseModel):
     the registry. Consumers can access the full LanguageModel directly.
 
     Attributes:
-        engine: The agent execution engine (INTERNAL, CLAUDE_CODE, GEMINI_CLI)
+        engine: The effective (resolved) engine — always non-null, with the global default applied.
+        stored_engine: The engine explicitly stored for this role, or None if using the global default.
         model_db: Resolved LanguageModel instance, or None for engines that
                   don't require model selection
     """
@@ -57,6 +58,7 @@ class AgentEngineModelConfig(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
     engine: AgentEngine
+    stored_engine: AgentEngine | None = None
     model_db: LanguageModelDB | None = Field(exclude=True)
 
     @computed_field  # type: ignore[prop-decorator]

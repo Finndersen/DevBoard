@@ -222,8 +222,8 @@ class TestImplementationPlanAPI:
 
         data = response.json()
         assert data["model_type"] == "standard"
-        # CODE_REVIEW role → INTERNAL engine → OpenAI models (only configured provider in tests)
-        assert data["model_display_name"] == "gpt-5"
+        # CODE_REVIEW role with no custom engine uses global default (CLAUDE_CODE) with standard model_type
+        assert data["model_display_name"] == "claude-sonnet-4"
 
     def test_create_implementation_step_fast_model_type(self, client: TestClient, task_with_plan):
         response = client.post(

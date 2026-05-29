@@ -629,6 +629,7 @@ export interface AgentEngineInfo {
 
 export interface AgentEngineModelConfig {
   engine: string
+  stored_engine: string | null
   model: ModelInfo | null
 }
 
@@ -642,7 +643,7 @@ export interface AgentConfigurationResponse {
 }
 
 export interface UpdateAgentConfigurationRequest {
-  engine: string
+  engine: string | null
   model_id: string | null
   custom_instructions?: string | null
 }

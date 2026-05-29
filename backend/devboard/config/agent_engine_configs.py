@@ -5,6 +5,7 @@ from enum import StrEnum
 
 from pydantic import field_validator
 
+from devboard.agents.engines.agent_engines import AgentEngine
 from devboard.config.base import BaseConfig
 
 
@@ -35,3 +36,11 @@ class ClaudeCodeEngineConfig(BaseConfig):
         if v == ClientMode.INTERACTIVE and not shutil.which("tmux"):
             raise ValueError("tmux is required for interactive mode but was not found on PATH")
         return v
+
+
+class GlobalAgentEngineConfig(BaseConfig):
+    """Global default engine configuration applied to all agent roles unless overridden."""
+
+    config_key = "agents.global"
+
+    default_engine: AgentEngine = AgentEngine.CLAUDE_CODE

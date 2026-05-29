@@ -17,6 +17,7 @@ from devboard.agents.language_models import (
 )
 from devboard.agents.roles import AgentRoleType
 from devboard.api.schemas.agents import MCPToolSummary
+from devboard.config.agent_engine_configs import GlobalAgentEngineConfig
 from devboard.config.base import BaseConfig
 from devboard.db.models import MCPTool
 from devboard.db.models.language_model import LanguageModelDB
@@ -105,9 +106,9 @@ class AgentConfigService:
         role_config = self._agent_role_config_repo.get_or_create(agent_role)
         custom_instructions = role_config.custom_instructions
 
-        # Get available engines for this role, including availability status
+        # Get available engines, including availability status
         available_engines = []
-        for defn in self._engine_registry.get_available_engines_for_agent_role(agent_role):
+        for defn in self._engine_registry.get_available_engines():
             is_available, unavailable_reason = self._check_engine_availability(defn.engine)
             available_engines.append(
                 AgentEngineInfo(
@@ -156,7 +157,7 @@ class AgentConfigService:
         """
         models_by_engine: dict[str, list[ModelInfo]] = {}
 
-        for engine_def in self._engine_registry.get_all_engines():
+        for engine_def in self._engine_registry.get_available_engines():
             # Get models available for this engine
             engine_models = self._get_available_models_for_engine(engine_def.engine)
 
@@ -184,7 +185,6 @@ class AgentConfigService:
         """Update role-level configuration.
 
         Validates:
-        - Engine is allowed for agent role
         - Model is available for engine (provider configured)
 
         Args:
@@ -198,36 +198,30 @@ class AgentConfigService:
         Raises:
             ValueError: If engine not allowed for role or model not available for engine
         """
-        # Validate engine allowed for role
-        if not self._engine_registry.validate_engine_for_agent_role(config.engine, agent_role):
-            allowed_engines = self._engine_registry.get_available_engines_for_agent_role(agent_role)
-            allowed_names = [e.engine.value for e in allowed_engines]
-            raise ValueError(
-                f"Engine '{config.engine.value}' not allowed for role '{agent_role.value}'. "
-                f"Allowed engines: {', '.join(allowed_names)}"
-            )
+        if config.engine is not None:
+            # Get engine definition to check if model selection is required
+            engine_def = self._engine_registry.get(config.engine)
+            if engine_def is None:
+                raise ValueError(f"Invalid engine: {config.engine}")
 
-        # Get engine definition to check if model selection is required
-        engine_def = self._engine_registry.get(config.engine)
-        if engine_def is None:
-            raise ValueError(f"Invalid engine: {config.engine}")
-
-        # Validate model selection based on engine requirements
-        if config.model_id is None:
-            # None model_id is only allowed for engines that don't require selection
-            if engine_def.requires_model_selection:
-                raise ValueError(
-                    f"Engine '{config.engine.value}' requires explicit model selection. "
-                    f"Please select a model from the available options."
-                )
-        else:
-            # If model_id is provided, validate it's available for the engine
-            available_models = self._get_available_models_for_engine(config.engine)
-            if not any(m.model_id == config.model_id for m in available_models):
-                raise ValueError(
-                    f"Model '{config.model_id}' not available for engine '{config.engine.value}'. "
-                    f"Ensure the provider is configured."
-                )
+            # Validate model selection based on engine requirements
+            if config.model_id is None:
+                # None model_id is only allowed for engines that don't require selection
+                if engine_def.requires_model_selection:
+                    raise ValueError(
+                        f"Engine '{config.engine.value}' requires explicit model selection. "
+                        f"Please select a model from the available options."
+                    )
+            else:
+                # If model_id is provided, validate it's available for the engine
+                available_models = self._get_available_models_for_engine(config.engine)
+                if not any(m.model_id == config.model_id for m in available_models):
+                    raise ValueError(
+                        f"Model '{config.model_id}' not available for engine '{config.engine.value}'. "
+                        f"Ensure the provider is configured."
+                    )
+        elif config.model_id is not None:
+            raise ValueError("Cannot specify model_id without an engine (engine is None = use global default)")
 
         # Update engine and model
         role_config = self._agent_role_config_repo.get_or_create(agent_role)
@@ -300,12 +294,14 @@ class AgentConfigService:
         # Get stored configuration from AgentRoleConfig
         role_config = self._agent_role_config_repo.get_or_create(agent_role)
 
-        # Resolve engine (selected or default)
-        effective_engine = (
-            role_config.engine
-            if role_config.engine
-            else self._engine_registry.get_default_engine_for_agent_role(agent_role)
-        )
+        # Resolve engine: use role's engine if set, otherwise fall back to global default
+        stored_engine = role_config.engine
+        if stored_engine:
+            effective_engine = stored_engine
+        else:
+            global_config = self._config_service.get_config(GlobalAgentEngineConfig)
+            assert global_config is not None, "GlobalAgentEngineConfig must be registered in the config registry"
+            effective_engine = global_config.default_engine
 
         # Resolve model ID (selected or default for agent role + engine)
         effective_model_id = (
@@ -320,6 +316,7 @@ class AgentConfigService:
 
         return AgentEngineModelConfig(
             engine=effective_engine,
+            stored_engine=stored_engine,
             model_db=resolved_model,
         )
 

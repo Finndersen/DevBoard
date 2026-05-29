@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel
 
+from devboard.agents.engines.agent_engines import AgentEngine
+
 
 class MCPToolSummary(BaseModel):
     """Summary of an MCP tool assigned to an agent role."""
@@ -32,6 +34,6 @@ class UpdateAgentConfigurationRequestFull(BaseModel):
     When custom_instructions is omitted from the request, the existing value is preserved.
     """
 
-    engine: str
+    engine: AgentEngine | None
     model_id: str | None
     custom_instructions: str | None = None

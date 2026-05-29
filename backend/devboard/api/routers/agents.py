@@ -9,7 +9,6 @@ from devboard.agents.agent_config_service import (
     AvailableModelsByEngine,
 )
 from devboard.agents.config_types import AgentEngineModelInput
-from devboard.agents.engines import AgentEngine
 from devboard.agents.roles import AgentRoleType
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_mcp_server_repository
@@ -62,18 +61,15 @@ async def update_agent_configuration(
     """Update configuration for an agent role.
 
     Updates engine, model, and custom instructions for the role. Validates that:
-    - Engine is allowed for the role
     - Model is available for the engine (provider configured)
+    - engine=null clears the role-specific engine (falls back to global default)
     """
     role = _parse_agent_role(agent_role)
 
-    try:
-        config = AgentEngineModelInput(
-            engine=AgentEngine(request.engine),
-            model_id=request.model_id,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from None
+    config = AgentEngineModelInput(
+        engine=request.engine,
+        model_id=request.model_id,
+    )
 
     try:
         return service.update_agent_configuration(role, config, request.custom_instructions)

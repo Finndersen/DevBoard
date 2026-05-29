@@ -20,10 +20,10 @@ class TestAgentsRouter:
         assert "enabled_mcp_tools" in data
         assert data["enabled_mcp_tools"] == []  # Empty by default
 
-        # PROJECT should allow INTERNAL and CLAUDE_CODE engines
-        assert len(data["available_engines"]) == 2
+        # All engines should be available for all roles
+        assert len(data["available_engines"]) == 3
         engine_names = {e["engine"] for e in data["available_engines"]}
-        assert engine_names == {"internal", "claude_code"}
+        assert engine_names == {"internal", "claude_code", "gemini_cli"}
 
     def test_get_agent_configuration_task_implementation(self, client):
         """TASK_IMPLEMENTATION should allow multiple engines."""
@@ -33,10 +33,10 @@ class TestAgentsRouter:
         data = response.json()
         assert data["agent_role"] == "task_implementation"
 
-        # Should allow Claude Code and Gemini CLI
-        assert len(data["available_engines"]) == 2
+        # All engines should be available for all roles
+        assert len(data["available_engines"]) == 3
         engine_names = {e["engine"] for e in data["available_engines"]}
-        assert engine_names == {"claude_code", "gemini_cli"}
+        assert engine_names == {"internal", "claude_code", "gemini_cli"}
 
     def test_get_agent_configuration_invalid_role(self, client):
         """Invalid agent role should return 400."""
@@ -84,8 +84,8 @@ class TestAgentsRouter:
         assert data["config"]["model"]["id"] == "anthropic:claude-sonnet-4.5"
 
     def test_update_agent_configuration_invalid_engine_for_role(self, client):
-        """Should reject engine not allowed for role."""
-        # Try to use Gemini CLI for PROJECT role (only allows INTERNAL and CLAUDE_CODE)
+        """All engines should be allowed for all roles."""
+        # Use Gemini CLI for PROJECT role (previously restricted, now allowed)
         response = client.put(
             "/api/agents/project/configuration",
             json={
@@ -93,8 +93,11 @@ class TestAgentsRouter:
                 "model_id": None,
             },
         )
-        assert response.status_code == 400
-        assert "not allowed for role" in response.json()["detail"]
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["agent_role"] == "project"
+        assert data["config"]["engine"] == "gemini_cli"
 
     def test_update_agent_configuration_rejects_wrong_provider_for_engine(self, client):
         """Should reject model from unsupported provider for engine."""

@@ -762,10 +762,12 @@ class TestRunSubAgentExecution:
         self, manager, mock_conversation, mock_role, mock_conv_repo, mock_agent_config_service
     ):
         """Test that the execution is registered with is_sub_agent=True during streaming."""
-        captured_execution = {}
+        captured_state = {}
 
         async def capturing_stream():
-            captured_execution["exec"] = manager._executions.get(42)
+            exec_entry = manager._executions.get(42)
+            captured_state["exec_is_sub_agent"] = exec_entry.is_sub_agent if exec_entry else None
+            captured_state["exec_status_during_stream"] = exec_entry.status if exec_entry else None
             yield TextMessage(role=MessageRole.AGENT, text_content="result", timestamp=datetime.datetime.now())
 
         mock_exec_service = Mock()
@@ -784,10 +786,9 @@ class TestRunSubAgentExecution:
                 working_dir="/test/dir",
             )
 
-        exec_entry = captured_execution.get("exec")
-        assert exec_entry is not None
-        assert exec_entry.is_sub_agent is True
-        assert exec_entry.status == ExecutionStatus.RUNNING
+        # Verify that during streaming, the execution was registered as a sub-agent with RUNNING status
+        assert captured_state["exec_is_sub_agent"] is True
+        assert captured_state["exec_status_during_stream"] == ExecutionStatus.RUNNING
 
     @pytest.mark.asyncio
     async def test_raises_conversation_busy_error_when_already_running(

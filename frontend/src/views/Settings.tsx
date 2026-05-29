@@ -47,6 +47,8 @@ export default function Settings() {
     { key: 'task_pr_review', name: 'Task PR Review Agent', description: 'Reviews pull requests and provides feedback' },
     { key: 'investigation', name: 'Investigation Agent', description: 'Analyzes codebases and gathers context' },
     { key: 'code_review', name: 'Code Review Agent', description: 'Reviews code changes and provides detailed feedback' },
+    { key: 'step_execution', name: 'Step Execution Agent', description: 'Executes individual implementation plan steps' },
+    { key: 'background_agent', name: 'Background Agent', description: 'Performs background analysis and evaluation tasks' },
   ]
   
   const [selectedConfig, setSelectedConfig] = useState<string | null>(integrationConfigs[0]?.key || null)
@@ -58,6 +60,8 @@ export default function Settings() {
   const [loadingDevboardConfig, setLoadingDevboardConfig] = useState(false)
   const [claudeCodeEngineConfig, setClaudeCodeEngineConfig] = useState<ConfigurationDetailResponse | null>(null)
   const [loadingClaudeCodeEngine, setLoadingClaudeCodeEngine] = useState(false)
+  const [globalEngineConfig, setGlobalEngineConfig] = useState<ConfigurationDetailResponse | null>(null)
+  const [loadingGlobalEngine, setLoadingGlobalEngine] = useState(false)
 
   const handleConfigurationSave = (config: ConfigurationDetailResponse) => {
     console.log('Configuration saved:', config)
@@ -145,6 +149,18 @@ export default function Settings() {
     }
   }
 
+  const loadGlobalEngineConfig = async () => {
+    try {
+      setLoadingGlobalEngine(true)
+      const config = await apiClient.getConfigurationDetail('agents.global')
+      setGlobalEngineConfig(config)
+    } catch (error) {
+      console.error('Failed to load global engine config:', error)
+    } finally {
+      setLoadingGlobalEngine(false)
+    }
+  }
+
   // Update URL when tab changes
   const handleTabChange = (newTab: 'integrations' | 'models' | 'agents' | 'custom-fields' | 'general') => {
     setActiveTab(newTab)
@@ -167,6 +183,7 @@ export default function Settings() {
 
     if (newTab === 'agents') {
       loadClaudeCodeEngineConfig()
+      loadGlobalEngineConfig()
     }
   }
 
@@ -186,8 +203,12 @@ export default function Settings() {
     }
     if (activeTab === 'agents') {
       loadClaudeCodeEngineConfig()
+      loadGlobalEngineConfig()
     }
   }, [activeTab])
+
+  const defaultEngineField = globalEngineConfig?.fields.find(f => f.name === 'default_engine')
+  const clientModeField = claudeCodeEngineConfig?.fields.find(f => f.name === 'client_mode')
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -292,6 +313,47 @@ export default function Settings() {
 
       {activeTab === 'agents' && (
         <div className="space-y-6">
+          {/* Default Engine Configuration */}
+          <Card className="p-6">
+            <div className="mb-4">
+              <h3 className={`text-base font-medium ${textColors.primary}`}>Default Engine</h3>
+            </div>
+            {loadingGlobalEngine ? (
+              <div className="animate-pulse">
+                <div className="h-10 bg-gray-200 dark:bg-white/[0.06] rounded"></div>
+              </div>
+            ) : defaultEngineField ? (
+              <div className="flex items-center space-x-4">
+                <label className={`text-sm font-medium ${textColors.primary}`}>
+                  Engine
+                </label>
+                <select
+                  value={defaultEngineField.effective_value || ''}
+                  onChange={async (e) => {
+                    const newValue = e.target.value
+                    try {
+                      const updated = await apiClient.updateConfigurationFields('agents.global', {
+                        default_engine: newValue
+                      })
+                      setGlobalEngineConfig(updated)
+                    } catch (error) {
+                      console.error('Failed to update global engine config:', error)
+                    }
+                  }}
+                  className={`px-3 py-2 border ${borderColors.input} rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-white/[0.06] dark:text-white`}
+                >
+                  {defaultEngineField.enum_values?.map((value) => (
+                    <option key={value} value={value}>
+                      {value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, ' ')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className={`text-sm ${textColors.secondary}`}>Failed to load configuration.</div>
+            )}
+          </Card>
+
           {/* Agent Role List and Configuration */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             {/* Agent Role List */}
@@ -324,6 +386,7 @@ export default function Settings() {
                       agentRole={selectedAgent.key}
                       agentName={selectedAgent.name}
                       agentDescription={selectedAgent.description}
+                      globalDefaultEngine={globalEngineConfig?.fields.find(f => f.name === 'default_engine')?.effective_value || null}
                     />
                   )
                 })()}
@@ -340,13 +403,13 @@ export default function Settings() {
               <div className="animate-pulse">
                 <div className="h-10 bg-gray-200 dark:bg-white/[0.06] rounded"></div>
               </div>
-            ) : claudeCodeEngineConfig && claudeCodeEngineConfig.fields.length > 0 ? (
+            ) : clientModeField ? (
               <div className="flex items-center space-x-4">
                 <label className={`text-sm font-medium ${textColors.primary}`}>
                   Client Mode
                 </label>
                 <select
-                  value={claudeCodeEngineConfig.fields[0]?.effective_value || ''}
+                  value={clientModeField.effective_value || ''}
                   onChange={async (e) => {
                     const newValue = e.target.value
                     try {
@@ -360,7 +423,7 @@ export default function Settings() {
                   }}
                   className={`px-3 py-2 border ${borderColors.input} rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-white/[0.06] dark:text-white`}
                 >
-                  {claudeCodeEngineConfig.fields[0]?.enum_values?.map((value) => (
+                  {clientModeField.enum_values?.map((value) => (
                     <option key={value} value={value}>
                       {value.charAt(0).toUpperCase() + value.slice(1)}
                     </option>

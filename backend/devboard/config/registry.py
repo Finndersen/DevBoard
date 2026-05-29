@@ -1,6 +1,6 @@
 """Registry for configuration schemas."""
 
-from devboard.config.agent_engine_configs import ClaudeCodeEngineConfig
+from devboard.config.agent_engine_configs import ClaudeCodeEngineConfig, GlobalAgentEngineConfig
 from devboard.config.base import BaseConfig
 from devboard.config.integration_configs import (
     DevBoardConfig,
@@ -25,6 +25,7 @@ config_schema_registry: Registry[type[BaseConfig]] = Registry[type[BaseConfig]](
         JiraIntegrationConfig,
         SlackIntegrationConfig,
         # Agent engine configurations
+        GlobalAgentEngineConfig,
         ClaudeCodeEngineConfig,
         # LLM provider configurations
         OpenAIProviderConfig,

@@ -9,6 +9,7 @@ from devboard.agents.config_types import AgentEngineModelInput
 from devboard.agents.engines import AgentEngine, agent_engine_registry
 from devboard.agents.language_models import ModelType
 from devboard.agents.roles import AgentRoleType
+from devboard.config.agent_engine_configs import GlobalAgentEngineConfig
 from devboard.config.base import ConfigValidationResult
 
 
@@ -21,12 +22,16 @@ class TestAgentConfigService:
 
         Uses a mock config_service that simulates Anthropic being configured,
         so INTERNAL engine has models available regardless of actual environment.
+        Global default engine is CLAUDE_CODE (matching GlobalAgentEngineConfig default).
         """
         mock_config_service = Mock()
         mock_config_service.validate_config_by_key.side_effect = lambda key: (
             ConfigValidationResult(success=True, config=Mock(), errors=[])
             if key == "llm.anthropic.main"
             else ConfigValidationResult(success=False, config=None, errors=["not configured"])
+        )
+        mock_config_service.get_config.side_effect = lambda config_class: (
+            GlobalAgentEngineConfig() if config_class is GlobalAgentEngineConfig else None
         )
         return AgentConfigService(
             agent_role_config_repo=agent_role_config_repository,
@@ -146,28 +151,31 @@ class TestAgentConfigService:
         with pytest.raises(ValueError, match="not available for engine"):
             agent_config_service.update_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION, config)
 
+        # Previously restricted roles can now use any engine — INTERNAL is valid for TASK_IMPLEMENTATION
+        config = AgentEngineModelInput(
+            engine=AgentEngine.INTERNAL,
+            model_id="anthropic:claude-sonnet-4.5",
+        )
+        result = agent_config_service.update_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION, config)
+        assert result.config.engine == AgentEngine.INTERNAL
+
     def test_get_agent_configuration_returns_effective_config(self, agent_config_service):
         """get_agent_configuration should return effective engine and model config."""
-        # Test PROJECT role (INTERNAL engine)
         project_config = agent_config_service.get_agent_configuration(AgentRoleType.PROJECT)
         assert project_config.agent_role == "project"
         assert project_config.config.engine is not None
-        assert project_config.config.model is not None
         assert len(project_config.available_engines) > 0
 
-        # PROJECT should allow INTERNAL and CLAUDE_CODE engines
-        assert len(project_config.available_engines) == 2
+        # All engines are available for all roles
         engine_names = {e.engine for e in project_config.available_engines}
-        assert engine_names == {"internal", "claude_code"}
+        assert engine_names == {AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE, AgentEngine.GEMINI_CLI}
 
-        # Test TASK_IMPLEMENTATION role (Claude Code by default)
         task_impl_config = agent_config_service.get_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION)
         assert task_impl_config.agent_role == "task_implementation"
 
-        # TASK_IMPLEMENTATION should allow multiple engines
-        assert len(task_impl_config.available_engines) == 2
+        # All roles get all engines
         engine_names = {e.engine for e in task_impl_config.available_engines}
-        assert engine_names == {"claude_code", "gemini_cli"}
+        assert engine_names == {AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE, AgentEngine.GEMINI_CLI}
 
     def test_language_model_full_name(self, language_model_repository):
         """LanguageModelDB should have correct full_name and display_full_name."""
@@ -309,6 +317,9 @@ class TestAgentConfigService:
             if key == "llm.openai.main"
             else ConfigValidationResult(success=False, config=None, errors=["not configured"])
         )
+        mock_config_service.get_config.side_effect = lambda config_class: (
+            GlobalAgentEngineConfig() if config_class is GlobalAgentEngineConfig else None
+        )
         service = AgentConfigService(
             agent_role_config_repo=agent_role_config_repository,
             config_service=mock_config_service,
@@ -321,6 +332,86 @@ class TestAgentConfigService:
         assert model_id is not None
         assert model_id.startswith("openai:")
 
+    def test_get_available_engines_returns_all_engines(self, agent_config_service):
+        """get_available_engines_for_agent_role was removed; get_available_engines returns all engines."""
+        available = agent_engine_registry.get_available_engines()
+        engine_values = {defn.engine for defn in available}
+        assert engine_values == {AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE, AgentEngine.GEMINI_CLI}
+
+    def test_get_effective_config_uses_global_default_when_role_engine_is_null(self, agent_config_service):
+        """When role has no engine set, get_effective_config resolves to global default engine."""
+        # Ensure no engine is stored for this role
+        role_config = agent_config_service._agent_role_config_repo.get_or_create(AgentRoleType.INVESTIGATION)
+        role_config.engine = None
+        role_config.model_id = None
+        agent_config_service._agent_role_config_repo.update(role_config)
+
+        # Global default is CLAUDE_CODE (from fixture's get_config mock)
+        effective = agent_config_service.get_effective_config(AgentRoleType.INVESTIGATION)
+        assert effective.engine == AgentEngine.CLAUDE_CODE
+        assert effective.stored_engine is None
+
+    def test_get_effective_config_uses_global_default_from_config(
+        self, agent_role_config_repository, language_model_repository
+    ):
+        """get_effective_config reads default_engine from GlobalAgentEngineConfig, not a hardcoded value."""
+        mock_config_service = Mock()
+        mock_config_service.validate_config_by_key.side_effect = lambda key: (
+            ConfigValidationResult(success=True, config=Mock(), errors=[])
+            if key == "llm.anthropic.main"
+            else ConfigValidationResult(success=False, config=None, errors=["not configured"])
+        )
+        # Set global default to INTERNAL engine
+        mock_config_service.get_config.side_effect = lambda config_class: (
+            GlobalAgentEngineConfig(default_engine=AgentEngine.INTERNAL)
+            if config_class is GlobalAgentEngineConfig
+            else None
+        )
+        service = AgentConfigService(
+            agent_role_config_repo=agent_role_config_repository,
+            config_service=mock_config_service,
+            language_model_repo=language_model_repository,
+            engine_registry=agent_engine_registry,
+        )
+
+        # Role has no engine set — should resolve to global default (INTERNAL)
+        effective = service.get_effective_config(AgentRoleType.CODE_REVIEW)
+        assert effective.engine == AgentEngine.INTERNAL
+        assert effective.stored_engine is None
+
+    def test_get_effective_config_role_engine_overrides_global_default(self, agent_config_service):
+        """A role-specific engine takes precedence over the global default."""
+        # Explicitly set GEMINI_CLI for this role
+        config = AgentEngineModelInput(engine=AgentEngine.GEMINI_CLI, model_id=None)
+        agent_config_service.update_agent_configuration(AgentRoleType.CODE_REVIEW, config)
+
+        # Global default is CLAUDE_CODE, but role override is GEMINI_CLI
+        effective = agent_config_service.get_effective_config(AgentRoleType.CODE_REVIEW)
+        assert effective.engine == AgentEngine.GEMINI_CLI
+        assert effective.stored_engine == AgentEngine.GEMINI_CLI
+
+    def test_update_agent_configuration_with_null_engine_clears_role_engine(self, agent_config_service):
+        """Saving null engine clears the role-specific engine (revert to global default)."""
+        # First set a specific engine
+        config = AgentEngineModelInput(engine=AgentEngine.GEMINI_CLI, model_id=None)
+        agent_config_service.update_agent_configuration(AgentRoleType.TASK_PR_REVIEW, config)
+
+        # Now clear it by sending null engine
+        config = AgentEngineModelInput(engine=None, model_id=None)
+        result = agent_config_service.update_agent_configuration(AgentRoleType.TASK_PR_REVIEW, config)
+
+        # Role engine stored as None; effective engine comes from global default (CLAUDE_CODE)
+        role_config = agent_config_service._agent_role_config_repo.get_or_create(AgentRoleType.TASK_PR_REVIEW)
+        assert role_config.engine is None
+        assert result.config.engine == AgentEngine.CLAUDE_CODE
+        assert result.config.stored_engine is None
+
+    def test_update_agent_configuration_null_engine_with_model_id_raises(self, agent_config_service):
+        """Cannot specify model_id when engine is null."""
+        config = AgentEngineModelInput(engine=None, model_id="anthropic:claude-sonnet-4.5")
+        with pytest.raises(ValueError, match="Cannot specify model_id without an engine"):
+            agent_config_service.update_agent_configuration(AgentRoleType.PROJECT, config)
+
     def test_check_engine_availability_internal_without_providers(
         self, agent_role_config_repository, language_model_repository
     ):
@@ -331,6 +422,9 @@ class TestAgentConfigService:
             success=False,
             config=None,
             errors=["API key not configured"],
+        )
+        mock_config_service.get_config.side_effect = lambda config_class: (
+            GlobalAgentEngineConfig() if config_class is GlobalAgentEngineConfig else None
         )
 
         service = AgentConfigService(

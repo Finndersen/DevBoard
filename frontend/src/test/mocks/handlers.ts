@@ -239,6 +239,20 @@ export const handlers = [
   http.get('*/api/configurations/:configKey/detail', ({ params }) => {
     // Return different mock data based on config key
     const configKey = params.configKey as string
+    if (configKey === 'agents.claude_code') {
+      return HttpResponse.json({
+        key: configKey,
+        fields: [{ name: 'client_mode', type: 'enum', required: false, description: 'Claude Code client mode', effective_value: 'sdk', env_value: null, db_value: null, default_value: 'sdk', is_secret: false, env_var_name: null, is_overridden: false, enum_values: ['sdk', 'cli'] }],
+        is_valid: true,
+      })
+    }
+    if (configKey === 'agents.global') {
+      return HttpResponse.json({
+        key: configKey,
+        fields: [{ name: 'default_engine', type: 'enum', required: false, description: 'Default agent engine', effective_value: 'claude_code', env_value: null, db_value: null, default_value: 'claude_code', is_secret: false, env_var_name: null, is_overridden: false, enum_values: ['claude_code', 'internal', 'gemini_cli'] }],
+        is_valid: true,
+      })
+    }
     return HttpResponse.json({
       ...mockConfigurationResponse,
       key: configKey,
