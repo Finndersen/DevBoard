@@ -4,6 +4,19 @@
 
 **Purpose**: Integrate Anthropic's Claude Code CLI as agent execution engine with virtual tool calling for user approval
 
+## Client Modes
+
+The Claude Code engine supports two client modes, configured via `ClaudeCodeEngineConfig.client_mode`:
+
+| Mode | Class | Billing | Notes |
+|------|-------|---------|-------|
+| `SDK` (default) | `ClaudeSDKClient` | API credits | Headless, no UI dependencies |
+| `INTERACTIVE` | `ClaudeInteractiveClient` | Claude subscription | Requires tmux; uses your Claude.ai Pro subscription rather than API credits |
+
+**SDK mode is the default** and requires no Claude API key if you already have a Claude Code subscription — authentication flows through the Claude Code CLI credentials.
+
+**Interactive mode** runs the agent in a tmux terminal session, billing through your subscription. This is useful if you have a subscription with generous limits and want to avoid consuming programmatic API credits. Requires tmux to be installed and on `PATH`.
+
 ## ClaudeCodeAgent
 
 **Location**: `backend/devboard/agents/engines/claude_code/agent.py`

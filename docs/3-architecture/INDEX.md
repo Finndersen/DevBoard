@@ -36,6 +36,9 @@ Complete data model including entities, relationships, SQLAlchemy implementation
 ### [API Design](./api-design.md)
 RESTful API principles, endpoint patterns, request/response formats, and general API architecture. Learn the API conventions used throughout DevBoard.
 
+### [Worktree Management](./worktree-management.md)
+Git worktree pool per codebase, slot allocation and locking, sticky reuse across agent sessions, and sandbox isolation.
+
 ## Backend Implementation
 
 ### [Backend Directory Structure](./backend/directory-structure.md)

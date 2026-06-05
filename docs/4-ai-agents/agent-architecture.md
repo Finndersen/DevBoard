@@ -55,9 +55,12 @@ DevBoard supports multiple agent execution engines, each with different capabili
 - Can use engine's default model or explicit selection
 - Location: `backend/devboard/agents/engines/claude_code/agent.py`
 
-**Future Engines**:
-- Gemini CLI integration planned
-- Other execution engines can be added following BaseAgent interface
+**GeminiCLIAgent** (`GEMINI_CLI` engine):
+- Integration with Google's Gemini CLI
+- Follows the same BaseAgent interface as other engines
+- Location: `backend/devboard/agents/engines/gemini_cli/`
+
+Additional engines can be added by implementing the BaseAgent interface.
 
 ### Engine Selection
 

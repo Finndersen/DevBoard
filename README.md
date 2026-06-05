@@ -1,84 +1,156 @@
 # DevBoard
 
-> An AI-powered developer command centre for intelligent project management and development workflow automation.
+> A local-first AI-powered developer command centre: structured task workflows, multi-engine AI agents, and automated workspace management.
 
 ## Overview
 
-DevBoard is a **local-first developer command centre** that transforms how developers manage projects, tasks, and development workflows by intelligently orchestrating context from multiple sources and enabling AI-driven assistance throughout the development lifecycle.
+DevBoard is a **local-first developer command centre** that structures the software development workflow around AI agents. Rather than a generic chat interface, DevBoard formalises each task into a guided lifecycle — investigation, specification, implementation planning, and PR review — with specialised AI agents driving each phase.
 
-The platform combines traditional project management with advanced AI agent capabilities, allowing developers to collaborate with specialized AI agents for planning, implementation, and code analysis—all while maintaining comprehensive context from GitHub, Jira, Slack, and local codebases.
-
-DevBoard formalizes the development workflow through a **state-driven task lifecycle** where specialized AI agents guide each phase—from requirements gathering through technical design to implementation. Each task maintains **living artifacts** including detailed specifications, implementation plans, and change summaries that serve as working documents for AI collaboration. The system creates a **continuous improvement feedback loop** where insights from completed tasks automatically update architecture documents, refine agent behavior, and enhance design guidelines, creating a self-optimizing development environment that learns from experience and continuously improves its assistance quality.
+Agents run on your choice of engine and model, and are fully configurable per role with custom instructions. **The default engine is Claude Code SDK**, which uses your existing Claude Code / Claude.ai Pro subscription with no separate API key required. Automatic git worktree management keeps agent workspaces isolated and ready. Background agents let you automate recurring work with manual, scheduled, or event-based triggers.
 
 ## Key Features
 
-### 🤖 AI-Powered Development Assistance
-- **Specialized AI Agents**: Project Q&A, Task Planning, Codebase Investigation, and Implementation agents
-- **Multi-Engine Support**: Choose between internal PydanticAI, Claude Code CLI, or Gemini CLI for different agent roles
-- **Context-Aware Intelligence**: Agents understand full project context from multiple integrated sources
-- **Virtual Tool Calling**: Safe, user-approved AI operations with transparent decision-making
+### 🗂 Structured Task Lifecycle
+- **Spec → Plan → Implement → PR** workflow with distinct task states: Planning, Implementing, PR Open, Complete
+- Each task maintains living documents: a **specification**, a structured **implementation plan** with step-by-step sub-agent execution and status tracking, and a **change summary**
+- Auto-generated task names, branch names, and model selection from an initial prompt
+- Automatic **git worktree / workspace management** — each task gets an isolated workspace from a managed pool, with sticky reuse across sessions
+- **Diff viewer and change approval** flow before committing or creating PRs
+- First-class **GitHub integration**: PR creation, PR status tracking, and PR review within the task view
 
-### 📊 Intelligent Project Management
-- **Living Documentation**: Maintain project specifications through collaborative AI editing
-- **Task Lifecycle Management**: Guided workflows from definition through implementation to completion
-- **Multi-Source Context Assembly**: Automatic integration of GitHub PRs, Jira tickets, Slack discussions, and codebase documentation
-- **Conversational Interface**: Natural language interaction for project status, planning, and execution
+### 🤖 Multi-Engine Agent System
+- **Three execution engines**: built-in PydanticAI (multi-provider LLM), Claude Code CLI/SDK (Anthropic), Gemini CLI (Google)
+- **Claude Code SDK is the default engine** — uses your existing Claude Code / Claude.ai Pro subscription, no separate Anthropic API key needed
+- **Interactive mode** runs the agent via a tmux terminal session, billing through your Claude subscription rather than consuming programmatic API credits
+- Independently configure **engine, model, and custom instructions** for each agent role: Project Q&A, Task Investigation, Task Specification, Task Planning, Task Implementation, Code Review, Step Execution, and Background Agent
+- **Tiered model selection**: Fast / Standard / Advanced tiers across Anthropic, OpenAI, and Google providers
+- Global default engine config with per-role overrides
+- Transparent **tool approval workflow**: agents surface tool calls for user confirmation before execution
+- Bash commands run in an **OS-level sandbox** by default for filesystem and network isolation
 
-### 💻 Developer-Centric Workflow
-- **Browser-Style Multi-Tasking**: Work on multiple projects and tasks simultaneously with persistent tab system
-- **Unified Dashboard**: Single interface for all projects, tasks, and codebases
-- **Real-Time Updates**: WebSocket-powered live agent progress and notifications
-- **Keyboard Shortcuts**: Full keyboard navigation for power users (Cmd+1-9, Cmd+W, Cmd+T)
+### ⏰ Background Agents
+- Define agents with **manual, scheduled (cron), or event-based triggers** (pattern-matched on incoming events)
+- Persistent agent state across runs; full run history with status tracking
+- Configurable engine, model, and MCP tool access per background agent
 
-### 🔗 Seamless Integrations
-- **GitHub**: Repository analysis, PR reviews, issue tracking, commit history
-- **Jira**: Project management, ticket workflows, progress tracking
-- **Slack**: Team communications, discussion threads, decision history
-- **Local Codebases**: File system analysis, architecture documentation generation
-- **Web Resources**: Documentation sites and technical references
+### 🔌 MCP Server Management & Proxy
+- Manage **STDIO and HTTP MCP servers** with connection verification and OAuth 2.0 support
+- **Assign individual MCP tools to specific agent roles** — fine-grained control over what each agent can access
+- Cached tool registry with live status; built-in **tool testing interface**
 
-### 🎨 Modern User Experience
-- **Dark/Light Theme**: Comprehensive theme support with system preference detection
-- **Responsive Design**: Optimized for desktop and mobile workflows
-- **Real-Time Collaboration**: Live agent conversations with streaming responses
-- **Tool Approval Workflow**: Transparent AI operations requiring user approval
+### 📋 Project & Task Management
+- **Project-level context documents** maintained collaboratively with AI — capture architecture, conventions, and current state to ground task agents
+- **Kanban-style task board** across all lifecycle states with filtering by project and status
+- **Active conversations sidebar** with unread indicators and live streaming status
+- Cross-entity agent tools: agents can read other tasks, project docs, and conversation history for shared context
+
+### 🛠 Developer Tooling
+- **Claude Code session viewer**: browse active and historical Claude Code sessions and inspect sub-agent conversations
+- **MCP server dashboard** with tool browser and test interface
+- **HTML, Mermaid diagram, and SVG rendering** inline in conversations for design mockups and architecture diagrams
+- Dark/light theme with system preference detection
+- Keyboard shortcuts for power-user navigation (Cmd+1–9, Cmd+W, Cmd+T)
+
+## Screenshots
+
+<table>
+<tr>
+<td width="50%">
+
+**Kanban task board** — tasks across Planning, Implementing, PR Open, and Complete states
+
+![Kanban task board](screenshots/tasks-kanban-view.png)
+</td>
+<td width="50%">
+
+**Task agent with implementation plan** — structured steps with git status, spec, plan, and summary tabs
+
+![Task agent with implementation plan](screenshots/task-agent-chat-complete-plan.png)
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Project Q&A agent** — chat with a project-level agent that has full access to the project specification
+
+![Project Q&A agent](screenshots/project-agent-chat.png)
+</td>
+<td width="50%">
+
+**Agent configuration** — per-role engine, model, custom instructions, and assigned MCP tools
+
+![Agent configuration](screenshots/settings-agent-config.png)
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**MCP server management** — connect to external MCP servers and browse their tools
+
+![MCP server management](screenshots/mcp-servers-config.png)
+</td>
+<td width="50%">
+
+**Background agent run history** — success rate, token usage, and run log per agent
+
+![Background agent run history](screenshots/background-agent-run-details.png)
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Claude Code session viewer** — browse active and historical Claude Code sessions and sub-agent conversations
+
+![Claude Code session viewer](screenshots/claude-code-session-viewer.png)
+</td>
+<td width="50%">
+
+**Codebase worktree pool** — view and manage the git worktree pool with per-slot status and last-used task
+
+![Codebase worktree pool](screenshots/codebases-worktrees-view.png)
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Events log** — filterable stream of developer, system, and agent events used to trigger background agents
+
+![Events log](screenshots/events-list-view.png)
+</td>
+<td></td>
+</tr>
+</table>
 
 ## Architecture
 
-DevBoard implements a **local client-server architecture** optimized for developer workflows:
+DevBoard is a **local client-server application** — all data and processing runs on your machine.
 
-### Backend Stack
+### Backend
 - **Framework**: FastAPI with async Python, SQLAlchemy 2.0 ORM
-- **AI Integration**: PydanticAI with multi-provider LLM support (OpenAI, Anthropic, Google)
-- **Database**: SQLite (PostgreSQL migration path)
-- **Real-Time**: WebSocket support for agent progress streaming
-- **Observability**: Pydantic Logfire for comprehensive instrumentation
+- **AI**: PydanticAI with multi-provider LLM support (Anthropic, OpenAI, Google)
+- **Database**: SQLite
+- **Streaming**: WebSocket + NDJSON event streaming for live agent output
+- **Observability**: Pydantic Logfire instrumentation
 
-### Frontend Stack
-- **Framework**: React 19+ with TypeScript, Vite build system
-- **State Management**: Zustand with Immer middleware, normalized entity caching
+### Frontend
+- **Framework**: React 19 with TypeScript, Vite
+- **State**: Zustand with Immer, normalised entity caching
 - **Styling**: Tailwind CSS with custom design system
 - **Testing**: Vitest + React Testing Library + MSW
-- **Real-Time**: WebSocket integration for live updates
 
-### Key Architectural Patterns
-- **Local-First**: Primary data and processing on user's machine
-- **Agent-Driven**: AI agents handle complex workflows with human oversight
-- **Context-Aware**: Intelligent multi-source context assembly
-- **Unified Conversations**: Polymorphic conversation architecture supporting all entity types
-- **Browser-Style Tabs**: Multi-task interface with persistent state
-
-### Sandboxing
-
-Bash commands executed by Claude Code agents run in an OS-level sandbox by default, providing filesystem and network isolation to reduce risk from prompt injection and unintended modifications. See [Claude Code Integration](docs/4-ai-agents/claude-code-integration.md) for details on configuration and customisation.
+### Key Patterns
+- **Layered architecture**: API routers → Services → Repositories
+- **Agent-driven workflows**: specialised roles with pluggable execution engines
+- **Worktree pool**: pre-allocated git worktrees for fast task workspace allocation
+- **Polymorphic conversations**: unified conversation system across all entity types
 
 ## Getting Started
 
 ### Prerequisites
-- **Python 3.12+** for backend development
-- **Node.js (LTS)** for frontend development
-- **Docker** for containerized deployment
-- **uv** for Python package management
+- Python 3.12+
+- Node.js (LTS)
+- [uv](https://docs.astral.sh/uv/) — Python package manager
+- A [Claude Code](https://claude.ai/code) subscription (recommended) or API keys for your preferred LLM provider
 
 ### Quick Start
 
@@ -88,85 +160,65 @@ Bash commands executed by Claude Code agents run in an OS-level sandbox by defau
    cd DevBoard
    ```
 
-2. **Run setup** (installs dependencies and runs migrations):
+2. **Run setup** (installs dependencies, runs migrations):
    ```bash
    ./setup.sh
    ```
 
-3. **Start development servers** (runs both backend and frontend):
+3. **Start development servers**:
    ```bash
    ./start.sh
    ```
 
-4. **Access the Application**:
-   - Frontend: http://localhost:5173
-   - Backend API: http://localhost:8000
-   - API Documentation: http://localhost:8000/docs
+4. **Open DevBoard**:
+   - App: http://localhost:5173
+   - API docs: http://localhost:8000/docs
 
 ### Configuration
 
-Configure integrations and AI providers through the Settings interface or environment variables:
+The default engine is Claude Code SDK, which uses your existing Claude Code subscription — no additional API keys required. To use alternative LLM providers, configure them via the Settings interface or environment variables:
 
 ```bash
-# AI Provider Configuration
+# Optional: alternative LLM providers
+ANTHROPIC_API_KEY=your_anthropic_key   # for internal PydanticAI engine with Claude
 OPENAI_API_KEY=your_openai_key
-ANTHROPIC_API_KEY=your_anthropic_key
 GOOGLE_API_KEY=your_google_key
 
-# External Service Integration
+# GitHub integration
 GITHUB_TOKEN=your_github_token
-JIRA_EMAIL=your_jira_email
-JIRA_API_TOKEN=your_jira_token
-SLACK_BOT_TOKEN=your_slack_token
 ```
 
-See `.env.example` for complete configuration options.
+See `.env.example` for the full list of options.
 
 ## Development
 
-### Backend Development
 ```bash
+# Backend
 cd backend
-make lint         # Auto-fix formatting and lint issues with ruff
-make typecheck    # Type-check with pyright (slow — run separately)
-make validate     # Run lint + typecheck together
-make test         # Run test suite
-```
+make install      # install dependencies
+make lint         # auto-fix formatting/lint (ruff)
+make typecheck    # type-check (ty)
+make test         # run test suite
 
-### Frontend Development
-```bash
+# Frontend
 cd frontend
-pnpm dev              # Development server with HMR
-pnpm build            # Production build
-pnpm test             # Run tests
-pnpm type-check       # TypeScript compilation check
-```
-
-### Docker Deployment
-```bash
-docker-compose up -d  # Start all services
+pnpm install
+pnpm dev          # dev server with HMR
+pnpm test         # run tests
+pnpm build        # production build
 ```
 
 ## Documentation
 
-- **[Project Specification](PROJECT_SPECIFICATION.md)**: Comprehensive product vision, requirements, and feature documentation
-- **[Architecture Documentation](ARCHITECTURE.md)**: Detailed technical implementation and system design
-- **[Backend README](backend/README.md)**: Backend-specific development guide
-- **API Documentation**: Available at `/docs` when running the backend
-
-## Testing
-
-DevBoard includes comprehensive test coverage:
-
-- **Backend**: Pytest with async support and fixtures (`make test`)
-- **Frontend**: Vitest + React Testing Library + MSW (`pnpm test`)
-- **Integration**: End-to-end workflow testing across API and UI layers
+- **[Architecture](docs/3-architecture/)**: System design and implementation details
+- **[AI Agents](docs/4-ai-agents/)**: Agent system, roles, engines, and tool configuration
+- **[Features](docs/2-features/)**: Full feature documentation
+- **API docs**: `/docs` when the backend is running
 
 ## License
 
 [License information to be added]
 
-## Support
+## Issues & Feedback
 
-For questions, issues, or feature requests, please [open an issue](../../issues) on GitHub.
-
+Please [open an issue](../../issues) on GitHub for bugs, questions, or feature requests.

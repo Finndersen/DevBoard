@@ -1,267 +1,33 @@
-# MCP Server
+# MCP Integration
 
-**Navigation**: [Documentation Home](../INDEX.md) > [Integrations](./INDEX.md) > MCP Server
-
-## Purpose
-
-The MCP (Model Context Protocol) server allows DevBoard to act as a tool and resource provider for AI clients, enabling external AI assistants to interact with DevBoard's project management, task tracking, and codebase features through a standardized protocol.
+**Navigation**: [Documentation Home](../INDEX.md) > [Integrations](./INDEX.md) > MCP Integration
 
 ## Overview
 
-DevBoard implements an MCP server using the FastMCP framework, providing HTTP-based access via Server-Sent Events (SSE) and Streamable HTTP transports. This allows AI clients (such as Claude Desktop, custom AI agents, or other MCP-compatible applications) to:
+DevBoard has two distinct MCP roles:
 
-- Query projects and tasks
-- Create and manage tasks
-- Access codebase information
-- Retrieve project resources
-- Use AI prompts for project planning and task management
+1. **MCP Client** (primary): DevBoard connects to external MCP servers and makes their tools available to its AI agents. This is the main user-facing feature — configure servers, assign tools to agent roles, and agents gain access to those tools at runtime.
 
-**Location**: `backend/devboard/mcp/`
+2. **MCP Server** (secondary): DevBoard exposes a basic MCP endpoint so external AI clients can query projects and tasks.
 
-## Architecture
-
-### FastMCP Integration
-
-The MCP server is built using the official [Model Context Protocol Python SDK](https://github.com/modelcontextprotocol/python-sdk) with FastMCP integration. It integrates seamlessly with our FastAPI backend, providing:
-
-- **Streamable HTTP Transport**: Uses the current MCP standard transport (SSE is legacy and not supported)
-- **Type Safety**: Leverages Python type hints for automatic schema generation
-- **Easy Tool Definition**: Decorator-based API for defining tools, resources, and prompts
-- **Production Ready**: Official Anthropic implementation with robust error handling
-
-### HTTP Endpoints
-
-The MCP server is mounted at `/mcp` using Streamable HTTP transport:
-
-| Endpoint | Transport | Description |
-|----------|-----------|-------------|
-| `/mcp` | Streamable HTTP | Current MCP standard transport |
-
-## MCP Capabilities
-
-### Tools
-
-Tools are functions that AI clients can invoke to perform actions in DevBoard. The server provides scaffolding for the following tools:
-
-#### `get_projects()`
-Get a list of all projects in DevBoard.
-
-```python
-@mcp.tool()
-async def get_projects() -> dict[str, Any]:
-    """Get a list of all projects in DevBoard."""
-```
-
-#### `get_tasks(project_id: str | None = None)`
-Get a list of tasks, optionally filtered by project.
-
-```python
-@mcp.tool()
-async def get_tasks(project_id: str | None = None) -> dict[str, Any]:
-    """Get a list of tasks, optionally filtered by project."""
-```
-
-#### `create_task(title: str, description: str, project_id: str | None = None)`
-Create a new task in DevBoard.
-
-```python
-@mcp.tool()
-async def create_task(
-    title: str,
-    description: str,
-    project_id: str | None = None,
-) -> dict[str, Any]:
-    """Create a new task in DevBoard."""
-```
-
-#### `get_codebase_info(codebase_id: str)`
-Get information about a codebase.
-
-```python
-@mcp.tool()
-async def get_codebase_info(codebase_id: str) -> dict[str, Any]:
-    """Get information about a codebase."""
-```
-
-### Resources
-
-Resources provide AI clients with access to DevBoard entities using URI-based addressing.
-
-#### Project Resource
-URI pattern: `devboard://project/{project_id}`
-
-```python
-@mcp.resource("devboard://project/{project_id}")
-async def get_project_resource(project_id: str) -> str:
-    """Get a project as an MCP resource."""
-```
-
-#### Task Resource
-URI pattern: `devboard://task/{task_id}`
-
-```python
-@mcp.resource("devboard://task/{task_id}")
-async def get_task_resource(task_id: str) -> str:
-    """Get a task as an MCP resource."""
-```
-
-### Prompts
-
-Prompts are templates that help AI clients interact with DevBoard in contextually appropriate ways.
-
-#### `project_overview_prompt(project_id: str)`
-Generate a prompt for getting a project overview.
-
-```python
-@mcp.prompt()
-async def project_overview_prompt(project_id: str) -> str:
-    """Generate a prompt for getting a project overview."""
-```
-
-#### `task_planning_prompt(task_description: str)`
-Generate a prompt for planning a new task.
-
-```python
-@mcp.prompt()
-async def task_planning_prompt(task_description: str) -> str:
-    """Generate a prompt for planning a new task."""
-```
-
-## Adding New Tools
-
-To add a new tool to the MCP server:
-
-1. **Define the tool function** in `backend/devboard/mcp/server.py`:
-
-```python
-@mcp.tool()
-async def your_tool_name(param1: str, param2: int = 0) -> dict[str, Any]:
-    """Description of what your tool does.
-
-    Args:
-        param1: Description of param1.
-        param2: Description of param2 (optional).
-
-    Returns:
-        A dictionary containing the tool result.
-    """
-    # TODO: Implement your tool logic here
-    return {"result": "your data"}
-```
-
-2. **Type annotations are required** - FastMCP uses them to generate the tool schema
-3. **Docstrings are important** - They become the tool description for AI clients
-4. **Return structured data** - Use dictionaries or Pydantic models for responses
-
-## Adding New Resources
-
-To add a new resource:
-
-```python
-@mcp.resource("devboard://your-resource/{resource_id}")
-async def get_your_resource(resource_id: str) -> str:
-    """Get a resource as an MCP resource.
-
-    Args:
-        resource_id: The ID of the resource to retrieve.
-
-    Returns:
-        A string representation of the resource.
-    """
-    # TODO: Implement resource retrieval
-    return f"Resource {resource_id} data"
-```
-
-## Adding New Prompts
-
-To add a new prompt template:
-
-```python
-@mcp.prompt()
-async def your_prompt_name(param: str) -> str:
-    """Generate a prompt for a specific task.
-
-    Args:
-        param: The parameter for the prompt.
-
-    Returns:
-        A formatted prompt for AI assistants.
-    """
-    return f"""Your prompt template here with {param}
-
-    Include instructions and context for the AI assistant.
-    """
-```
-
-## Implementation Status
-
-The MCP server scaffolding is complete with the following implementation status:
-
-- ✅ Official MCP SDK integration with FastAPI
-- ✅ Streamable HTTP transport endpoint
-- ✅ Tool, resource, and prompt scaffolding
-- 🚧 Database integration for tools (TODO)
-- 🚧 Authentication/authorization (TODO)
-- 🚧 Rate limiting (TODO)
-
-## Testing the MCP Server
-
-### Check Server Status
-
-You can verify the server is running by checking the main API health endpoint:
-
-```bash
-curl http://localhost:8000/health
-```
-
-### Connect with MCP Client
-
-The server can be accessed by any MCP-compatible client using the Streamable HTTP transport at:
-
-```
-http://localhost:8000/mcp
-```
-
-## Dependencies
-
-- **mcp** (>=1.0.0): Official Model Context Protocol Python SDK
-- **fastapi** (>=0.118.0): Web framework for HTTP endpoints
-- **uvicorn** (>=0.24.0): ASGI server for running FastAPI
-
-## Configuration
-
-The MCP server uses the same FastAPI configuration as the rest of DevBoard:
-
-- **CORS**: Configured to allow connections from frontend origins
-- **Logging**: Integrated with DevBoard's Logfire logging
-- **Port**: Runs on the same port as the main FastAPI application (default: 8000)
-
-## Security Considerations
-
-### Authentication (To Be Implemented)
-
-Future enhancements should include:
-- API key authentication for MCP clients
-- Token-based authentication
-- Rate limiting per client
-- Access control for sensitive operations
-
-### Authorization (To Be Implemented)
-
-- Tool-level permissions
-- Resource access control
-- Audit logging of MCP operations
+---
 
 ## MCP Client Integration
 
-In addition to acting as an MCP server, DevBoard can also connect to external MCP servers as a client, allowing its AI agents to use tools provided by those servers.
-
 ### Configuring External MCP Servers
 
-1. Navigate to Settings → Integrations → MCP Servers
-2. Add server configuration (name, server type, connection details)
-3. Click "Verify" to test connection and discover available tools
-4. Tools are stored in the database for assignment to agent roles
+Navigate to **Settings → MCP Servers** to manage external servers.
+
+Each server configuration specifies:
+
+| Field | Description |
+|-------|-------------|
+| `name` | Display name |
+| `server_type` | `STDIO` or `HTTP` |
+| Connection config | `StdioMCPConfig` (command + args) or `HttpMCPConfig` (URL) |
+| Authentication | None, Bearer Token, or OAuth 2.0 |
+
+After saving, click **Verify** to open a live connection, discover available tools, and cache them as `MCPTool` records. The verification status and last-checked timestamp are stored on the server record.
 
 ### Authentication
 
@@ -270,80 +36,107 @@ External MCP servers support three authentication methods:
 | Method | Description |
 |--------|-------------|
 | **None** | No authentication (default) |
-| **Bearer Token** | Static bearer token sent in Authorization header |
+| **Bearer Token** | Static bearer token in `Authorization` header |
 | **OAuth 2.0** | Full OAuth 2.1 flow with auto-discovery, Dynamic Client Registration, and PKCE |
 
-#### OAuth 2.0
+#### OAuth 2.0 Flow
 
-OAuth authentication uses the MCP SDK's built-in `OAuthClientProvider`, which handles the complete OAuth 2.1 flow transparently:
+OAuth authentication uses the MCP SDK's built-in `OAuthClientProvider`:
 
 1. **Auto-discovery** (RFC 9728 Protected Resource Metadata)
 2. **Dynamic Client Registration** (RFC 7591) — automatically registers DevBoard as an OAuth client
 3. **PKCE Authorization** — opens the browser for user consent
 4. **Token Exchange & Refresh** — manages access/refresh tokens automatically
 
-**Basic setup (recommended):** Select "OAuth 2.0" as the authentication type and provide only the server URL. The SDK handles discovery and registration automatically.
+**Basic setup (recommended)**: select "OAuth 2.0" and provide only the server URL; the SDK handles discovery and registration automatically.
 
-**Manual credentials (advanced):** If the server doesn't support Dynamic Client Registration, you can provide a pre-configured Client ID and Client Secret. These are stored and used to skip the registration step.
+**Manual credentials**: if the server doesn't support Dynamic Client Registration, provide a pre-configured Client ID and Secret to skip registration.
 
 **Scopes** can optionally be specified as a space-separated string (e.g., `read write admin`).
 
-#### OAuth Flow During Verification
-
-When you click "Verify" on an OAuth-configured server:
-1. DevBoard constructs an OAuth provider with the server URL and configuration
-2. The MCP SDK discovers the server's OAuth endpoints
-3. If needed, DevBoard registers as an OAuth client via DCR
-4. Your browser opens to the authorization page for consent
-5. After approval, the callback delivers the authorization code to DevBoard
-6. Tokens are exchanged and stored for future use
-
-Subsequent connections (during tool execution) reuse stored tokens. The SDK automatically refreshes expired access tokens using the refresh token. If the refresh token itself expires, the server detail view shows a warning and re-verification (re-authorization) is needed.
+When you click **Verify** on an OAuth-configured server, DevBoard opens the server's authorization page in your browser. After consent, tokens are exchanged and stored. Subsequent connections reuse stored tokens; the SDK automatically refreshes expired access tokens using the refresh token.
 
 #### OAuth Status
 
-The server detail view displays OAuth status for OAuth-configured servers:
-- **Authenticated** (green) — valid tokens are stored
+The server detail view shows the current OAuth state:
+
+- **Authenticated** (green) — valid tokens stored
 - **Token expired** (amber) — re-verification needed
 - **Not authenticated** (gray) — initial authorization pending
 
-### Assigning MCP Tools to Agents
+If the refresh token itself expires, re-verification (re-authorization) is required.
 
-1. Navigate to Settings → Agents
-2. Select an agent role (e.g., Project, Task Planning)
-3. In the "Assigned MCP Tools" section, click "Add Tools"
-4. Select tools from available MCP servers
+### Assigning MCP Tools to Agent Roles
+
+1. Navigate to **Settings → Agents**
+2. Select an agent role (e.g., Task Planning, Task Implementation)
+3. In the **Assigned MCP Tools** section, click **Add Tools**
+4. Select tools from the available MCP servers
 5. Save configuration
+
+Background agents support the same assignment via **Settings → Background Agents → [agent] → Assigned MCP Tools**.
 
 ### Runtime Integration
 
 When an agent with assigned MCP tools executes:
-1. `MCPToolFactory` creates tool instances from the assigned `MCPTool` records
-2. Server connections are established as an async context
-3. Tools are available alongside built-in role tools
+
+1. `MCPToolFactory` creates PydanticAI tool instances from the assigned `MCPTool` records
+2. MCP server connections are established as an async context
+3. Tools are available alongside the role's built-in tools
 4. Connections are cleaned up after execution
 
-**Note**: MCP client integration is only supported for agents using the INTERNAL (PydanticAI) engine. Claude Code manages its own MCP configuration externally.
+**Note**: MCP tool assignment is only available for agents using the **INTERNAL** (PydanticAI) engine. Claude Code manages its own MCP configuration separately (via its own config file).
 
 ### Implementation Details
 
-**Location**: `backend/devboard/mcp/mcp_tool_factory.py`
+**Key classes**:
+- `MCPToolFactory` (`backend/devboard/mcp/mcp_tool_factory.py`): creates PydanticAI tools from `MCPTool` records
+- `MCPServerConfig` (`backend/devboard/db/models/mcp_server.py`): server configuration model
+- `MCPTool` (`backend/devboard/db/models/mcp_server.py`): discovered tool record (name, description, input schema)
+- `MCPLifecycleManager`: manages async client/session lifecycle with event-based setup/teardown
+- `MCPService`: CRUD, verification, and OAuth status management
 
-**Key Classes**:
-- `MCPToolFactory`: Creates PydanticAI tools from MCPTool database records
-- `MCPServerConfig`: Database model for server configuration
-- `MCPTool`: Database model for discovered tools
+---
+
+## DevBoard as an MCP Server
+
+DevBoard exposes its own MCP endpoint so external AI clients (e.g., Claude Desktop) can query projects, tasks, and codebases.
+
+**Endpoint**: `http://localhost:8000/mcp` (Streamable HTTP transport)
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `get_projects()` | List all projects |
+| `get_tasks(project_id?)` | List tasks, optionally filtered by project |
+| `create_task(title, description, project_id?)` | Create a new task |
+| `get_codebase_info(codebase_id)` | Get codebase details |
+
+### Resources
+
+| URI Pattern | Description |
+|-------------|-------------|
+| `devboard://project/{project_id}` | Project resource |
+| `devboard://task/{task_id}` | Task resource |
+
+### Connecting
+
+Add DevBoard to any MCP-compatible client using the Streamable HTTP transport URL:
+
+```
+http://localhost:8000/mcp
+```
+
+---
 
 ## Related Sections
 
-- **[Features - Configuration System](../2-features/configuration-system.md)**: Integration configuration
 - **[AI Agents - Configuration](../4-ai-agents/configuration.md)**: Agent MCP tool assignment
+- **[AI Agents - Background Agents](../4-ai-agents/background-agents.md)**: MCP tools in background agents
 - **[AI Agents - Tools](../4-ai-agents/tools-and-capabilities.md)**: Tool system overview
-- **[Architecture - API Structure](../3-architecture/backend/api-structure.md)**: API design patterns
-- **[Development - Testing](../6-development/testing.md)**: Testing strategies
+- **[Features - Configuration System](../2-features/configuration-system.md)**: Integration configuration UI
 
 ## References
 
 - [Model Context Protocol Specification](https://spec.modelcontextprotocol.io/)
-- [FastMCP Documentation](https://gofastmcp.com/)
-- [FastMCP GitHub Repository](https://github.com/jlowin/fastmcp)
