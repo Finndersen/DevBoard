@@ -1,7 +1,5 @@
 # DevBoard
 
-> A local-first AI-powered developer command centre: structured task workflows, multi-engine AI agents, and automated workspace management.
-
 ## Overview
 
 DevBoard is a **local-first developer command centre** that structures the software development workflow around AI agents. Rather than a generic chat interface, DevBoard formalises each task into a guided lifecycle — investigation, specification, implementation planning, and PR review — with specialised AI agents driving each phase.
