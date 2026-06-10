@@ -62,6 +62,9 @@
 - Show Claude usage
 - Include bas branch changes (commit details) in automatic event task agent context so it can decide whetehr rebase would be useful. 
 - Handle "You've hit your limit" response from sub-agent as error not success
+- add ability for parent agent to inspect sub-agent conversation or last response to see how to resume
+- Tools to list and inspect (summary or ask qeustion) of project / task conversations
+- Need to somehow disable auto mode from user settings.json, is still providing its system prompt to agent even when using bypassPermissions mode
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file
