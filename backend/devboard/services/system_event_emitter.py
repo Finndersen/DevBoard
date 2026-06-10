@@ -57,6 +57,24 @@ class SystemEventEmitter:
             pinned=False,
         )
 
+    def emit_task_merged(self, task: Task, method: str) -> LogEntry:
+        """Emit a task.merged event.
+
+        Args:
+            task: The merged task
+            method: Merge method — one of "local_merge", "pr_merge"
+        """
+        return self.log_entry_repo.create(
+            source=LogEntrySource.SYSTEM,
+            type="task.merged",
+            content=f"Task '{task.title}' was merged",
+            project_id=task.project_id,
+            task_id=task.id,
+            entry_metadata={"task_title": task.title, "merge_method": method},
+            status=LogEntryStatus.ACTIVE,
+            pinned=False,
+        )
+
     def emit_project_created(self, project: Project) -> LogEntry:
         """Emit a project.created event."""
         return self.log_entry_repo.create(

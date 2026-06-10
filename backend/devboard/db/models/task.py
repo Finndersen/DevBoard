@@ -24,6 +24,7 @@ class TaskStatus(StrEnum):
     PLANNING = "planning"
     IMPLEMENTING = "implementing"
     PR_OPEN = "pr_open"
+    MERGED = "merged"
     COMPLETE = "complete"
 
 
@@ -105,8 +106,9 @@ class Task(Base):
     # Valid status transitions: from_status -> set of allowed target statuses
     VALID_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
         TaskStatus.PLANNING: {TaskStatus.IMPLEMENTING},
-        TaskStatus.IMPLEMENTING: {TaskStatus.PR_OPEN, TaskStatus.COMPLETE},
-        TaskStatus.PR_OPEN: {TaskStatus.COMPLETE},
+        TaskStatus.IMPLEMENTING: {TaskStatus.PR_OPEN, TaskStatus.MERGED},
+        TaskStatus.PR_OPEN: {TaskStatus.MERGED},
+        TaskStatus.MERGED: {TaskStatus.COMPLETE},
         TaskStatus.COMPLETE: set(),
     }
 

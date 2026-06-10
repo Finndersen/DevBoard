@@ -2,6 +2,7 @@ export enum TaskStatus {
   PLANNING = 'planning',
   IMPLEMENTING = 'implementing',
   PR_OPEN = 'pr_open',
+  MERGED = 'merged',
   COMPLETE = 'complete',
 }
 

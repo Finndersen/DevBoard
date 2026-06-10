@@ -38,6 +38,7 @@ const WORKFLOW_ACTION_LABELS: Record<string, string> = {
   'task.approve_and_create_pr': 'Approve & Create PR',
   'task.merge_and_finalise': 'Merge PR & Complete',
   'task.finalise': 'Complete Task',
+  'task.archive': 'Archive Task',
 }
 
 function getActionLabel(
@@ -89,7 +90,7 @@ function TaskDetail({ id }: TaskDetailProps) {
       .catch(err => console.error('Failed to load task custom field definitions:', err))
   }, [])
 
-  const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes' | 'pullrequest' | 'summary'>('specification')
+  const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes' | 'pullrequest' | 'summary' | 'finalise'>('specification')
 
   // PR status sourced from the unified github store
   const fetchForTask = useGithubStore(s => s.fetchForTask)
@@ -109,7 +110,7 @@ function TaskDetail({ id }: TaskDetailProps) {
     setPrDetailError(false)
     prDetailFetchedRef.current = false
 
-    if (task?.id && task.github_pr_number && (task.status === TaskStatus.PR_OPEN || task.status === TaskStatus.COMPLETE)) {
+    if (task?.id && task.github_pr_number && [TaskStatus.PR_OPEN, TaskStatus.MERGED, TaskStatus.COMPLETE].includes(task.status)) {
       fetchForTask(task.id)
       apiClient.getTaskPRFeedback(task.id)
         .then(setPrFeedback)
@@ -188,6 +189,13 @@ function TaskDetail({ id }: TaskDetailProps) {
   useEffect(() => {
     refetch()
   }, [id, refetch])
+
+  // Switch to finalise tab when task is in MERGED state (initial load or on transition)
+  useEffect(() => {
+    if (task?.status === TaskStatus.MERGED) {
+      setActiveTab('finalise')
+    }
+  }, [task?.id, task?.status])
 
   // Fetch project data using hook (never fetch automatically)
   const projectId = task?.project_id ?? 0
@@ -523,13 +531,14 @@ function TaskDetail({ id }: TaskDetailProps) {
   }
 
   const handleStepClick = useCallback((stepId: string) => {
-    // Map stepper step IDs to tab names (stepper uses: specification, plan, changes, summary, pullrequest)
+    // Map stepper step IDs to tab names (stepper uses: specification, plan, changes, summary, pullrequest, finalise)
     const stepToTab: Record<string, typeof activeTab> = {
       'specification': 'specification',
       'plan': 'plan',
       'changes': 'changes',
       'summary': 'summary',
-      'pullrequest': 'pullrequest'
+      'pullrequest': 'pullrequest',
+      'finalise': 'finalise',
     }
     const tab = stepToTab[stepId]
     if (tab) {
@@ -570,6 +579,9 @@ function TaskDetail({ id }: TaskDetailProps) {
       },
       'task.finalise': {
         loadingMessage: 'Completing task...',
+      },
+      'task.archive': {
+        loadingMessage: 'Archiving task...',
       },
     }
     return configs[actionKey] || { loadingMessage: 'Processing...' }
@@ -673,9 +685,9 @@ function TaskDetail({ id }: TaskDetailProps) {
               hasSpecification={!!specificationDoc?.content}
               hasPlan={!!(task.implementation_plan_id || task.implementation_plan_document_id)}
               planStatus={implementationPlan?.status as 'pending' | 'executing' | 'complete' | 'failed' | undefined}
-              hasChanges={!!(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN, TaskStatus.COMPLETE].includes(task.status))}
+              hasChanges={!!(task.codebase_id && [TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN, TaskStatus.MERGED, TaskStatus.COMPLETE].includes(task.status))}
               changeCount={diffData?.files?.length}
-              hasPR={!!(task.github_pr_number && [TaskStatus.PR_OPEN, TaskStatus.COMPLETE].includes(task.status))}
+              hasPR={!!(task.github_pr_number && [TaskStatus.PR_OPEN, TaskStatus.MERGED, TaskStatus.COMPLETE].includes(task.status))}
               prStatus={prStatus ? {
                 mergeable_state: prStatus.mergeable_state,
                 ci_status: prStatus.ci_status,
@@ -703,7 +715,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                 />
               )}
 
-              {activeTab === 'changes' && task.status !== TaskStatus.COMPLETE && (
+              {activeTab === 'changes' && ![TaskStatus.COMPLETE, TaskStatus.MERGED].includes(task.status) && (
                 <ChangesTab
                   branchInfo={branchInfo}
                   diffData={diffData}
@@ -720,7 +732,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                 />
               )}
 
-              {activeTab === 'changes' && task.status === TaskStatus.COMPLETE && (
+              {activeTab === 'changes' && [TaskStatus.MERGED, TaskStatus.COMPLETE].includes(task.status) && (
                 <SummaryTab changeSummaryDoc={changeSummaryDoc} />
               )}
 
@@ -742,6 +754,17 @@ function TaskDetail({ id }: TaskDetailProps) {
 
               {activeTab === 'summary' && (
                 <SummaryTab changeSummaryDoc={changeSummaryDoc} />
+              )}
+
+              {activeTab === 'finalise' && (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className={`text-sm font-medium ${textColors.primary} mb-1`}>Task Finalisation</h3>
+                    <p className={`text-sm ${textColors.secondary}`}>
+                      The branch has been merged. Use the chat to update the project specification, external documentation, and Jira status, or create follow-up tasks before archiving.
+                    </p>
+                  </div>
+                </div>
               )}
             </div>
           </Card>

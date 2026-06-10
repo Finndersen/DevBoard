@@ -12,6 +12,7 @@ from devboard.services.workspace.types import AllocationResult
 from devboard.workflow_actions.task_workflows import (
     ApproveAndCreatePRAction,
     ApproveAndMergeAction,
+    ArchiveTaskAction,
     BeginImplementationAction,
     RebaseTaskBranchAction,
     _get_task_changes_prompt_context,
@@ -145,14 +146,14 @@ class TestApproveAndMergePrompt:
     def test_always_includes_complete_task_tool(self, merge_method: MergeMethod):
         prompt = ApproveAndMergeAction._build_prompt(merge_method, self.CHANGES_CONTEXT)
 
-        assert "complete_task_with_local_merge" in prompt
+        assert "merge_branch_and_finalise" in prompt
 
     def test_unknown_merge_method_uses_fallback(self):
         prompt = ApproveAndMergeAction._build_prompt("unknown_method", self.CHANGES_CONTEXT)
 
         assert "appropriate commit(s)" in prompt
         assert "clear commit messages" in prompt
-        assert "complete_task_with_local_merge" in prompt
+        assert "merge_branch_and_finalise" in prompt
 
 
 def _make_action(action_class, task, **kwargs):
@@ -292,7 +293,7 @@ class TestApproveAndMergeActionRun:
             result = await action.run()
 
         assert result is not None
-        assert "complete_task_with_local_merge" in result
+        assert "merge_branch_and_finalise" in result
         assert "rebased" not in result  # no rebase note
 
     @pytest.mark.asyncio
@@ -330,7 +331,7 @@ class TestApproveAndMergeActionRun:
             result = await action.run()
 
         assert result is not None
-        assert "complete_task_with_local_merge" in result
+        assert "merge_branch_and_finalise" in result
         assert "rebased" in result  # rebase note prepended
 
     @pytest.mark.asyncio
@@ -361,7 +362,7 @@ class TestApproveAndMergeActionRun:
 
         assert result is not None
         assert "Conflicts in src/api.py" in result
-        assert "complete_task_with_local_merge" in result
+        assert "merge_branch_and_finalise" in result
 
     @pytest.mark.asyncio
     async def test_stash_conflict_returns_stash_conflict_prompt_with_merge_instructions(
@@ -395,7 +396,7 @@ class TestApproveAndMergeActionRun:
 
         assert result is not None
         assert "stash" in result.lower()
-        assert "complete_task_with_local_merge" in result
+        assert "merge_branch_and_finalise" in result
         assert "rebase is complete" not in result  # must not say rebase is still in progress
 
 
@@ -734,3 +735,35 @@ class TestApproveAndCreatePRActionRun:
         assert "stash" in result.lower()
         assert "create_pull_request" in result
         assert "rebase is complete" not in result  # must not say rebase is still in progress
+
+
+class TestArchiveTaskAction:
+    def _make_action(self, task) -> ArchiveTaskAction:
+        return _make_action(ArchiveTaskAction, task)
+
+    def test_is_available_when_merged(self):
+        task = Mock()
+        task.status = TaskStatus.MERGED
+
+        assert ArchiveTaskAction.is_available(task) is True
+
+    @pytest.mark.parametrize(
+        "status",
+        [TaskStatus.PLANNING, TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN, TaskStatus.COMPLETE],
+    )
+    def test_is_not_available_for_other_statuses(self, status):
+        task = Mock()
+        task.status = status
+
+        assert ArchiveTaskAction.is_available(task) is False
+
+    @pytest.mark.asyncio
+    async def test_run_transitions_to_complete_and_commits(self):
+        task = Mock()
+        action = self._make_action(task)
+
+        result = await action.run()
+
+        assert result is None
+        action.task_service.transition_to_complete.assert_called_once_with(task, method="archive")
+        action.conversation_repo.commit.assert_called_once()

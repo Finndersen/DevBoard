@@ -45,6 +45,7 @@ export default function Settings() {
     { key: 'task_planning', name: 'Task Planning Agent', description: 'Creates implementation plans for tasks' },
     { key: 'task_implementation', name: 'Task Implementation Agent', description: 'Provides implementation guidance and code suggestions' },
     { key: 'task_pr_review', name: 'Task PR Review Agent', description: 'Reviews pull requests and provides feedback' },
+    { key: 'task_finalisation', name: 'Task Finalisation Agent', description: 'Handles post-merge follow-up: updating project spec, external docs, Jira status, and creating follow-up tasks.' },
     { key: 'investigation', name: 'Investigation Agent', description: 'Analyzes codebases and gathers context' },
     { key: 'code_review', name: 'Code Review Agent', description: 'Reviews code changes and provides detailed feedback' },
     { key: 'step_execution', name: 'Step Execution Agent', description: 'Executes individual implementation plan steps' },

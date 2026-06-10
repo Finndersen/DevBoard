@@ -134,7 +134,7 @@ class TestTaskPRReviewAgentRole:
 
         assert "get_pr_status" in tool_names
         assert "get_pr_feedback" in tool_names
-        assert "merge_pr_and_complete_task" in tool_names
+        assert "merge_pr_and_finalise" in tool_names
 
     def test_get_tools_total_count(self, role):
         """Test the total number of tools returned."""
@@ -142,7 +142,7 @@ class TestTaskPRReviewAgentRole:
         # 4 common (list_tasks, view_task_details, create_task, investigate_codebase)
         # + 2 codebase tools (view_codebase_details, update_codebase)
         # + inspect_conversation
-        # + 5 PR-specific (get_pr_status, get_pr_feedback, code_structure_search, directory_tree, merge_pr_and_complete_task)
+        # + 5 PR-specific (get_pr_status, get_pr_feedback, code_structure_search, directory_tree, merge_pr_and_finalise)
         assert len(tools) == 12
 
     def test_system_prompt_content(self, role):

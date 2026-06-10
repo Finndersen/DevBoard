@@ -3,7 +3,8 @@ import {
   NumberedListIcon,
   CodeBracketIcon,
   ArrowPathIcon,
-  XCircleIcon
+  XCircleIcon,
+  CheckCircleIcon,
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon as CheckCircleSolidIcon } from '@heroicons/react/24/solid'
 import { TaskStatus } from '../../lib/api'
@@ -12,7 +13,7 @@ import { StatusIndicator, ReviewBadge } from '../github/PRStatusComponents'
 import { borderColors } from '../../styles/designSystem'
 
 export interface TaskArtifactStepperProps {
-  activeStep: 'specification' | 'plan' | 'changes' | 'pullrequest' | 'summary'
+  activeStep: 'specification' | 'plan' | 'changes' | 'pullrequest' | 'summary' | 'finalise'
   onStepClick: (step: string) => void
   taskStatus: TaskStatus
   hasSpecification: boolean
@@ -68,14 +69,14 @@ export function TaskArtifactStepper({
 
       case 'plan':
         // Complete when past implementing, or all implementation steps finished
-        if (hasPlan && [TaskStatus.PR_OPEN, TaskStatus.COMPLETE].includes(status)) return 'complete'
+        if (hasPlan && [TaskStatus.PR_OPEN, TaskStatus.MERGED, TaskStatus.COMPLETE].includes(status)) return 'complete'
         if (hasPlan && planStatus === 'complete') return 'complete'
         // Active during planning (once plan exists) and throughout implementation
         if (hasPlan && [TaskStatus.PLANNING, TaskStatus.IMPLEMENTING].includes(status)) return 'active'
         return 'pending'
 
       case 'changes':
-        if ([TaskStatus.PR_OPEN, TaskStatus.COMPLETE].includes(status)) return 'complete'
+        if ([TaskStatus.PR_OPEN, TaskStatus.MERGED, TaskStatus.COMPLETE].includes(status)) return 'complete'
         if (status === TaskStatus.IMPLEMENTING) return 'active'
         return 'pending'
 
@@ -84,8 +85,13 @@ export function TaskArtifactStepper({
         return 'pending'
 
       case 'pullrequest':
-        if (prStatus?.merged) return 'complete'
+        if (prStatus?.merged || (hasPR && [TaskStatus.MERGED, TaskStatus.COMPLETE].includes(status))) return 'complete'
         if (status === TaskStatus.PR_OPEN) return 'active'
+        return 'pending'
+
+      case 'finalise':
+        if (status === TaskStatus.COMPLETE) return 'complete'
+        if (status === TaskStatus.MERGED) return 'active'
         return 'pending'
 
       default:
@@ -170,6 +176,15 @@ export function TaskArtifactStepper({
       state: getStepState('pullrequest'),
       isClickable: hasPR,
       badge: getPRBadges(),
+      statusIcon: undefined,
+    },
+    {
+      id: 'finalise',
+      name: 'Finalise',
+      icon: CheckCircleIcon,
+      state: getStepState('finalise'),
+      isClickable: [TaskStatus.MERGED, TaskStatus.COMPLETE].includes(status),
+      badge: undefined,
       statusIcon: undefined,
     },
   ]

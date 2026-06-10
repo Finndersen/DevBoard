@@ -10,7 +10,7 @@ from devboard.agents.tools import (
     create_directory_tree_tool,
     create_get_pr_feedback_tool,
     create_get_pr_status_tool,
-    create_merge_pr_and_complete_task_tool,
+    create_merge_pr_and_finalise_tool,
 )
 from devboard.db.models import Task
 from devboard.db.repositories.conversation import ConversationRepository
@@ -98,7 +98,7 @@ class TaskPRReviewAgentRole(TaskAgentRoleBase):
                 create_get_pr_feedback_tool(self.task, self.github_integration),
                 create_code_structure_search_tool(codebase_integration),
                 create_directory_tree_tool(codebase_integration),
-                create_merge_pr_and_complete_task_tool(self.task, self.task_service, self.github_integration),
+                create_merge_pr_and_finalise_tool(self.task, self.task_service, self.github_integration),
             ]
         )
         return tools

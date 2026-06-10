@@ -162,7 +162,7 @@ IMPORTANT: The git status above already contains the current branch state includ
 
 {commit_instruction}
 
-Once all changes are committed, use the `complete_task_with_local_merge` tool to merge the feature branch and complete the task. Include a change_summary with:
+Once all changes are committed, use the `merge_branch_and_finalise` tool to merge the feature branch and transition to finalisation. Include a change_summary with:
 - A brief overview of what was implemented
 - Key files that were added or modified
 - Any notable implementation decisions or trade-offs
@@ -350,5 +350,20 @@ class FinaliseAction(TaskWorkflowAction):
 
     async def run(self) -> str | None:
         self.task_service.transition_to_complete(self.task)
+        self.conversation_repo.commit()
+        return None
+
+
+class ArchiveTaskAction(TaskWorkflowAction):
+    """Archive a task after the finalisation phase is complete."""
+
+    KEY = "task.archive"
+
+    @classmethod
+    def is_available(cls, task: Task) -> bool:
+        return task.status == TaskStatus.MERGED
+
+    async def run(self) -> str | None:
+        self.task_service.transition_to_complete(self.task, method="archive")
         self.conversation_repo.commit()
         return None

@@ -6,10 +6,10 @@ from devboard.agents.roles.context_helpers import build_task_context
 from devboard.agents.roles.task_base import TaskAgentRoleBase
 from devboard.agents.tools import (
     create_code_structure_search_tool,
-    create_complete_task_with_local_merge_tool,
     create_directory_tree_tool,
     create_document_edit_tool,
     create_github_pr_tool,
+    create_merge_branch_and_finalise_tool,
     create_rebase_task_branch_tool,
     create_set_document_content_tool,
 )
@@ -188,8 +188,8 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
             # GitHub PR workflow: create PR tool
             tools.append(create_github_pr_tool(self.task, self.github_integration, self.task_service))
         elif branch_handling == BranchHandling.DIRECT_MERGE.value:
-            # Direct merge workflow: complete_task_with_local_merge tool handles change summary + merge
-            tools.append(create_complete_task_with_local_merge_tool(self.task, self.task_service))
+            # Direct merge workflow: merge_branch_and_finalise tool handles change summary + merge
+            tools.append(create_merge_branch_and_finalise_tool(self.task, self.task_service))
         # For MANUAL branch handling, no completion tools are provided
 
         return tools

@@ -4,6 +4,7 @@ from pydantic_ai import ModelRetry, Tool
 
 from devboard.db.models import Task
 from devboard.db.models.codebase import MergeMethod
+from devboard.db.models.task import TaskStatus
 from devboard.integrations.git import GitRepoIntegration
 from devboard.integrations.github import GitHubIntegration
 from devboard.services.task_git import BaseWorkdirOverlapError
@@ -11,29 +12,30 @@ from devboard.services.task_git.types import MergeFailureError, MergeOutcome, Ta
 from devboard.services.task_service import TaskService
 
 
-def create_complete_task_with_local_merge_tool(
+def create_merge_branch_and_finalise_tool(
     task: Task,
     task_service: TaskService,
 ) -> Tool:
-    """Create a tool for completing a task via local merge.
+    """Create a tool for merging a task branch locally and finalising the task.
 
     This tool validates preconditions, creates the change summary document,
-    executes the merge strategy, and transitions the task to COMPLETE status.
+    executes the merge strategy, and transitions the task to MERGED status.
 
     Args:
-        task: The task to complete
+        task: The task to merge
         task_service: Service for task operations (includes merge logic)
     """
 
-    async def complete_task_with_local_merge(change_summary: str) -> str:
-        """Complete the task by merging the feature branch locally.
+    async def merge_branch_and_finalise(change_summary: str) -> str:
+        """Merge the feature branch locally and transition to MERGED status.
 
         This tool will:
         1. Validate that all changes are committed (git state is clean)
         2. Save the change summary document
         3. Merge the feature branch into the base branch using the configured merge strategy
         4. Delete the feature branch
-        5. Transition the task to COMPLETE status
+        5. Transition the task to MERGED status
+        6. Replace active conversation with TASK_FINALISATION agent
 
         IMPORTANT: Before calling this tool, ensure all changes are committed
         (no uncommitted changes in workspace).
@@ -60,9 +62,9 @@ def create_complete_task_with_local_merge_tool(
                 "Please commit all changes before completing the task."
             )
 
-        # Execute merge and transition to complete (creates change_summary document)
+        # Execute merge and transition to merged (creates change_summary document)
         try:
-            merge_result = await task_service.complete_task_with_local_merge(task, change_summary)
+            merge_result = await task_service.merge_task_branch(task, change_summary)
         except BaseWorkdirOverlapError as e:
             return f"{e}\n\nSTOP. Inform the user that they need to commit or stash their uncommitted changes before this task can be merged."
         except MergeFailureError as e:
@@ -73,45 +75,46 @@ def create_complete_task_with_local_merge_tool(
                     "To resolve this:\n"
                     "1. Call rebase_task_branch() to rebase the feature branch onto the latest base branch\n"
                     "2. If there are conflicts, resolve them manually\n"
-                    "3. Then call complete_task_with_local_merge() again"
+                    "3. Then call merge_branch_and_finalise() again"
                 )
             raise ModelRetry(error_msg) from e
         except TaskConfigurationError as e:
             raise ModelRetry(str(e)) from e
 
-        result = f"Task completed successfully. {merge_result.message}"
+        result = f"Task merged successfully. {merge_result.message}"
         if merge_result.merge_commit:
             result += f" Merge commit: {merge_result.merge_commit}"
         return result
 
-    return Tool(function=complete_task_with_local_merge, name="complete_task_with_local_merge")  # ty:ignore[invalid-argument-type, invalid-return-type]
+    return Tool(function=merge_branch_and_finalise, name="merge_branch_and_finalise")  # ty:ignore[invalid-argument-type, invalid-return-type]
 
 
-def create_merge_pr_and_complete_task_tool(
+def create_merge_pr_and_finalise_tool(
     task: Task,
     task_service: TaskService,
     github_integration: GitHubIntegration,
 ) -> Tool:
-    """Create a tool for merging a PR and completing the task.
+    """Create a tool for merging a PR and finalising the task.
 
     This tool merges the PR via GitHub API, then handles cleanup (branch deletion,
-    change summary creation) and task status transition.
+    change summary creation) and task status transition to MERGED.
 
     Args:
-        task: The task to complete
+        task: The task to merge
         task_service: Service for task operations
         github_integration: GitHub integration for API calls
     """
 
-    async def merge_pr_and_complete_task(change_summary: str) -> str:
-        """Merge the pull request and complete the task.
+    async def merge_pr_and_finalise(change_summary: str) -> str:
+        """Merge the pull request and transition to MERGED status.
 
         This tool will:
         1. Validate that all changes are committed (git state is clean)
         2. Merge the pull request via GitHub using the configured merge method (squash, rebase, or merge commit)
         3. Save the change summary document
         4. Delete the local feature branch
-        5. Transition the task to COMPLETE status
+        5. Transition the task to MERGED status
+        6. Replace active conversation with TASK_FINALISATION agent
 
         IMPORTANT: Before calling this tool, ensure all changes are committed and pushed
         (no uncommitted changes in workspace).
@@ -154,13 +157,13 @@ def create_merge_pr_and_complete_task_tool(
         # Check PR status before attempting merge
         pr_status = await github_pr.get_status()
 
-        # If PR is already merged (e.g., merged directly on GitHub), skip merge but still complete task
+        # If PR is already merged (e.g., merged directly on GitHub), skip merge but still finalise task
         if pr_status.merged:
             try:
-                await task_service.complete_pr_task(task, change_summary)
+                await task_service.merge_pr_task(task, change_summary)
             except ValueError as e:
                 raise ModelRetry(str(e)) from e
-            return "Task completed successfully. PR was already merged on GitHub."
+            return "Task merged successfully. PR was already merged on GitHub."
 
         # PR must be open to merge
         if pr_status.state != "open":
@@ -193,13 +196,48 @@ def create_merge_pr_and_complete_task_tool(
         if not merge_result.merged:
             raise ModelRetry(f"PR merge was not successful: {merge_result.message}")
 
-        # Complete the task (creates change summary, deletes branch, transitions status)
+        # Merge the task (creates change summary, deletes branch, transitions status)
         try:
-            await task_service.complete_pr_task(task, change_summary)
+            await task_service.merge_pr_task(task, change_summary)
         except ValueError as e:
             raise ModelRetry(str(e)) from e
 
-        result = f"Task completed successfully. PR merged via {merge_method.value}. Merge commit: {merge_result.sha}"
+        result = f"Task merged successfully. PR merged via {merge_method.value}. Merge commit: {merge_result.sha}"
         return result
 
-    return Tool(function=merge_pr_and_complete_task, name="merge_pr_and_complete_task")  # ty:ignore[invalid-argument-type, invalid-return-type]
+    return Tool(function=merge_pr_and_finalise, name="merge_pr_and_finalise")  # ty:ignore[invalid-argument-type, invalid-return-type]
+
+
+def create_finalise_task_tool(
+    task: Task,
+    task_service: TaskService,
+) -> Tool:
+    """Create a tool for finalising a task after merge.
+
+    Transitions the task from MERGED to COMPLETE status.
+
+    Args:
+        task: The task to finalise
+        task_service: Service for task operations
+    """
+
+    async def finalise_task() -> str:
+        """Finalise the task by transitioning it to COMPLETE status.
+
+        Call this after completing all post-merge housekeeping:
+        - Reviewing what was built
+        - Updating the project specification
+        - Updating external documentation or Jira issues
+        - Creating any necessary follow-up tasks
+
+        Raises:
+            ModelRetry: If the task is not in MERGED status.
+        """
+        if task.status != TaskStatus.MERGED:
+            raise ModelRetry(
+                f"Cannot finalise task: task must be in MERGED status, but is currently {task.status.value}."
+            )
+        task_service.transition_to_complete(task, method="finalise")
+        return "Task has been finalised and transitioned to COMPLETE status."
+
+    return Tool(function=finalise_task, name="finalise_task")  # ty:ignore[invalid-argument-type, invalid-return-type]

@@ -6,8 +6,8 @@ import pytest
 from pydantic_ai import ModelRetry, Tool
 
 from devboard.agents.tools.task_completion_tools import (
-    create_complete_task_with_local_merge_tool,
-    create_merge_pr_and_complete_task_tool,
+    create_merge_branch_and_finalise_tool,
+    create_merge_pr_and_finalise_tool,
 )
 from devboard.db.models import Task
 from devboard.db.models.codebase import MergeMethod
@@ -31,19 +31,19 @@ def mock_task():
 def mock_task_service():
     """Create a mock TaskService."""
     service = Mock(spec=TaskService)
-    service.complete_task_with_local_merge = AsyncMock()
+    service.merge_task_branch = AsyncMock()
     return service
 
 
-class TestCreateCompleteTaskWithLocalMergeTool:
-    """Tests for create_complete_task_with_local_merge_tool."""
+class TestCreateMergeBranchAndFinaliseTool:
+    """Tests for create_merge_branch_and_finalise_tool."""
 
     def test_tool_creation(self, mock_task, mock_task_service):
         """Tool is created with correct name."""
-        tool = create_complete_task_with_local_merge_tool(mock_task, mock_task_service)
+        tool = create_merge_branch_and_finalise_tool(mock_task, mock_task_service)
 
         assert isinstance(tool, Tool)
-        assert tool.name == "complete_task_with_local_merge"
+        assert tool.name == "merge_branch_and_finalise"
         assert tool.function is not None
 
     @pytest.mark.asyncio
@@ -54,14 +54,14 @@ class TestCreateCompleteTaskWithLocalMergeTool:
             mock_git.has_uncommitted_changes = AsyncMock(return_value=True)
             mock_git_class.return_value = mock_git
 
-            tool = create_complete_task_with_local_merge_tool(mock_task, mock_task_service)
+            tool = create_merge_branch_and_finalise_tool(mock_task, mock_task_service)
 
             with pytest.raises(ModelRetry) as exc_info:
                 await tool.function(change_summary="Test summary")
 
             assert "Cannot merge" in str(exc_info.value)
             assert "uncommitted changes" in str(exc_info.value)
-            mock_task_service.complete_task_with_local_merge.assert_not_called()
+            mock_task_service.merge_task_branch.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_successful_merge(self, mock_task, mock_task_service):
@@ -72,22 +72,20 @@ class TestCreateCompleteTaskWithLocalMergeTool:
             message="Squash merged feature branch into main",
             merge_commit="abc123",
         )
-        mock_task_service.complete_task_with_local_merge.return_value = merge_result
+        mock_task_service.merge_task_branch.return_value = merge_result
 
         with patch("devboard.agents.tools.task_completion_tools.GitRepoIntegration") as mock_git_class:
             mock_git = Mock()
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_complete_task_with_local_merge_tool(mock_task, mock_task_service)
+            tool = create_merge_branch_and_finalise_tool(mock_task, mock_task_service)
             result = await tool.function(change_summary="Test change summary content")
 
-            assert "Task completed successfully" in result
+            assert "Task merged successfully" in result
             assert "Squash merged feature branch into main" in result
             assert "abc123" in result
-            mock_task_service.complete_task_with_local_merge.assert_called_once_with(
-                mock_task, "Test change summary content"
-            )
+            mock_task_service.merge_task_branch.assert_called_once_with(mock_task, "Test change summary content")
 
     @pytest.mark.asyncio
     async def test_successful_merge_without_commit_hash(self, mock_task, mock_task_service):
@@ -98,24 +96,24 @@ class TestCreateCompleteTaskWithLocalMergeTool:
             message="Rebased feature branch onto main",
             merge_commit=None,
         )
-        mock_task_service.complete_task_with_local_merge.return_value = merge_result
+        mock_task_service.merge_task_branch.return_value = merge_result
 
         with patch("devboard.agents.tools.task_completion_tools.GitRepoIntegration") as mock_git_class:
             mock_git = Mock()
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_complete_task_with_local_merge_tool(mock_task, mock_task_service)
+            tool = create_merge_branch_and_finalise_tool(mock_task, mock_task_service)
             result = await tool.function(change_summary="Test summary")
 
-            assert "Task completed successfully" in result
+            assert "Task merged successfully" in result
             assert "Rebased feature branch onto main" in result
             assert "Merge commit:" not in result
 
     @pytest.mark.asyncio
     async def test_base_branch_overlap_returns_stop_message(self, mock_task, mock_task_service):
         """Returns stop message (not ModelRetry) when base branch has uncommitted changes overlapping feature branch."""
-        mock_task_service.complete_task_with_local_merge.side_effect = BaseWorkdirOverlapError(
+        mock_task_service.merge_task_branch.side_effect = BaseWorkdirOverlapError(
             "/repo", ["backend/devboard/agents/roles/task_implementation.py"]
         )
 
@@ -124,7 +122,7 @@ class TestCreateCompleteTaskWithLocalMergeTool:
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_complete_task_with_local_merge_tool(mock_task, mock_task_service)
+            tool = create_merge_branch_and_finalise_tool(mock_task, mock_task_service)
             result = await tool.function(change_summary="Test summary")
 
             assert "overlap with feature branch changes" in result
@@ -134,7 +132,7 @@ class TestCreateCompleteTaskWithLocalMergeTool:
     @pytest.mark.asyncio
     async def test_merge_conflict_raises_model_retry_with_rebase_instructions(self, mock_task, mock_task_service):
         """Raises ModelRetry with rebase instructions when merge fails with CONFLICT outcome."""
-        mock_task_service.complete_task_with_local_merge.side_effect = MergeFailureError(
+        mock_task_service.merge_task_branch.side_effect = MergeFailureError(
             MergeOutcome.CONFLICT, "Conflicts detected in src/main.py"
         )
 
@@ -143,7 +141,7 @@ class TestCreateCompleteTaskWithLocalMergeTool:
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_complete_task_with_local_merge_tool(mock_task, mock_task_service)
+            tool = create_merge_branch_and_finalise_tool(mock_task, mock_task_service)
 
             with pytest.raises(ModelRetry) as exc_info:
                 await tool.function(change_summary="Test summary")
@@ -158,7 +156,7 @@ class TestCreateCompleteTaskWithLocalMergeTool:
         self, mock_task, mock_task_service
     ):
         """Raises ModelRetry without rebase instructions for non-conflict merge failures."""
-        mock_task_service.complete_task_with_local_merge.side_effect = MergeFailureError(
+        mock_task_service.merge_task_branch.side_effect = MergeFailureError(
             MergeOutcome.ERROR, "An internal error occurred"
         )
 
@@ -167,7 +165,7 @@ class TestCreateCompleteTaskWithLocalMergeTool:
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_complete_task_with_local_merge_tool(mock_task, mock_task_service)
+            tool = create_merge_branch_and_finalise_tool(mock_task, mock_task_service)
 
             with pytest.raises(ModelRetry) as exc_info:
                 await tool.function(change_summary="Test summary")
@@ -179,16 +177,14 @@ class TestCreateCompleteTaskWithLocalMergeTool:
     @pytest.mark.asyncio
     async def test_task_configuration_error_raises_model_retry(self, mock_task, mock_task_service):
         """Raises ModelRetry when task has configuration error (e.g. missing branch)."""
-        mock_task_service.complete_task_with_local_merge.side_effect = TaskConfigurationError(
-            "Task 1 has no branch configured"
-        )
+        mock_task_service.merge_task_branch.side_effect = TaskConfigurationError("Task 1 has no branch configured")
 
         with patch("devboard.agents.tools.task_completion_tools.GitRepoIntegration") as mock_git_class:
             mock_git = Mock()
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_complete_task_with_local_merge_tool(mock_task, mock_task_service)
+            tool = create_merge_branch_and_finalise_tool(mock_task, mock_task_service)
 
             with pytest.raises(ModelRetry) as exc_info:
                 await tool.function(change_summary="Test summary")
@@ -246,15 +242,15 @@ def mock_github_integration(mock_github_repo):
     return integration
 
 
-class TestCreateMergePRAndCompleteTaskTool:
-    """Tests for create_merge_pr_and_complete_task_tool."""
+class TestCreateMergePRAndFinaliseTool:
+    """Tests for create_merge_pr_and_finalise_tool."""
 
     def test_tool_creation(self, mock_task_with_pr, mock_task_service, mock_github_integration):
         """Tool is created with correct name."""
-        tool = create_merge_pr_and_complete_task_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
+        tool = create_merge_pr_and_finalise_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
 
         assert isinstance(tool, Tool)
-        assert tool.name == "merge_pr_and_complete_task"
+        assert tool.name == "merge_pr_and_finalise"
         assert tool.function is not None
 
     @pytest.mark.asyncio
@@ -264,7 +260,7 @@ class TestCreateMergePRAndCompleteTaskTool:
         task.id = 1
         task.github_pr_number = None
 
-        tool = create_merge_pr_and_complete_task_tool(task, mock_task_service, mock_github_integration)
+        tool = create_merge_pr_and_finalise_tool(task, mock_task_service, mock_github_integration)
 
         with pytest.raises(ModelRetry) as exc_info:
             await tool.function(change_summary="Test summary")
@@ -281,7 +277,7 @@ class TestCreateMergePRAndCompleteTaskTool:
             mock_git.has_uncommitted_changes = AsyncMock(return_value=True)
             mock_git_class.return_value = mock_git
 
-            tool = create_merge_pr_and_complete_task_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
+            tool = create_merge_pr_and_finalise_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
 
             with pytest.raises(ModelRetry) as exc_info:
                 await tool.function(change_summary="Test summary")
@@ -297,20 +293,20 @@ class TestCreateMergePRAndCompleteTaskTool:
         mock_github_pr.merge.return_value = PullRequestMergeResult(
             merged=True, sha="abc123def456", message="Pull Request successfully merged"
         )
-        mock_task_service.complete_pr_task = AsyncMock()
+        mock_task_service.merge_pr_task = AsyncMock()
 
         with patch("devboard.agents.tools.task_completion_tools.GitRepoIntegration") as mock_git_class:
             mock_git = Mock()
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_merge_pr_and_complete_task_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
+            tool = create_merge_pr_and_finalise_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
             result = await tool.function(change_summary="Test change summary")
 
-            assert "Task completed successfully" in result
+            assert "Task merged successfully" in result
             assert "abc123def456" in result
             mock_github_pr.merge.assert_called_once_with(merge_method=MergeMethod.SQUASH)
-            mock_task_service.complete_pr_task.assert_called_once_with(mock_task_with_pr, "Test change summary")
+            mock_task_service.merge_pr_task.assert_called_once_with(mock_task_with_pr, "Test change summary")
 
     @pytest.mark.asyncio
     async def test_github_merge_failure_raises_model_retry(
@@ -324,7 +320,7 @@ class TestCreateMergePRAndCompleteTaskTool:
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_merge_pr_and_complete_task_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
+            tool = create_merge_pr_and_finalise_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
 
             with pytest.raises(ModelRetry) as exc_info:
                 await tool.function(change_summary="Test summary")
@@ -345,7 +341,7 @@ class TestCreateMergePRAndCompleteTaskTool:
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_merge_pr_and_complete_task_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
+            tool = create_merge_pr_and_finalise_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
 
             with pytest.raises(ModelRetry) as exc_info:
                 await tool.function(change_summary="Test summary")
@@ -359,14 +355,14 @@ class TestCreateMergePRAndCompleteTaskTool:
     ):
         """Raises ModelRetry when task completion fails."""
         mock_github_pr.merge.return_value = PullRequestMergeResult(merged=True, sha="abc123", message="Merged")
-        mock_task_service.complete_pr_task = AsyncMock(side_effect=ValueError("Task has invalid status for completion"))
+        mock_task_service.merge_pr_task = AsyncMock(side_effect=ValueError("Task has invalid status for completion"))
 
         with patch("devboard.agents.tools.task_completion_tools.GitRepoIntegration") as mock_git_class:
             mock_git = Mock()
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_merge_pr_and_complete_task_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
+            tool = create_merge_pr_and_finalise_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
 
             with pytest.raises(ModelRetry) as exc_info:
                 await tool.function(change_summary="Test summary")
@@ -387,20 +383,20 @@ class TestCreateMergePRAndCompleteTaskTool:
             ci_status=None,
             ci_checks=[],
         )
-        mock_task_service.complete_pr_task = AsyncMock()
+        mock_task_service.merge_pr_task = AsyncMock()
 
         with patch("devboard.agents.tools.task_completion_tools.GitRepoIntegration") as mock_git_class:
             mock_git = Mock()
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_merge_pr_and_complete_task_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
+            tool = create_merge_pr_and_finalise_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
             result = await tool.function(change_summary="Test summary")
 
-            assert "Task completed successfully" in result
+            assert "Task merged successfully" in result
             assert "already merged on GitHub" in result
             mock_github_pr.merge.assert_not_called()
-            mock_task_service.complete_pr_task.assert_called_once_with(mock_task_with_pr, "Test summary")
+            mock_task_service.merge_pr_task.assert_called_once_with(mock_task_with_pr, "Test summary")
 
     @pytest.mark.asyncio
     async def test_closed_pr_raises_model_retry(
@@ -422,7 +418,7 @@ class TestCreateMergePRAndCompleteTaskTool:
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_merge_pr_and_complete_task_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
+            tool = create_merge_pr_and_finalise_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
 
             with pytest.raises(ModelRetry) as exc_info:
                 await tool.function(change_summary="Test summary")
@@ -450,7 +446,7 @@ class TestCreateMergePRAndCompleteTaskTool:
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_merge_pr_and_complete_task_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
+            tool = create_merge_pr_and_finalise_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
 
             with pytest.raises(ModelRetry) as exc_info:
                 await tool.function(change_summary="Test summary")
@@ -478,7 +474,7 @@ class TestCreateMergePRAndCompleteTaskTool:
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_merge_pr_and_complete_task_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
+            tool = create_merge_pr_and_finalise_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
 
             with pytest.raises(ModelRetry) as exc_info:
                 await tool.function(change_summary="Test summary")
@@ -506,7 +502,7 @@ class TestCreateMergePRAndCompleteTaskTool:
             mock_git.has_uncommitted_changes = AsyncMock(return_value=False)
             mock_git_class.return_value = mock_git
 
-            tool = create_merge_pr_and_complete_task_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
+            tool = create_merge_pr_and_finalise_tool(mock_task_with_pr, mock_task_service, mock_github_integration)
 
             with pytest.raises(ModelRetry) as exc_info:
                 await tool.function(change_summary="Test summary")

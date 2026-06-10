@@ -393,8 +393,8 @@ class TestTransitionValidation:
             task_service.transition_to_implementing(task_in_planning_no_plan)
 
 
-class TestCompleteTaskWithLocalMerge:
-    """Tests for TaskService.complete_task_with_local_merge()."""
+class TestMergeTaskBranch:
+    """Tests for TaskService.merge_task_branch()."""
 
     @pytest.fixture
     def task_with_branch(self):
@@ -428,10 +428,10 @@ class TestCompleteTaskWithLocalMerge:
             new_callable=AsyncMock,
             return_value=mock_merge_result,
         ):
-            result = await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
+            result = await task_service.merge_task_branch(task_with_branch, "Changes summary")
 
         assert result.outcome == MergeOutcome.SUCCESS
-        assert task_with_branch.status == TaskStatus.COMPLETE
+        assert task_with_branch.status == TaskStatus.MERGED
         mock_document_repo.create.assert_called_once()
 
     @pytest.mark.asyncio
@@ -450,10 +450,10 @@ class TestCompleteTaskWithLocalMerge:
             new_callable=AsyncMock,
             return_value=mock_merge_result,
         ):
-            result = await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
+            result = await task_service.merge_task_branch(task_with_branch, "Changes summary")
 
         assert result.outcome == MergeOutcome.SKIPPED
-        assert task_with_branch.status == TaskStatus.COMPLETE
+        assert task_with_branch.status == TaskStatus.MERGED
         mock_document_repo.create.assert_called_once()
 
     @pytest.mark.asyncio
@@ -471,7 +471,7 @@ class TestCompleteTaskWithLocalMerge:
             return_value=mock_merge_result,
         ):
             with pytest.raises(MergeFailureError) as exc_info:
-                await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
+                await task_service.merge_task_branch(task_with_branch, "Changes summary")
 
         assert exc_info.value.outcome == MergeOutcome.CONFLICT
         assert "Conflicts detected between feature and main" in exc_info.value.message
@@ -492,18 +492,18 @@ class TestCompleteTaskWithLocalMerge:
             return_value=mock_merge_result,
         ):
             with pytest.raises(MergeFailureError) as exc_info:
-                await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
+                await task_service.merge_task_branch(task_with_branch, "Changes summary")
 
         assert exc_info.value.outcome == MergeOutcome.ERROR
         mock_document_repo.create.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_fails_without_branch_configured(self, task_service, task_with_branch):
-        """Test complete raises TaskConfigurationError when task has no branch."""
+        """Test merge raises TaskConfigurationError when task has no branch."""
         task_with_branch.branch_name = None
 
         with pytest.raises(TaskConfigurationError, match="has no branch configured"):
-            await task_service.complete_task_with_local_merge(task_with_branch, "Changes summary")
+            await task_service.merge_task_branch(task_with_branch, "Changes summary")
 
 
 class TestUpdateTask:
@@ -591,8 +591,8 @@ class TestEventEmission:
 
         mock_system_event_emitter.emit_task_created.assert_called_once_with(result)
 
-    def test_transition_to_complete_emits_transition(self, task_service, mock_system_event_emitter):
-        """transition_to_complete emits task.completed with method='transition'."""
+    def test_transition_to_complete_emits_with_default_manual_method(self, task_service, mock_system_event_emitter):
+        """transition_to_complete emits task.completed with method='manual' by default."""
         task = MagicMock(spec=Task)
         task.verify_status_transition.return_value = None
 
@@ -600,9 +600,18 @@ class TestEventEmission:
 
         mock_system_event_emitter.emit_task_completed.assert_called_once_with(task, method="manual")
 
+    def test_transition_to_complete_passes_through_method(self, task_service, mock_system_event_emitter):
+        """transition_to_complete passes the method arg to emit_task_completed."""
+        task = MagicMock(spec=Task)
+        task.verify_status_transition.return_value = None
+
+        task_service.transition_to_complete(task, method="archive")
+
+        mock_system_event_emitter.emit_task_completed.assert_called_once_with(task, method="archive")
+
     @pytest.mark.asyncio
-    async def test_complete_task_with_local_merge_emits_local_merge(self, task_service, mock_system_event_emitter):
-        """complete_task_with_local_merge emits task.completed with method='local_merge'."""
+    async def test_merge_task_branch_emits_local_merge(self, task_service, mock_system_event_emitter):
+        """merge_task_branch emits task.merged with method='local_merge'."""
         task = MagicMock(spec=Task)
         task.id = 10
         task.branch_name = "feature/test"
@@ -621,13 +630,13 @@ class TestEventEmission:
             new_callable=AsyncMock,
             return_value=mock_merge_result,
         ):
-            await task_service.complete_task_with_local_merge(task, "Summary")
+            await task_service.merge_task_branch(task, "Summary")
 
-        mock_system_event_emitter.emit_task_completed.assert_called_once_with(task, method="local_merge")
+        mock_system_event_emitter.emit_task_merged.assert_called_once_with(task, method="local_merge")
 
     @pytest.mark.asyncio
-    async def test_complete_pr_task_emits_pr_merge(self, task_service, mock_system_event_emitter):
-        """complete_pr_task emits task.completed with method='pr_merge'."""
+    async def test_merge_pr_task_emits_pr_merge(self, task_service, mock_system_event_emitter):
+        """merge_pr_task emits task.merged with method='pr_merge'."""
         task = MagicMock(spec=Task)
         task.id = 11
         task.github_pr_number = 42
@@ -640,9 +649,9 @@ class TestEventEmission:
         with patch("devboard.services.task_service.GitRepoIntegration") as mock_git_cls:
             mock_git = mock_git_cls.return_value
             mock_git.delete_branch = AsyncMock()
-            await task_service.complete_pr_task(task, "PR summary")
+            await task_service.merge_pr_task(task, "PR summary")
 
-        mock_system_event_emitter.emit_task_completed.assert_called_once_with(task, method="pr_merge")
+        mock_system_event_emitter.emit_task_merged.assert_called_once_with(task, method="pr_merge")
 
     @pytest.mark.asyncio
     async def test_delete_task_emits_task_deleted_before_deletion(

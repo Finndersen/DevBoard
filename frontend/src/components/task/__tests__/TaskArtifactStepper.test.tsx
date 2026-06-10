@@ -255,6 +255,95 @@ describe('TaskArtifactStepper', () => {
     })
   })
 
+  describe('finalise step', () => {
+    it('does not show finalise step for statuses before MERGED', () => {
+      for (const status of [TaskStatus.PLANNING, TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN]) {
+        const { unmount } = render(
+          <TaskArtifactStepper
+            {...defaultProps}
+            taskStatus={status}
+            hasSpecification={true}
+            hasPlan={status !== TaskStatus.PLANNING}
+            hasChanges={status === TaskStatus.IMPLEMENTING || status === TaskStatus.PR_OPEN}
+            hasPR={status === TaskStatus.PR_OPEN}
+          />
+        )
+        expect(screen.queryByRole('button', { name: /finalise/i })).not.toBeInTheDocument()
+        unmount()
+      }
+    })
+
+    it('shows finalise step as active when task is MERGED', () => {
+      render(
+        <TaskArtifactStepper
+          {...defaultProps}
+          taskStatus={TaskStatus.MERGED}
+          hasSpecification={true}
+          hasPlan={true}
+          hasChanges={true}
+          hasPR={true}
+        />
+      )
+
+      const finaliseStep = screen.getByRole('button', { name: /finalise/i })
+      expect(finaliseStep).toBeInTheDocument()
+      // Active step should have the active circle indicator (not a checkmark)
+      const circleIndicator = finaliseStep.querySelector('.rounded-full')
+      expect(circleIndicator).toBeInTheDocument()
+    })
+
+    it('shows finalise step as done (complete) when task is COMPLETE', () => {
+      render(
+        <TaskArtifactStepper
+          {...defaultProps}
+          taskStatus={TaskStatus.COMPLETE}
+          hasSpecification={true}
+          hasPlan={true}
+          hasChanges={true}
+          hasPR={true}
+          hasSummary={true}
+        />
+      )
+
+      const finaliseStep = screen.getByRole('button', { name: /finalise/i })
+      expect(finaliseStep).toBeInTheDocument()
+    })
+
+    it('highlights finalise step when it is the activeStep in MERGED state', () => {
+      render(
+        <TaskArtifactStepper
+          {...defaultProps}
+          activeStep="finalise"
+          taskStatus={TaskStatus.MERGED}
+          hasSpecification={true}
+          hasPlan={true}
+          hasChanges={true}
+        />
+      )
+
+      const finaliseStep = screen.getByRole('button', { name: /finalise/i })
+      expect(finaliseStep).toHaveClass('bg-blue-900/30', 'border-blue-500', 'text-blue-400')
+    })
+
+    it('calls onStepClick with finalise when finalise step is clicked in MERGED state', () => {
+      const onStepClick = vi.fn()
+      render(
+        <TaskArtifactStepper
+          {...defaultProps}
+          onStepClick={onStepClick}
+          taskStatus={TaskStatus.MERGED}
+          hasSpecification={true}
+          hasPlan={true}
+          hasChanges={true}
+        />
+      )
+
+      const finaliseStep = screen.getByRole('button', { name: /finalise/i })
+      fireEvent.click(finaliseStep)
+      expect(onStepClick).toHaveBeenCalledWith('finalise')
+    })
+  })
+
   describe('summary handling', () => {
     it('shows summary step for COMPLETE tasks with hasSummary', () => {
       render(

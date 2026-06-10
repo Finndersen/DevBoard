@@ -5,6 +5,7 @@ from devboard.workflow_actions.base import TaskWorkflowAction
 from devboard.workflow_actions.task_workflows import (
     ApproveAndCreatePRAction,
     ApproveAndMergeAction,
+    ArchiveTaskAction,
     BeginImplementationAction,
     CreateImplementationPlanAction,
     FinaliseAction,
@@ -21,6 +22,7 @@ _workflow_actions: list[type[TaskWorkflowAction]] = [
     ApproveAndCreatePRAction,
     MergeAndFinaliseAction,
     FinaliseAction,
+    ArchiveTaskAction,
 ]
 
 # Registry of all workflow action definitions using the generic Registry pattern

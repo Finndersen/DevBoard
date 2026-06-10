@@ -25,8 +25,9 @@ from .sub_agent_tools import (
     create_multi_codebase_investigation_tool,
 )
 from .task_completion_tools import (
-    create_complete_task_with_local_merge_tool,
-    create_merge_pr_and_complete_task_tool,
+    create_finalise_task_tool,
+    create_merge_branch_and_finalise_tool,
+    create_merge_pr_and_finalise_tool,
 )
 from .task_tools import (
     create_create_task_tool,
@@ -38,16 +39,17 @@ from .task_tools import (
 
 __all__ = [
     "create_code_structure_search_tool",
-    "create_complete_task_with_local_merge_tool",
+    "create_merge_branch_and_finalise_tool",
     "create_create_task_tool",
     "create_edit_own_task_tool",
     "create_edit_task_tool",
+    "create_finalise_task_tool",
     "create_get_pr_feedback_tool",
     "create_get_pr_status_tool",
     "create_inspect_conversation_tool",
     "create_list_conversations_tool",
     "create_list_tasks_tool",
-    "create_merge_pr_and_complete_task_tool",
+    "create_merge_pr_and_finalise_tool",
     "create_github_pr_tool",
     "create_multi_codebase_investigation_tool",
     "create_directory_tree_tool",

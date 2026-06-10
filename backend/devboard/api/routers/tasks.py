@@ -569,10 +569,10 @@ async def get_task_pr_status(
     """Get GitHub PR status for a task that has a PR.
 
     Returns PR information including merge status, mergeable state, and checks status.
-    Supported for tasks in PR_OPEN or COMPLETE state (PR number persists after completion).
+    Supported for tasks in PR_OPEN, MERGED or COMPLETE state (PR number persists after merge/completion).
     """
     # Validate task has (or had) a PR
-    if task.status not in (TaskStatus.PR_OPEN, TaskStatus.COMPLETE):
+    if task.status not in (TaskStatus.PR_OPEN, TaskStatus.MERGED, TaskStatus.COMPLETE):
         raise HTTPException(status_code=404, detail=f"Task has no PR (current status: {task.status.value})")
 
     # Check task has PR info

@@ -15,6 +15,7 @@ from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.agents.roles.background_agent import BackgroundAgentRole
 from devboard.agents.roles.project_qa import ProjectQAAgentRole
+from devboard.agents.roles.task_finalisation import TaskFinalisationAgentRole
 from devboard.agents.roles.task_implementation import TaskImplementationAgentRole
 from devboard.agents.roles.task_planning import TaskPlanningAgentRole
 from devboard.agents.roles.task_pr_review import TaskPRReviewAgentRole
@@ -97,6 +98,16 @@ async def create_agent_role_for_conversation(
                 )
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e)) from e
+        elif conversation.agent_role == AgentRoleType.TASK_FINALISATION:
+            return TaskFinalisationAgentRole(
+                task=parent_entity,
+                task_service=task_service,
+                working_dir=working_dir,
+                conversation_repo=conversation_repo,
+                agent_config_service=agent_config_service,
+                conversation_id=parent_conversation_id,
+                document_repo=document_repo,
+            )
         else:
             raise HTTPException(
                 status_code=400,

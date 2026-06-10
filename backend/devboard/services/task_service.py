@@ -237,6 +237,53 @@ class TaskService:
 
         return task
 
+    def transition_to_merged(self, task: Task, change_summary: str, method: str = "merge") -> Task:
+        """Transition task to MERGED status and replace with TASK_FINALISATION agent.
+
+        This method is called after a branch or PR is successfully merged:
+        1. Creates/updates the change_summary document
+        2. Transitions task to MERGED status
+        3. Replaces active conversation with TASK_FINALISATION agent
+        4. Emits task_merged event
+
+        Args:
+            task: Task to transition
+            change_summary: Markdown content summarizing the changes made
+            method: Merge method — one of "local_merge", "pr_merge"
+
+        Returns:
+            Updated task instance
+        """
+        task.verify_status_transition(TaskStatus.MERGED)
+
+        # Create/update change_summary document
+        if not task.change_summary:
+            doc = self.document_repo.create(DocumentType.CHANGE_SUMMARY, change_summary)
+            task.change_summary_id = doc.id
+            task.change_summary = doc
+        else:
+            self.document_repo.update_content(task.change_summary, change_summary)
+
+        # Update task status
+        task.status = TaskStatus.MERGED
+        self._touch_updated_at(task)
+        self.task_repo.update(task)
+
+        # Replace active conversation with TASK_FINALISATION agent
+        self.conversation_service.replace_active_conversation(
+            entity_type=ParentEntityType.TASK,
+            entity_id=task.id,
+            new_agent_role=AgentRoleType.TASK_FINALISATION,
+        )
+
+        # Emit merged event
+        self.system_event_emitter.emit_task_merged(task, method=method)
+
+        # Commit all changes atomically
+        self.task_repo.commit()
+
+        return task
+
     def _apply_complete_status(self, task: Task) -> Task:
         """Validate and apply COMPLETE status without emitting an event."""
         task.verify_status_transition(TaskStatus.COMPLETE)
@@ -245,14 +292,15 @@ class TaskService:
         self.task_repo.update(task)
         return task
 
-    def transition_to_complete(self, task: Task) -> Task:
-        """Transition task from IMPLEMENTING or PR_OPEN to COMPLETE status.
+    def transition_to_complete(self, task: Task, method: str = "manual") -> Task:
+        """Transition task to COMPLETE status from IMPLEMENTING, PR_OPEN, or MERGED.
 
         Note: change_summary document should be created by the workflow action
         using the set_change_summary tool before calling this method.
 
         Args:
             task: Task to transition
+            method: How the task was completed (e.g. "manual", "archive", "finalise")
 
         Returns:
             Updated task instance
@@ -261,20 +309,20 @@ class TaskService:
             InvalidStatusTransitionError: If transition is not valid
         """
         self._apply_complete_status(task)
-        self.system_event_emitter.emit_task_completed(task, method="manual")
+        self.system_event_emitter.emit_task_completed(task, method=method)
         return task
 
-    async def complete_task_with_local_merge(self, task: Task, change_summary: str) -> MergeResult:
-        """Complete a task by merging its feature branch locally.
+    async def merge_task_branch(self, task: Task, change_summary: str) -> MergeResult:
+        """Merge a task's feature branch locally and transition to MERGED status.
 
-        This method handles the complete merge workflow for local/solo development:
-        1. Creates the change_summary document for the task
-        2. Merges feature branch into base branch using codebase merge strategy
-        3. Deletes the feature branch
-        4. Transitions task to COMPLETE status
+        This method handles the merge workflow for local/solo development:
+        1. Merges feature branch into base branch using codebase merge strategy
+        2. Deletes the feature branch
+        3. Transitions task to MERGED status with change summary
+        4. Replaces active conversation with TASK_FINALISATION agent
 
         Args:
-            task: Task to complete
+            task: Task to merge
             change_summary: Markdown content summarizing the changes made
 
         Returns:
@@ -283,7 +331,7 @@ class TaskService:
         Raises:
             ValueError: If task has no branch configured, merge strategy is invalid,
                 or merge fails (conflict/error)
-            InvalidStatusTransitionError: If task cannot transition to COMPLETE
+            InvalidStatusTransitionError: If task cannot transition to MERGED
         """
         if not task.branch_name:
             raise TaskConfigurationError(f"Task {task.id} has no branch configured")
@@ -294,47 +342,31 @@ class TaskService:
         if merge_result.outcome not in (MergeOutcome.SUCCESS, MergeOutcome.SKIPPED, MergeOutcome.STASH_CONFLICT):
             raise MergeFailureError(merge_result.outcome, merge_result.message)
 
-        # Only create/update change_summary document after successful merge
-        if not task.change_summary:
-            doc = self.document_repo.create(DocumentType.CHANGE_SUMMARY, change_summary)
-            task.change_summary_id = doc.id
-            task.change_summary = doc
-        else:
-            self.document_repo.update_content(task.change_summary, change_summary)
+        # Transition to MERGED (handles change_summary creation, status update, and conversation replacement)
+        self.transition_to_merged(task, change_summary, method="local_merge")
 
-        self._apply_complete_status(task)
-        self.system_event_emitter.emit_task_completed(task, method="local_merge")
-        self.task_repo.commit()
         return merge_result
 
-    async def complete_pr_task(self, task: Task, change_summary: str) -> None:
-        """Complete a task that has an open/merged PR.
+    async def merge_pr_task(self, task: Task, change_summary: str) -> None:
+        """Complete a PR merge and transition task to MERGED status.
 
-        This method handles post-merge cleanup and task completion:
-        1. Creates the change_summary document
-        2. Deletes local feature branch
-        3. Transitions task to COMPLETE
+        This method handles post-PR-merge cleanup and task transition:
+        1. Deletes local feature branch
+        2. Transitions task to MERGED status with change summary
+        3. Replaces active conversation with TASK_FINALISATION agent
 
         Note: PR merging should be handled by the caller before calling this method.
 
         Args:
-            task: Task with PR to complete
+            task: Task with PR to merge
             change_summary: Markdown content summarizing the changes made
 
         Raises:
             ValueError: If task has no PR reference
-            InvalidStatusTransitionError: If task cannot transition to COMPLETE
+            InvalidStatusTransitionError: If task cannot transition to MERGED
         """
         if not task.github_pr_number:
             raise ValueError(f"Task {task.id} has no PR configured")
-
-        # Create change_summary document
-        if not task.change_summary:
-            doc = self.document_repo.create(DocumentType.CHANGE_SUMMARY, change_summary)
-            task.change_summary_id = doc.id
-            task.change_summary = doc
-        else:
-            self.document_repo.update_content(task.change_summary, change_summary)
 
         # Delete local feature branch
         git = GitRepoIntegration(task.codebase.local_path)
@@ -344,10 +376,8 @@ class TaskService:
         except Exception as e:
             logfire.warning(f"Failed to delete local branch {task.branch_name}: {e}")
 
-        # Transition to COMPLETE
-        self._apply_complete_status(task)
-        self.system_event_emitter.emit_task_completed(task, method="pr_merge")
-        self.task_repo.commit()
+        # Transition to MERGED (handles change_summary creation, status update, and conversation replacement)
+        self.transition_to_merged(task, change_summary, method="pr_merge")
 
     def update_task(
         self,
