@@ -1,13 +1,11 @@
-"""Tests for TaskFinalisationAgentRole and finalise_task tool."""
+"""Tests for TaskFinalisationAgentRole."""
 
 from unittest.mock import Mock, patch
 
 import pytest
-from pydantic_ai import ModelRetry, Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.task_finalisation import TaskFinalisationAgentRole
-from devboard.agents.tools.task_completion_tools import create_finalise_task_tool
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.task_service import TaskService
@@ -94,7 +92,6 @@ class TestTaskFinalisationAgentRole:
         tool_names = [tool.name for tool in tools]
 
         assert "edit_project_specification" in tool_names
-        assert "finalise_task" in tool_names
 
     def test_get_tools_does_not_include_editing_tools(self, role):
         """Code editing tools should not be present — code is already merged."""
@@ -116,7 +113,8 @@ class TestTaskFinalisationAgentRole:
 
     def test_system_prompt_content(self, role):
         prompt = role.get_system_prompt()
-        assert "finalise_task" in prompt
+        assert "propose" in prompt.lower()
+        assert "plan" in prompt.lower()
         assert "project specification" in prompt.lower()
 
     @pytest.mark.asyncio
@@ -124,52 +122,3 @@ class TestTaskFinalisationAgentRole:
         content = await role.get_context_content()
         assert isinstance(content, str)
         assert len(content) > 0
-
-
-class TestCreateFinaliseTaskTool:
-    """Tests for create_finalise_task_tool."""
-
-    @pytest.fixture
-    def mock_merged_task(self):
-        task = Mock()
-        task.id = 1
-        task.status = TaskStatus.MERGED
-        return task
-
-    @pytest.fixture
-    def mock_task_service(self):
-        service = Mock(spec=TaskService)
-        service.transition_to_complete = Mock()
-        return service
-
-    def test_tool_creation(self, mock_merged_task, mock_task_service):
-        tool = create_finalise_task_tool(mock_merged_task, mock_task_service)
-
-        assert isinstance(tool, Tool)
-        assert tool.name == "finalise_task"
-        assert tool.function is not None
-
-    @pytest.mark.asyncio
-    async def test_transitions_merged_task_to_complete(self, mock_merged_task, mock_task_service):
-        tool = create_finalise_task_tool(mock_merged_task, mock_task_service)
-        result = await tool.function()
-
-        assert "COMPLETE" in result
-        mock_task_service.transition_to_complete.assert_called_once_with(mock_merged_task, method="finalise")
-
-    @pytest.mark.asyncio
-    async def test_raises_model_retry_when_not_merged(self, mock_task_service):
-        for status in [TaskStatus.PLANNING, TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN, TaskStatus.COMPLETE]:
-            task = Mock()
-            task.id = 1
-            task.status = status
-
-            tool = create_finalise_task_tool(task, mock_task_service)
-
-            with pytest.raises(ModelRetry) as exc_info:
-                await tool.function()
-
-            assert "MERGED" in str(exc_info.value)
-            assert status.value in str(exc_info.value)
-
-        mock_task_service.transition_to_complete.assert_not_called()

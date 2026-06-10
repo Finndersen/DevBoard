@@ -91,7 +91,7 @@ function TaskDetail({ id }: TaskDetailProps) {
       .catch(err => console.error('Failed to load task custom field definitions:', err))
   }, [])
 
-  const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes' | 'pullrequest' | 'summary' | 'finalise'>('specification')
+  const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes' | 'pullrequest' | 'summary'>('specification')
 
   // PR status sourced from the unified github store
   const fetchForTask = useGithubStore(s => s.fetchForTask)
@@ -191,10 +191,10 @@ function TaskDetail({ id }: TaskDetailProps) {
     refetch()
   }, [id, refetch])
 
-  // Switch to finalise tab when task is in MERGED state (initial load or on transition)
+  // Switch to changes tab when task is in MERGED state (initial load or on transition)
   useEffect(() => {
     if (task?.status === TaskStatus.MERGED) {
-      setActiveTab('finalise')
+      setActiveTab('changes')
     }
   }, [task?.id, task?.status])
 
@@ -548,14 +548,12 @@ function TaskDetail({ id }: TaskDetailProps) {
   }
 
   const handleStepClick = useCallback((stepId: string) => {
-    // Map stepper step IDs to tab names (stepper uses: specification, plan, changes, summary, pullrequest, finalise)
     const stepToTab: Record<string, typeof activeTab> = {
       'specification': 'specification',
       'plan': 'plan',
       'changes': 'changes',
       'summary': 'summary',
       'pullrequest': 'pullrequest',
-      'finalise': 'finalise',
     }
     const tab = stepToTab[stepId]
     if (tab) {
@@ -776,16 +774,6 @@ function TaskDetail({ id }: TaskDetailProps) {
                 <SummaryTab changeSummaryDoc={changeSummaryDoc} />
               )}
 
-              {activeTab === 'finalise' && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className={`text-sm font-medium ${textColors.primary} mb-1`}>Task Finalisation</h3>
-                    <p className={`text-sm ${textColors.secondary}`}>
-                      The branch has been merged. Use the chat to update the project specification, external documentation, and Jira status, or create follow-up tasks before archiving.
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
           </Card>
         }

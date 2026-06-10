@@ -27,6 +27,7 @@ const AGENT_ROLE_LABELS: Record<string, string> = {
   task_planning: 'Planning',
   task_implementation: 'Implementation',
   task_pr_review: 'PR Review',
+  task_finalisation: 'Finalisation',
   codebase_qa: 'Codebase QA',
   investigation: 'Investigation',
   code_review: 'Code Review',
@@ -55,6 +56,7 @@ function getAgentRoleColor(agentRole: string): string {
     case 'task_implementation':
       return 'text-purple-600 dark:text-purple-400'
     case 'task_pr_review':
+    case 'task_finalisation':
       return 'text-amber-600 dark:text-amber-400'
     case 'project':
     case 'project_qa':

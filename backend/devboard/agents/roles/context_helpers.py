@@ -211,4 +211,7 @@ def build_task_context(
         elif task.implementation_plan:
             sections.append(_format_implementation_plan(task))
 
+    if task.change_summary:
+        sections.append(_format_document_section("## Change Summary", task.change_summary.content))
+
     return "\n\n---\n\n".join(sections)

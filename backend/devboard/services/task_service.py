@@ -237,7 +237,7 @@ class TaskService:
 
         return task
 
-    def transition_to_merged(self, task: Task, change_summary: str, method: str = "merge") -> Task:
+    def transition_to_merged(self, task: Task, change_summary: str, method: str = "merge") -> int:
         """Transition task to MERGED status and replace with TASK_FINALISATION agent.
 
         This method is called after a branch or PR is successfully merged:
@@ -252,7 +252,7 @@ class TaskService:
             method: Merge method — one of "local_merge", "pr_merge"
 
         Returns:
-            Updated task instance
+            ID of the newly created TASK_FINALISATION conversation
         """
         task.verify_status_transition(TaskStatus.MERGED)
 
@@ -270,7 +270,7 @@ class TaskService:
         self.task_repo.update(task)
 
         # Replace active conversation with TASK_FINALISATION agent
-        self.conversation_service.replace_active_conversation(
+        new_conversation = self.conversation_service.replace_active_conversation(
             entity_type=ParentEntityType.TASK,
             entity_id=task.id,
             new_agent_role=AgentRoleType.TASK_FINALISATION,
@@ -282,7 +282,7 @@ class TaskService:
         # Commit all changes atomically
         self.task_repo.commit()
 
-        return task
+        return new_conversation.id
 
     def _apply_complete_status(self, task: Task) -> Task:
         """Validate and apply COMPLETE status without emitting an event."""
@@ -300,7 +300,7 @@ class TaskService:
 
         Args:
             task: Task to transition
-            method: How the task was completed (e.g. "manual", "archive", "finalise")
+            method: How the task was completed (e.g. "manual", "archive")
 
         Returns:
             Updated task instance
@@ -312,7 +312,7 @@ class TaskService:
         self.system_event_emitter.emit_task_completed(task, method=method)
         return task
 
-    async def merge_task_branch(self, task: Task, change_summary: str) -> MergeResult:
+    async def merge_task_branch(self, task: Task, change_summary: str) -> tuple[MergeResult, int]:
         """Merge a task's feature branch locally and transition to MERGED status.
 
         This method handles the merge workflow for local/solo development:
@@ -326,7 +326,7 @@ class TaskService:
             change_summary: Markdown content summarizing the changes made
 
         Returns:
-            MergeResult with outcome and relevant details
+            Tuple of (MergeResult with outcome and relevant details, new conversation ID)
 
         Raises:
             ValueError: If task has no branch configured, merge strategy is invalid,
@@ -343,11 +343,11 @@ class TaskService:
             raise MergeFailureError(merge_result.outcome, merge_result.message)
 
         # Transition to MERGED (handles change_summary creation, status update, and conversation replacement)
-        self.transition_to_merged(task, change_summary, method="local_merge")
+        new_conv_id = self.transition_to_merged(task, change_summary, method="local_merge")
 
-        return merge_result
+        return merge_result, new_conv_id
 
-    async def merge_pr_task(self, task: Task, change_summary: str) -> None:
+    async def merge_pr_task(self, task: Task, change_summary: str) -> int:
         """Complete a PR merge and transition task to MERGED status.
 
         This method handles post-PR-merge cleanup and task transition:
@@ -360,6 +360,9 @@ class TaskService:
         Args:
             task: Task with PR to merge
             change_summary: Markdown content summarizing the changes made
+
+        Returns:
+            ID of the newly created TASK_FINALISATION conversation
 
         Raises:
             ValueError: If task has no PR reference
@@ -377,7 +380,7 @@ class TaskService:
             logfire.warning(f"Failed to delete local branch {task.branch_name}: {e}")
 
         # Transition to MERGED (handles change_summary creation, status update, and conversation replacement)
-        self.transition_to_merged(task, change_summary, method="pr_merge")
+        return self.transition_to_merged(task, change_summary, method="pr_merge")
 
     def update_task(
         self,

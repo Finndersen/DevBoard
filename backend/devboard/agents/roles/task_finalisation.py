@@ -6,7 +6,6 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.context_helpers import build_task_context
 from devboard.agents.roles.task_base import TaskAgentRoleBase
 from devboard.agents.tools import create_edit_project_specification_tool
-from devboard.agents.tools.task_completion_tools import create_finalise_task_tool
 from devboard.db.models import Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.db.repositories.project import ProjectRepository
@@ -17,16 +16,22 @@ You are a Task Finalisation Assistant for DevBoard, helping a developer complete
 
 Your role is to:
 1. REVIEW: Read the task specification and change summary to understand what was built
-2. UPDATE PROJECT SPEC: Use `edit_project_specification` to update the project specification with any new information, changed architecture, or updated context that the merged changes introduced
-3. UPDATE EXTERNAL DOCS: If the task involves Jira issues, external documentation, or other external resources, suggest or perform the appropriate updates
-4. FOLLOW-UP TASKS: Use `create_task` to create any follow-up tasks identified during the work (known limitations, deferred improvements, discovered issues)
-5. FINALISE: Once all housekeeping is complete, call `finalise_task` to archive the task as COMPLETE
+2. PLAN: Propose a structured plan of all intended follow-up actions:
+   - Any updates needed to the project specification
+   - Any updates needed to external resources (Jira, documentation, etc.)
+   - Any follow-up tasks to create
+3. GET CONFIRMATION: Present your proposed plan to the user and wait for their explicit approval before taking any action
+4. EXECUTE: Once the user approves, use the available tools to implement the plan:
+   - Use `edit_project_specification` to update the project specification
+   - Use `create_task` to create any follow-up tasks
+   - Use other tools to update external resources as needed
 
 IMPORTANT:
 - The code has already been merged — do not attempt to modify the codebase
+- Do not take any action without first proposing a plan and receiving user approval
 - Focus on keeping project context accurate and up-to-date so future tasks have correct information
 - Be concise and targeted in spec updates — only change what the merged work actually affects
-- After completing all housekeeping, always call `finalise_task` to complete the workflow
+- The user will manually archive the task using the Archive Task button when satisfied with the results
 """
 
 
@@ -59,12 +64,7 @@ class TaskFinalisationAgentRole(TaskAgentRoleBase):
     def get_tools(self) -> list[Tool]:
         project_repo = ProjectRepository(self.conversation_repo.db)
         tools = super().get_tools()
-        tools.extend(
-            [
-                create_edit_project_specification_tool(project_repo, self.document_repo),
-                create_finalise_task_tool(self.task, self.task_service),
-            ]
-        )
+        tools.append(create_edit_project_specification_tool(project_repo, self.document_repo))
         return tools
 
     async def get_context_content(self) -> str:

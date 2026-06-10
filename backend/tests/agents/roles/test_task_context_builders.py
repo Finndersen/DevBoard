@@ -218,7 +218,7 @@ class TestBuildTaskPlanningContext:
 
         context = build_task_planning_context(task, working_dir="/tmp/test-codebase")
 
-        # Should have <EMPTY> for both task documents (but not project spec)
+        # Should have <EMPTY> for both task documents (but not change summary, since it's None)
         assert context.count("<EMPTY>") == 2
 
     def test_handles_empty_task_specification(self, db_session, project_with_spec: Project, sample_codebase: Codebase):
@@ -312,7 +312,7 @@ class TestBuildTaskPlanningContext:
 
         context = build_task_planning_context(task, working_dir="/tmp/test-codebase")
 
-        # Should show <EMPTY> for project spec
+        # Should show <EMPTY> for project spec (change summary is None, so not included)
         assert "## Project Specification" in context
         assert context.count("<EMPTY>") == 1
 

@@ -19,6 +19,10 @@ from devboard.services.task_service import TaskService
 def mock_conversation_service():
     """Mock ConversationService."""
     service = MagicMock()
+    # replace_active_conversation returns a Conversation-like object with an id
+    mock_new_conv = MagicMock()
+    mock_new_conv.id = 100
+    service.replace_active_conversation.return_value = mock_new_conv
     return service
 
 
@@ -393,6 +397,44 @@ class TestTransitionValidation:
             task_service.transition_to_implementing(task_in_planning_no_plan)
 
 
+class TestTransitionToMerged:
+    """Tests for TaskService.transition_to_merged()."""
+
+    @pytest.fixture
+    def task_implementing(self):
+        task = MagicMock(spec=Task)
+        task.id = 20
+        task.status = TaskStatus.IMPLEMENTING
+        task.change_summary = None
+        task.change_summary_id = None
+        task.verify_status_transition.return_value = None
+        return task
+
+    def test_returns_new_conversation_id(
+        self, task_service, task_implementing, mock_document_repo, mock_conversation_service
+    ):
+        """transition_to_merged returns the ID of the newly created TASK_FINALISATION conversation."""
+        new_conv = MagicMock()
+        new_conv.id = 42
+        mock_conversation_service.replace_active_conversation.return_value = new_conv
+
+        result = task_service.transition_to_merged(task_implementing, "Summary")
+
+        assert result == 42
+
+    def test_transitions_task_status_to_merged(
+        self, task_service, task_implementing, mock_document_repo, mock_conversation_service
+    ):
+        """transition_to_merged sets task status to MERGED."""
+        new_conv = MagicMock()
+        new_conv.id = 99
+        mock_conversation_service.replace_active_conversation.return_value = new_conv
+
+        task_service.transition_to_merged(task_implementing, "Summary")
+
+        assert task_implementing.status == TaskStatus.MERGED
+
+
 class TestMergeTaskBranch:
     """Tests for TaskService.merge_task_branch()."""
 
@@ -428,9 +470,10 @@ class TestMergeTaskBranch:
             new_callable=AsyncMock,
             return_value=mock_merge_result,
         ):
-            result = await task_service.merge_task_branch(task_with_branch, "Changes summary")
+            merge_result, new_conv_id = await task_service.merge_task_branch(task_with_branch, "Changes summary")
 
-        assert result.outcome == MergeOutcome.SUCCESS
+        assert merge_result.outcome == MergeOutcome.SUCCESS
+        assert isinstance(new_conv_id, int)
         assert task_with_branch.status == TaskStatus.MERGED
         mock_document_repo.create.assert_called_once()
 
@@ -450,9 +493,10 @@ class TestMergeTaskBranch:
             new_callable=AsyncMock,
             return_value=mock_merge_result,
         ):
-            result = await task_service.merge_task_branch(task_with_branch, "Changes summary")
+            merge_result, new_conv_id = await task_service.merge_task_branch(task_with_branch, "Changes summary")
 
-        assert result.outcome == MergeOutcome.SKIPPED
+        assert merge_result.outcome == MergeOutcome.SKIPPED
+        assert isinstance(new_conv_id, int)
         assert task_with_branch.status == TaskStatus.MERGED
         mock_document_repo.create.assert_called_once()
 
