@@ -20,6 +20,7 @@ import { reportMutationError } from '../lib/errors'
 import { useTaskGitStatus } from './hooks/useTaskGitStatus'
 import { useTaskEventHandlers } from './hooks/useTaskEventHandlers'
 import { useCodeReviewStatus } from './hooks/useCodeReviewStatus'
+import { useCIPolling } from './hooks/useCIPolling'
 import { TaskDetailHeader } from '../components/task/TaskDetailHeader'
 import { SpecificationTab } from '../components/task/SpecificationTab'
 import { PlanTab } from '../components/task/PlanTab'
@@ -194,6 +195,13 @@ function TaskDetail({ id }: TaskDetailProps) {
   useEffect(() => {
     if (task?.status === TaskStatus.MERGED) {
       setActiveTab('finalise')
+    }
+  }, [task?.id, task?.status])
+
+  // Switch to PR tab when task is in PR_OPEN state (initial load or on transition)
+  useEffect(() => {
+    if (task?.status === TaskStatus.PR_OPEN) {
+      setActiveTab('pullrequest')
     }
   }, [task?.id, task?.status])
 
@@ -382,6 +390,15 @@ function TaskDetail({ id }: TaskDetailProps) {
     setActiveTab,
     diffRefreshTimeoutRef,
     markStepRunning,
+  })
+
+  // CI polling and auto-reporting for PR_OPEN state
+  const { autoResolve, setAutoResolve, reportCIIssues } = useCIPolling({
+    task,
+    prDetail,
+    isConversationStreaming,
+    onPRDetailUpdate: setPrDetail,
+    onReportIssues: (message) => agentChatRef.current?.sendMessage(message),
   })
 
   // Handle conversation reset from AgentChat (when user clears chat history)
@@ -749,6 +766,9 @@ function TaskDetail({ id }: TaskDetailProps) {
                   onResolveConflicts={handleResolveConflicts}
                   onSubmitComments={handleSubmitReviewComments}
                   isConversationStreaming={isConversationStreaming}
+                  autoResolve={autoResolve}
+                  onAutoResolveChange={setAutoResolve}
+                  onReportCIIssues={reportCIIssues}
                 />
               )}
 

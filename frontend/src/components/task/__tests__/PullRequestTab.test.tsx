@@ -53,6 +53,9 @@ const defaultProps = {
   onResolveConflicts: vi.fn(),
   onSubmitComments: vi.fn(),
   isConversationStreaming: false,
+  autoResolve: false,
+  onAutoResolveChange: vi.fn(),
+  onReportCIIssues: vi.fn(),
 }
 
 beforeEach(() => {

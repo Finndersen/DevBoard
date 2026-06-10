@@ -19,6 +19,9 @@ interface PullRequestTabProps {
   onResolveConflicts: () => void
   onSubmitComments: (message: string) => void
   isConversationStreaming: boolean
+  autoResolve: boolean
+  onAutoResolveChange: (v: boolean) => void
+  onReportCIIssues: () => void
 }
 
 function CiCheckRow({ check }: { check: PRCheckItem }) {
@@ -157,30 +160,63 @@ function CiChecksSection({
   prDetail,
   prDetailLoading,
   prDetailError,
+  autoResolve,
+  onAutoResolveChange,
+  onReportCIIssues,
+  isConversationStreaming,
 }: {
   prDetail: PRDetailResponse | null
   prDetailLoading: boolean
   prDetailError: boolean
+  autoResolve: boolean
+  onAutoResolveChange: (v: boolean) => void
+  onReportCIIssues: () => void
+  isConversationStreaming: boolean
 }) {
   const [expanded, setExpanded] = useState(true)
   const checks = prDetail?.checks ?? []
   const { text: summaryText, colorClass: summaryColor } = ciSummaryText(checks)
+  const failingChecks = checks.filter(c => c.state.toUpperCase() === 'FAILURE' || c.state.toUpperCase() === 'ERROR')
 
   return (
     <div>
-      <button
-        onClick={() => setExpanded(e => !e)}
-        className={`flex items-center gap-2 w-full text-left mb-3 ${textColors.secondary} hover:text-gray-900 dark:hover:text-gray-100 transition-colors`}
-      >
-        {expanded
-          ? <ChevronDownIcon className="w-4 h-4 flex-shrink-0" />
-          : <ChevronRightIcon className="w-4 h-4 flex-shrink-0" />
-        }
-        <span className={`text-sm font-medium ${textColors.primary}`}>CI Checks</span>
-        {summaryText && (
-          <span className={`text-xs ${summaryColor}`}>{summaryText}</span>
-        )}
-      </button>
+      <div className={`flex items-center justify-between gap-3 mb-3`}>
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className={`flex items-center gap-2 text-left ${textColors.secondary} hover:text-gray-900 dark:hover:text-gray-100 transition-colors`}
+        >
+          {expanded
+            ? <ChevronDownIcon className="w-4 h-4 flex-shrink-0" />
+            : <ChevronRightIcon className="w-4 h-4 flex-shrink-0" />
+          }
+          <span className={`text-sm font-medium ${textColors.primary}`}>CI Checks</span>
+          {summaryText && (
+            <span className={`text-xs ${summaryColor}`}>{summaryText}</span>
+          )}
+        </button>
+
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <label className={`flex items-center gap-2 cursor-pointer ${textColors.secondary}`}>
+            <input
+              type="checkbox"
+              checked={autoResolve}
+              onChange={(e) => onAutoResolveChange(e.target.checked)}
+              className={`w-4 h-4 rounded accent-amber-600 ${borderColors.input}`}
+            />
+            <span className="text-xs font-medium">Auto-report failures</span>
+          </label>
+
+          {failingChecks.length > 0 && (
+            <button
+              onClick={onReportCIIssues}
+              disabled={isConversationStreaming}
+              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+            >
+              Report CI Issues
+            </button>
+          )}
+        </div>
+      </div>
 
       {expanded && (
         <div className={`border ${borderColors.default} rounded-lg overflow-hidden`}>
@@ -243,6 +279,9 @@ export function PullRequestTab({
   onResolveConflicts,
   onSubmitComments,
   isConversationStreaming,
+  autoResolve,
+  onAutoResolveChange,
+  onReportCIIssues,
 }: PullRequestTabProps) {
   return (
     <div className="h-full overflow-y-auto space-y-6 p-1">
@@ -258,6 +297,10 @@ export function PullRequestTab({
         prDetail={prDetail}
         prDetailLoading={prDetailLoading}
         prDetailError={prDetailError}
+        autoResolve={autoResolve}
+        onAutoResolveChange={onAutoResolveChange}
+        onReportCIIssues={onReportCIIssues}
+        isConversationStreaming={isConversationStreaming}
       />
       <ReviewsSection
         prFeedback={prFeedback}
