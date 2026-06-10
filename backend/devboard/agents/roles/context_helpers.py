@@ -188,6 +188,9 @@ def build_task_context(
         _format_project_metadata(task),
     ]
 
+    if task.custom_fields:
+        sections.append(_format_custom_fields(task))
+
     if include_project_specification:
         sections.append(_format_project_specification(task))
 
@@ -207,8 +210,5 @@ def build_task_context(
             )
         elif task.implementation_plan:
             sections.append(_format_implementation_plan(task))
-
-    if task.custom_fields:
-        sections.append(_format_custom_fields(task))
 
     return "\n\n---\n\n".join(sections)

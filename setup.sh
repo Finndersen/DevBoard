@@ -61,6 +61,17 @@ install_pnpm() {
     npm install -g pnpm
 }
 
+install_uv() {
+    if command -v brew &> /dev/null; then
+        info "Installing uv via Homebrew..."
+        brew install uv
+    else
+        info "Installing uv via installer script..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+}
+
 # Check prerequisites
 info "Checking prerequisites..."
 
@@ -74,7 +85,10 @@ if ! command -v pnpm &> /dev/null; then
     install_pnpm
 fi
 
-check_command uv
+if ! command -v uv &> /dev/null; then
+    warn "uv not found, attempting to install..."
+    install_uv
+fi
 brew install tree
 
 info "All prerequisites satisfied"

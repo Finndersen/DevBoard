@@ -61,10 +61,7 @@
 - add codebase-level docs config (whether enabled, path, and custom guidance). this is then used when deciding whether to have documentation update step in plan, and enhance the documetnation update agent with more context and guidance
 - Show Claude usage
 - Include bas branch changes (commit details) in automatic event task agent context so it can decide whetehr rebase would be useful. 
-- add ability for parent agent to inspect sub-agent conversation or last response to see how to resume
 - Handle "You've hit your limit" response from sub-agent as error not success
-- Tools to list and inspect (summary or ask qeustion) of project / task conversations
-- CHeck if implemntation step is actually running when attempting to re-run step in "running" status - to avoid need of using force
 
 - For Implementation agent:
 - Add interface for viewing & editing user-level CLAUDE.md agent prompt/context file

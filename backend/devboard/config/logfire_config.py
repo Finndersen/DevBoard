@@ -63,10 +63,10 @@ def setup_logfire(app: FastAPI) -> None:
     if environment == "development":
         console_options = ConsoleOptions(verbose=True, min_log_level=log_level)
 
-    # Configure Logfire with hardcoded sensible defaults
-    # Let logfire auto-detect credentials (env var, local .logfire/, or ~/.logfire/)
-    # Only pass send_to_logfire explicitly when forcing it off via DISABLE_LOGFIRE
+    # 'if-token-present' enables cloud export only when LOGFIRE_TOKEN env var or
+    # ~/.logfire/default.toml credentials exist — silently skips otherwise.
     logfire.configure(
+        send_to_logfire="if-token-present",
         service_name="devboard",
         environment=environment,
         console=console_options,
