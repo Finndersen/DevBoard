@@ -155,7 +155,7 @@ class TestCreateFinaliseTaskTool:
         result = await tool.function()
 
         assert "COMPLETE" in result
-        mock_task_service.transition_to_complete.assert_called_once_with(mock_merged_task)
+        mock_task_service.transition_to_complete.assert_called_once_with(mock_merged_task, method="finalise")
 
     @pytest.mark.asyncio
     async def test_raises_model_retry_when_not_merged(self, mock_task_service):

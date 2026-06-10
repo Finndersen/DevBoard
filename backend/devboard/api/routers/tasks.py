@@ -35,12 +35,14 @@ from devboard.api.schemas import (
     ImplementationStepUpdate,
     MergeBranchRequest,
     MergeBranchResponse,
+    PaginatedTaskListResponse,
     PRFeedbackCommentResponse,
     PRFeedbackCommentThreadResponse,
     PRFeedbackResponse,
     PRFeedbackReviewResponse,
     PromptActionRequest,
     TaskBranchInfo,
+    TaskCountsResponse,
     TaskDiffResponse,
     TaskListResponse,
     TaskResponse,
@@ -99,9 +101,49 @@ async def list_all_tasks(
             codebase_id=task.codebase_id,
             status=task.status,
             created_at=task.created_at,
+            updated_at=task.updated_at,
         )
         for task in tasks
     ]
+
+
+@router.get("/counts", response_model=TaskCountsResponse)
+async def get_task_counts(
+    project_id: int | None = Query(None),
+    task_repo: TaskRepository = Depends(get_task_repository),
+) -> TaskCountsResponse:
+    """Return a status → count map for all task statuses."""
+    counts = task_repo.count_by_status(project_id)
+    return TaskCountsResponse(counts)
+
+
+@router.get("/archived", response_model=PaginatedTaskListResponse)
+async def list_archived_tasks(
+    project_id: int | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    task_repo: TaskRepository = Depends(get_task_repository),
+) -> PaginatedTaskListResponse:
+    """Return paginated COMPLETE tasks, optionally filtered by project."""
+    tasks, total = task_repo.get_archived_paginated(project_id, page, page_size)
+    return PaginatedTaskListResponse(
+        items=[
+            TaskListResponse(
+                id=task.id,
+                title=task.title,
+                project_id=task.project_id,
+                project_name=task.project.name,
+                codebase_id=task.codebase_id,
+                status=task.status,
+                created_at=task.created_at,
+                updated_at=task.updated_at,
+            )
+            for task in tasks
+        ],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

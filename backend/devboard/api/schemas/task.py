@@ -3,7 +3,7 @@
 import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, RootModel, model_validator
 
 from devboard.db.models.task import TaskStatus
 
@@ -64,6 +64,10 @@ class WorkflowActionInfo(BaseModel):
     key: str
 
 
+class TaskCountsResponse(RootModel[dict[TaskStatus, int]]):
+    """Status → count map for all task statuses."""
+
+
 class TaskListResponse(BaseModel):
     """Schema for task list responses (lightweight, no conversation/workflow data)."""
 
@@ -74,8 +78,18 @@ class TaskListResponse(BaseModel):
     codebase_id: int
     status: TaskStatus
     created_at: datetime.datetime
+    updated_at: datetime.datetime
 
     model_config = {"from_attributes": True}
+
+
+class PaginatedTaskListResponse(BaseModel):
+    """Paginated list of tasks with total count."""
+
+    items: list[TaskListResponse]
+    total: int
+    page: int
+    page_size: int
 
 
 class TaskResponse(TaskBase):

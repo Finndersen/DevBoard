@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { apiClient } from '../lib/api'
-import type { Task, TaskCreate, TaskListItem } from '../lib/api'
+import type { Task, TaskCreate, TaskListItem, TaskCountsResponse, PaginatedTaskListResponse } from '../lib/api'
 import { useApi, useMutation } from './useApi'
 import { useUIStore } from '../stores/uiStore'
 
@@ -51,5 +51,16 @@ export function useDeleteTask() {
 export function useTransitionTaskState(options?: { updateCache?: (data: Task) => void }) {
   return useMutation((data: { id: number | string; newState: string }) =>
     apiClient.transitionTaskState(data.id, { new_state: data.newState }), options
+  )
+}
+
+export function useTaskCounts(projectId?: number) {
+  return useApi<TaskCountsResponse>(() => apiClient.getTaskCounts(projectId))
+}
+
+export function useArchivedTasks(projectId: number | undefined, page: number) {
+  return useApi<PaginatedTaskListResponse>(
+    () => apiClient.getArchivedTasks({ projectId, page, pageSize: 20 }),
+    { immediate: false }
   )
 }

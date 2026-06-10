@@ -54,6 +54,7 @@ const getStatusVariant = (status: TaskStatus): 'default' | 'success' | 'warning'
     case TaskStatus.PR_OPEN:
       return 'warning'
     case TaskStatus.COMPLETE:
+    case TaskStatus.MERGED:
       return 'success'
     default:
       return 'default'
@@ -257,8 +258,8 @@ export function TaskDetailHeader({
           />
         )}
 
-        {/* Branch Status Icon - only shown when task has a branch_name and is not complete */}
-        {gitStatus?.branch_name && task.status !== TaskStatus.COMPLETE && (
+        {/* Branch Status Icon - only shown when task has a branch_name and is not complete or merged */}
+        {gitStatus?.branch_name && task.status !== TaskStatus.COMPLETE && task.status !== TaskStatus.MERGED && (
           <button
             onClick={onOpenBranchStatusModal}
             className={`flex-shrink-0 flex items-center space-x-1.5 px-2 py-1 rounded text-sm border transition-colors ${

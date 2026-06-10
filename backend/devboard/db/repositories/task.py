@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from devboard.db.models import Codebase, Conversation, Document, ParentEntityType, Task, TaskStatus
@@ -170,6 +170,37 @@ class TaskRepository(BaseRepository[Task]):
             Task.codebase_id.in_(codebase_ids),
         )
         return list(self.db.execute(stmt).scalars().all())
+
+    def count_by_status(self, project_id: int | None = None) -> dict[TaskStatus, int]:
+        """Count tasks grouped by status, optionally filtered by project."""
+        stmt = select(Task.status, func.count(Task.id)).group_by(Task.status)
+        if project_id is not None:
+            stmt = stmt.where(Task.project_id == project_id)
+        rows = self.db.execute(stmt).all()
+        return {row[0]: row[1] for row in rows}
+
+    def get_archived_paginated(
+        self,
+        project_id: int | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[Task], int]:
+        """Get paginated COMPLETE tasks ordered by created_at descending.
+
+        Returns the page of tasks and the total count of matching tasks.
+        """
+        base_stmt = select(Task).where(Task.status == TaskStatus.COMPLETE)
+        if project_id is not None:
+            base_stmt = base_stmt.where(Task.project_id == project_id)
+
+        total: int = self.db.execute(select(func.count()).select_from(base_stmt.subquery())).scalar_one()
+
+        offset = (page - 1) * page_size
+        data_stmt = (
+            base_stmt.options(joinedload(Task.project)).order_by(Task.created_at.desc()).offset(offset).limit(page_size)
+        )
+        tasks = list(self.db.execute(data_stmt).unique().scalars().all())
+        return tasks, total
 
     def get_tasks_filtered(
         self,

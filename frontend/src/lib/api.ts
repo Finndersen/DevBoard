@@ -88,6 +88,16 @@ export interface TaskListItem {
   codebase_id: number
   status: TaskStatus
   created_at: string
+  updated_at: string
+}
+
+export type TaskCountsResponse = Partial<Record<TaskStatus, number>>
+
+export interface PaginatedTaskListResponse {
+  items: TaskListItem[]
+  total: number
+  page: number
+  page_size: number
 }
 
 export interface GitHubPRStatusResponse {
@@ -1120,8 +1130,27 @@ export class ApiClient {
 
   // Tasks
   async getAllTasks(projectId?: number): Promise<TaskListItem[]> {
-    const params = projectId ? `?project_id=${projectId}` : ''
-    return this.request<TaskListItem[]>(`/api/tasks${params}`)
+    const searchParams = new URLSearchParams()
+    if (projectId) searchParams.set('project_id', String(projectId))
+    for (const status of [TaskStatus.PLANNING, TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN, TaskStatus.MERGED]) {
+      searchParams.append('status', status)
+    }
+    return this.request<TaskListItem[]>(`/api/tasks?${searchParams}`)
+  }
+
+  async getTaskCounts(projectId?: number): Promise<TaskCountsResponse> {
+    const searchParams = new URLSearchParams()
+    if (projectId) searchParams.set('project_id', String(projectId))
+    const query = searchParams.toString()
+    return this.request<TaskCountsResponse>(`/api/tasks/counts${query ? `?${query}` : ''}`)
+  }
+
+  async getArchivedTasks({ projectId, page, pageSize }: { projectId?: number; page: number; pageSize: number }): Promise<PaginatedTaskListResponse> {
+    const searchParams = new URLSearchParams()
+    if (projectId) searchParams.set('project_id', String(projectId))
+    searchParams.set('page', String(page))
+    searchParams.set('page_size', String(pageSize))
+    return this.request<PaginatedTaskListResponse>(`/api/tasks/archived?${searchParams}`)
   }
 
   async getProjectTasks(projectId: number | string): Promise<Task[]> {
