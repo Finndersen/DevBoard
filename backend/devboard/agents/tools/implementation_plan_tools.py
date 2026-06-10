@@ -80,7 +80,7 @@ def create_set_implementation_plan_steps_tool(
             raise ModelRetry(f"Invalid dependency graph: {e}") from e
         plan_service.commit()
 
-        return f"Implementation plan created with {len(steps)} steps."
+        return f"Implementation plan created with {len(steps)} steps. DO NOT proceed with implementation."
 
     return Tool(
         function=set_implementation_plan_steps,  # ty:ignore[invalid-argument-type]
@@ -123,7 +123,7 @@ def create_add_implementation_step_tool(
         except ValueError as e:
             raise ModelRetry(str(e)) from e
         plan_service.commit()
-        return f"Step {step.step_number} '{title}' added to implementation plan."
+        return f"Step {step.step_number} '{title}' added to implementation plan. DO NOT proceed with implementation."
 
     return Tool(
         function=add_implementation_step,  # ty:ignore[invalid-argument-type]

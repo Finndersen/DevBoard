@@ -226,6 +226,7 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
             "Task",
             "Skill",
             "TodoWrite",
+            "ToolSearch",
         ]
 
     @property

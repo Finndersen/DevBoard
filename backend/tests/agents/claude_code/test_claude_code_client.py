@@ -92,8 +92,9 @@ class TestClaudeClient:
         agent = ClaudeClient(tools=[tool], load_settings=False)
         assert agent.options.mcp_servers is not None
         assert BUILTIN_TOOLS_MCP_NAME in agent.options.mcp_servers
-        assert len(agent.options.allowed_tools) == 1
-        assert agent.options.allowed_tools[0] == f"mcp__{BUILTIN_TOOLS_MCP_NAME}__custom_tool"
+        assert len(agent.options.allowed_tools) == 2
+        assert f"mcp__{BUILTIN_TOOLS_MCP_NAME}__custom_tool" in agent.options.allowed_tools
+        assert "ToolSearch" in agent.options.allowed_tools
         assert agent.options.disallowed_tools is not None
 
     @pytest.mark.asyncio

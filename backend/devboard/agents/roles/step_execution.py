@@ -77,18 +77,7 @@ class StepExecutionAgentRole(AgentRole):
 
     @property
     def allowed_builtin_tools(self) -> list[str]:
-        return [
-            "Read",
-            "Grep",
-            "Glob",
-            "Edit",
-            "Write",
-            "Bash",
-            "WebFetch",
-            "WebSearch",
-            "Agent",
-            "Skill",
-        ]
+        return ["Read", "Grep", "Glob", "Edit", "Write", "Bash", "WebFetch", "WebSearch", "Skill"]
 
     @property
     def include_builtin_system_prompt(self) -> bool:

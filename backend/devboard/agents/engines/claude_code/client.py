@@ -49,6 +49,7 @@ CLAUDE_BUILTIN_TOOLS: set[str] = {
     "TaskList",
     "Agent",
     "Skill",
+    "ToolSearch",
     # Planning & Task Management
     "EnterPlanMode",
     "ExitPlanMode",
@@ -142,15 +143,19 @@ class ClaudeClient:
 
         # Validate allowed_builtin_tools
         if allowed_builtin_tools:
-            invalid_tools = set(allowed_builtin_tools) - CLAUDE_BUILTIN_TOOLS
+            allowed_set: set[str] = set(allowed_builtin_tools)
+            invalid_tools = allowed_set - CLAUDE_BUILTIN_TOOLS
             if invalid_tools:
                 raise ValueError(f"Invalid builtin tool names: {invalid_tools}. Valid tools: {CLAUDE_BUILTIN_TOOLS}")
+        else:
+            allowed_set = set()
 
         # Both allowed_tools and disallowed_tools are required to both allow needed tools, but also hide remaining tools
         # Calculate disallowed tools (all builtin tools minus allowed ones)
         # Custom MCP tools are always allowed - they are not part of the disallowed calculation
-        allowed_set: set[str] = set(allowed_builtin_tools) if allowed_builtin_tools else set()
-        disallowed_tools = list(CLAUDE_BUILTIN_TOOLS - allowed_set)
+        # ToolSearch is always included so deferred tool schemas can be fetched at runtime
+        allowed_builtin_set = allowed_set | {"ToolSearch"}
+        disallowed_tools = CLAUDE_BUILTIN_TOOLS - allowed_builtin_set
 
         # Build MCP server from custom tools if provided
         if tools:
@@ -161,12 +166,13 @@ class ClaudeClient:
             custom_tool_names = []
 
         # Combine allowed builtin tools with custom MCP tool names
-        all_allowed_tools = list(allowed_set) + custom_tool_names
+        all_allowed_tools = allowed_builtin_set | set(custom_tool_names)
 
         # Add Edit rules for additional write directories
         if additional_write_dirs:
+            disallowed_tools.discard("Edit")
             for write_dir in additional_write_dirs:
-                all_allowed_tools.append(f"Edit({write_dir}/**)")
+                all_allowed_tools.add(f"Edit({write_dir}/**)")
 
         # Load environment variables from user settings
         env_vars = load_env_from_settings()
@@ -184,8 +190,8 @@ class ClaudeClient:
         self.options = ClaudeAgentOptions(
             resume=session_id,
             system_prompt=self._build_system_prompt(system_prompt, include_builtin_system_prompt),
-            allowed_tools=all_allowed_tools,
-            disallowed_tools=disallowed_tools,
+            allowed_tools=list(all_allowed_tools),
+            disallowed_tools=list(disallowed_tools),
             model=model,
             cwd=str(Path(cwd).resolve()) if cwd else None,
             mcp_servers=mcp_servers,  # type: ignore[arg-type]  # ty:ignore[invalid-argument-type]

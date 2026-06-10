@@ -108,11 +108,8 @@ class TaskPRReviewAgentRole(TaskAgentRoleBase):
 
     @property
     def allowed_builtin_tools(self) -> list[str]:
-        """List of allowed engine internal tools for this role.
-
-        Same as implementation role - needs full codebase editing capabilities.
-        """
-        return ["Read", "Edit", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "Task", "Agent", "Write"]
+        """List of allowed engine internal tools for this role."""
+        return ["Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch"]
 
     @property
     def include_builtin_system_prompt(self) -> bool:
