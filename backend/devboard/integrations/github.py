@@ -2,6 +2,7 @@
 
 import asyncio
 import re
+import subprocess
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -34,6 +35,7 @@ from devboard.db.models.codebase import MergeMethod
 from .base import (
     AuthenticationError,
     BaseIntegration,
+    IntegrationConfigurationError,
     IntegrationConnectionResult,
     IntegrationError,
     RateLimitError,
@@ -167,6 +169,7 @@ class PullRequest:
     ci_status: str | None
     comment_count: int
     state: str = "OPEN"
+    ci_checks: list[CICheck] = field(default_factory=list)
 
 
 class GitHubPR:
@@ -526,6 +529,77 @@ def _extract_ci_status(node: dict[str, Any]) -> str | None:
     return rollup.get("state")
 
 
+def _check_run_to_ci_state(check_run: dict[str, Any]) -> CIState:
+    """Map a GraphQL CheckRun conclusion/status to CIState."""
+    conclusion = check_run.get("conclusion")
+    if conclusion is None:
+        return "pending"
+    match conclusion:
+        case "SUCCESS" | "NEUTRAL" | "SKIPPED":
+            return "success"
+        case "FAILURE" | "TIMED_OUT" | "ACTION_REQUIRED" | "STARTUP_FAILURE":
+            return "failure"
+        case _:  # CANCELLED, STALE
+            return "error"
+
+
+def _extract_ci_checks(node: dict[str, Any]) -> list[CICheck]:
+    """Extract individual CI checks from a GraphQL PR node's statusCheckRollup contexts."""
+    commits = node.get("commits", {}).get("nodes", [])
+    if not commits:
+        return []
+    rollup = commits[0].get("commit", {}).get("statusCheckRollup")
+    if not rollup:
+        return []
+
+    checks: list[CICheck] = []
+    for context in rollup.get("contexts", {}).get("nodes", []):
+        if context is None:
+            continue
+        typename = context.get("__typename")
+        if typename == "StatusContext":
+            checks.append(
+                CICheck(
+                    context=context["context"],
+                    state=cast(CIState, context["state"].lower()),
+                    description=context.get("description"),
+                )
+            )
+        elif typename == "CheckRun":
+            checks.append(
+                CICheck(
+                    context=context["name"],
+                    state=_check_run_to_ci_state(context),
+                    description=context.get("title"),
+                )
+            )
+    return checks
+
+
+def _resolve_api_token(config: "GitHubIntegrationConfig") -> str:
+    """Return the configured token, or fall back to `gh auth token` if none is set."""
+    if config.api_token:
+        return config.api_token
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            raise IntegrationConfigurationError(
+                "No GitHub token configured and `gh auth token` failed. "
+                "Either configure a token or run `gh auth login`."
+            )
+        return result.stdout.strip()
+    except FileNotFoundError as e:
+        raise IntegrationConfigurationError(
+            "No GitHub token configured and `gh` CLI is not installed. "
+            "Either configure a token or install the GitHub CLI."
+        ) from e
+
+
 class GitHubIntegration(BaseIntegration):
     """Integration for GitHub API access."""
 
@@ -574,7 +648,8 @@ class GitHubIntegration(BaseIntegration):
     def __init__(self, config: GitHubIntegrationConfig):
         """Initialize with GitHub configuration and client."""
         super().__init__(config)
-        self.client = Github(auth=Token(config.api_token), base_url=config.base_url)
+        self._token = _resolve_api_token(config)
+        self.client = Github(auth=Token(self._token), base_url=config.base_url)
         logfire.info("Initialized GitHub integration")
 
     async def test_connection(self) -> IntegrationConnectionResult:
@@ -629,14 +704,19 @@ class GitHubIntegration(BaseIntegration):
             response = await client.post(
                 graphql_url,
                 json={"query": query, "variables": variables},
-                headers={"Authorization": f"Bearer {config.api_token}"},
+                headers={"Authorization": f"Bearer {self._token}"},
                 timeout=30.0,
             )
             response.raise_for_status()
             data = response.json()
 
         if "errors" in data:
-            raise IntegrationError(f"GitHub GraphQL error: {data['errors']}")
+            # Partial success: data is present but some fields were inaccessible (e.g. FORBIDDEN).
+            # Log and continue — callers receive null values for those fields.
+            if data.get("data") is not None:
+                logfire.warning(f"GitHub GraphQL partial errors (returning data): {data['errors']}")
+            else:
+                raise IntegrationError(f"GitHub GraphQL error: {data['errors']}")
 
         return data
 
@@ -744,6 +824,22 @@ class GitHubIntegration(BaseIntegration):
                   commit {
                     statusCheckRollup {
                       state
+                      contexts(last: 100) {
+                        nodes {
+                          __typename
+                          ... on StatusContext {
+                            context
+                            state
+                            description
+                          }
+                          ... on CheckRun {
+                            name
+                            conclusion
+                            status
+                            title
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -771,6 +867,7 @@ class GitHubIntegration(BaseIntegration):
             review_decision=node.get("reviewDecision"),
             ci_status=_extract_ci_status(node),
             comment_count=node.get("totalCommentsCount", 0),
+            ci_checks=_extract_ci_checks(node),
         )
         GitHubIntegration._pr_cache[key] = PRCacheEntry(data=result, fetched_at=time.time())
         return result

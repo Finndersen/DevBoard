@@ -10,9 +10,10 @@ from github.PullRequestComment import PullRequestComment
 from github.PullRequestReview import PullRequestReview
 
 from devboard.config.integration_configs import GitHubIntegrationConfig
-from devboard.integrations.base import IntegrationError, ResourceNotFoundError
+from devboard.integrations.base import IntegrationConfigurationError, IntegrationError, ResourceNotFoundError
 from devboard.integrations.github import (
     PR_CACHE_MAX_AGE,
+    CICheck,
     CommentThread,
     GitHubIntegration,
     GitHubPR,
@@ -22,6 +23,9 @@ from devboard.integrations.github import (
     PullRequest,
     ReviewComment,
     ReviewWithComments,
+    _check_run_to_ci_state,
+    _extract_ci_checks,
+    _resolve_api_token,
 )
 
 
@@ -829,8 +833,24 @@ def _make_graphql_response_for_single_pr(
     number: int = 42,
     repo: str = "owner/repo",
     title: str = "Test PR",
+    contexts: list[dict] | None = None,
+    rollup_state: str | None = None,
 ) -> dict:
     """Build a minimal GraphQL response for get_pull_request_status."""
+    if rollup_state is not None or contexts is not None:
+        status_check_rollup: dict | None = {
+            "state": rollup_state or "SUCCESS",
+            "contexts": {"nodes": contexts or []},
+        }
+    else:
+        status_check_rollup = None
+
+    commits = (
+        {"nodes": [{"commit": {"statusCheckRollup": status_check_rollup}}]}
+        if status_check_rollup is not None
+        else {"nodes": []}
+    )
+
     return {
         "data": {
             "repository": {
@@ -844,7 +864,7 @@ def _make_graphql_response_for_single_pr(
                     "mergeQueueEntry": None,
                     "reviewDecision": None,
                     "totalCommentsCount": 0,
-                    "commits": {"nodes": []},
+                    "commits": commits,
                     "repository": {"nameWithOwner": repo},
                 }
             }
@@ -985,6 +1005,211 @@ class TestGetPullRequestStatusCache:
         assert mock_client.post.call_count == 1  # Only the batch call, single PR hit cache
 
 
+class TestExtractCiChecks:
+    """Unit tests for _extract_ci_checks and _check_run_to_ci_state."""
+
+    def _node_with_contexts(self, contexts: list[dict], rollup_state: str = "SUCCESS") -> dict:
+        return {
+            "commits": {
+                "nodes": [{"commit": {"statusCheckRollup": {"state": rollup_state, "contexts": {"nodes": contexts}}}}]
+            }
+        }
+
+    def test_empty_commits_returns_empty(self):
+        assert _extract_ci_checks({"commits": {"nodes": []}}) == []
+
+    def test_no_rollup_returns_empty(self):
+        assert _extract_ci_checks({"commits": {"nodes": [{"commit": {"statusCheckRollup": None}}]}}) == []
+
+    def test_status_context_maps_correctly(self):
+        node = self._node_with_contexts(
+            [
+                {
+                    "__typename": "StatusContext",
+                    "context": "ci/circleci: build",
+                    "state": "SUCCESS",
+                    "description": "Passed",
+                }
+            ]
+        )
+        assert _extract_ci_checks(node) == [
+            CICheck(context="ci/circleci: build", state="success", description="Passed")
+        ]
+
+    def test_status_context_state_lowercased(self):
+        node = self._node_with_contexts(
+            [{"__typename": "StatusContext", "context": "ci/test", "state": "FAILURE", "description": None}]
+        )
+        checks = _extract_ci_checks(node)
+        assert checks[0].state == "failure"
+
+    def test_check_run_success(self):
+        node = self._node_with_contexts(
+            [
+                {
+                    "__typename": "CheckRun",
+                    "name": "Security pipeline",
+                    "conclusion": "SUCCESS",
+                    "status": "COMPLETED",
+                    "title": None,
+                }
+            ]
+        )
+        checks = _extract_ci_checks(node)
+        assert checks[0] == CICheck(context="Security pipeline", state="success", description=None)
+
+    def test_check_run_in_progress(self):
+        node = self._node_with_contexts(
+            [
+                {
+                    "__typename": "CheckRun",
+                    "name": "Security pipeline",
+                    "conclusion": None,
+                    "status": "IN_PROGRESS",
+                    "title": None,
+                }
+            ]
+        )
+        assert _extract_ci_checks(node)[0].state == "pending"
+
+    def test_check_run_failure(self):
+        node = self._node_with_contexts(
+            [
+                {
+                    "__typename": "CheckRun",
+                    "name": "Security pipeline",
+                    "conclusion": "FAILURE",
+                    "status": "COMPLETED",
+                    "title": "Required workflow did not pass",
+                }
+            ]
+        )
+        checks = _extract_ci_checks(node)
+        assert checks[0].state == "failure"
+        assert checks[0].description == "Required workflow did not pass"
+
+    def test_check_run_cancelled_maps_to_error(self):
+        node = self._node_with_contexts(
+            [
+                {
+                    "__typename": "CheckRun",
+                    "name": "Deploy",
+                    "conclusion": "CANCELLED",
+                    "status": "COMPLETED",
+                    "title": None,
+                }
+            ]
+        )
+        assert _extract_ci_checks(node)[0].state == "error"
+
+    def test_mixed_context_types(self):
+        node = self._node_with_contexts(
+            [
+                {
+                    "__typename": "StatusContext",
+                    "context": "ci/circleci: lint",
+                    "state": "SUCCESS",
+                    "description": None,
+                },
+                {
+                    "__typename": "CheckRun",
+                    "name": "Security pipeline",
+                    "conclusion": "FAILURE",
+                    "status": "COMPLETED",
+                    "title": None,
+                },
+            ]
+        )
+        checks = _extract_ci_checks(node)
+        assert len(checks) == 2
+        assert checks[0].context == "ci/circleci: lint"
+        assert checks[0].state == "success"
+        assert checks[1].context == "Security pipeline"
+        assert checks[1].state == "failure"
+
+    @pytest.mark.parametrize(
+        "conclusion,expected",
+        [
+            ("SUCCESS", "success"),
+            ("NEUTRAL", "success"),
+            ("SKIPPED", "success"),
+            ("FAILURE", "failure"),
+            ("TIMED_OUT", "failure"),
+            ("ACTION_REQUIRED", "failure"),
+            ("STARTUP_FAILURE", "failure"),
+            ("CANCELLED", "error"),
+            (None, "pending"),
+        ],
+    )
+    def test_check_run_to_ci_state_all_conclusions(self, conclusion: str | None, expected: str):
+        assert _check_run_to_ci_state({"conclusion": conclusion}) == expected
+
+
+class TestGetPullRequestStatusChecks:
+    """Integration tests for get_pull_request_status returning ci_checks."""
+
+    @pytest.fixture
+    def github_integration(self) -> GitHubIntegration:
+        config = GitHubIntegrationConfig(api_token="ghp_test_token", base_url="https://api.github.com")
+        with patch("devboard.integrations.github.Github"):
+            return GitHubIntegration(config)
+
+    @pytest.mark.asyncio
+    async def test_returns_ci_checks_from_graphql(self, github_integration: GitHubIntegration):
+        response = _make_graphql_response_for_single_pr(
+            rollup_state="FAILURE",
+            contexts=[
+                {
+                    "__typename": "StatusContext",
+                    "context": "ci/circleci: build",
+                    "state": "SUCCESS",
+                    "description": None,
+                },
+                {
+                    "__typename": "CheckRun",
+                    "name": "Security pipeline",
+                    "conclusion": "FAILURE",
+                    "status": "COMPLETED",
+                    "title": "Required workflow did not pass",
+                },
+            ],
+        )
+        mock_response = Mock()
+        mock_response.json.return_value = response
+        mock_response.raise_for_status = Mock()
+
+        with patch("devboard.integrations.github.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            result = await github_integration.get_pull_request_status("owner", "repo", 42)
+
+        assert result.ci_status == "FAILURE"
+        assert result.ci_checks == [
+            CICheck(context="ci/circleci: build", state="success", description=None),
+            CICheck(context="Security pipeline", state="failure", description="Required workflow did not pass"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_no_rollup_returns_empty_checks(self, github_integration: GitHubIntegration):
+        response = _make_graphql_response_for_single_pr()  # no rollup
+        mock_response = Mock()
+        mock_response.json.return_value = response
+        mock_response.raise_for_status = Mock()
+
+        with patch("devboard.integrations.github.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            result = await github_integration.get_pull_request_status("owner", "repo", 42)
+
+        assert result.ci_checks == []
+
+
 class TestGetUserPullRequestsCache:
     """Tests for caching behaviour in get_user_open_pull_requests."""
 
@@ -1055,3 +1280,47 @@ class TestGetUserPullRequestsCache:
             await github_integration.get_user_open_pull_requests(force_refresh=True)
 
         assert mock_client.post.call_count == 2
+
+
+class TestResolveApiToken:
+    """Unit tests for _resolve_api_token."""
+
+    def test_returns_explicit_token_when_configured(self):
+        config = GitHubIntegrationConfig(api_token="ghp_explicit")
+        assert _resolve_api_token(config) == "ghp_explicit"
+
+    def test_calls_gh_cli_when_no_token_configured(self):
+        config = GitHubIntegrationConfig()
+        with patch("devboard.integrations.github.subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="gho_fallback_token\n")
+            token = _resolve_api_token(config)
+        assert token == "gho_fallback_token"
+        mock_run.assert_called_once_with(["gh", "auth", "token"], capture_output=True, text=True, timeout=5)
+
+    def test_raises_when_gh_not_installed(self):
+        config = GitHubIntegrationConfig()
+        with patch("devboard.integrations.github.subprocess.run", side_effect=FileNotFoundError):
+            with pytest.raises(IntegrationConfigurationError, match="gh.*CLI is not installed"):
+                _resolve_api_token(config)
+
+    def test_raises_when_gh_not_authenticated(self):
+        config = GitHubIntegrationConfig()
+        with patch("devboard.integrations.github.subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=1, stdout="")
+            with pytest.raises(IntegrationConfigurationError, match="gh auth login"):
+                _resolve_api_token(config)
+
+    def test_raises_when_gh_returns_empty_token(self):
+        config = GitHubIntegrationConfig()
+        with patch("devboard.integrations.github.subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="   ")
+            with pytest.raises(IntegrationConfigurationError):
+                _resolve_api_token(config)
+
+    def test_integration_init_uses_gh_token_when_no_config(self):
+        config = GitHubIntegrationConfig()
+        with patch("devboard.integrations.github.subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="gho_from_gh\n")
+            with patch("devboard.integrations.github.Github"):
+                integration = GitHubIntegration(config)
+        assert integration._token == "gho_from_gh"

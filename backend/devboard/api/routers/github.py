@@ -105,6 +105,7 @@ async def get_pr_detail(
 
     try:
         github = integration_service.get_integration_instance(GitHubIntegration)
+        owner, repo = GitHubIntegration.parse_repo_url(codebase.repository_url)
         github_repo = await github.get_repository_from_url(codebase.repository_url)
         github_pr = await github_repo.get_pull_request(pr_number)
     except IntegrationConfigurationError as e:
@@ -112,16 +113,16 @@ async def get_pr_detail(
     except IntegrationError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
-    # Fetch status, reviews, and comments in parallel
-    status, reviews, comments = await asyncio.gather(
-        github_pr.get_status(),
+    # Fetch PR status (GraphQL, includes all check types), reviews, and comments in parallel
+    pr_status, reviews, comments = await asyncio.gather(
+        github.get_pull_request_status(owner, repo, pr_number, force_refresh=True),
         github_pr.get_reviews(),
         github_pr.get_comments(),
     )
 
     return PRDetailResponse(
-        ci_status=status.ci_status,
-        checks=[PRCheckItem(name=c.context, state=c.state, description=c.description) for c in status.ci_checks],
+        ci_status=pr_status.ci_status,
+        checks=[PRCheckItem(name=c.context, state=c.state, description=c.description) for c in pr_status.ci_checks],
         reviews=[
             PRReviewItem(
                 author=r.user.login if r.user else "Unknown",

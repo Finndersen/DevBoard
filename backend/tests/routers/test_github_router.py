@@ -9,7 +9,7 @@ from devboard.db.models import Codebase, Configuration
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import CodebaseRepository, ConfigurationRepository
 from devboard.integrations.base import IntegrationConfigurationError, IntegrationError
-from devboard.integrations.github import CICheck, GitHubPR, GitHubRepository, PRStatus, PullRequest
+from devboard.integrations.github import CICheck, GitHubPR, GitHubRepository, PullRequest
 
 
 @pytest.fixture
@@ -52,13 +52,14 @@ def _mock_github_with_prs(prs: list[PullRequest]) -> Mock:
 
 class TestGetOpenPRs:
     def test_github_not_configured(self, client):
-        """Returns error when GitHub integration is not configured."""
-        response = client.get("/api/github/open-prs")
+        """Returns error when no GitHub token is configured and gh CLI is unavailable."""
+        with patch("devboard.integrations.github.subprocess.run", side_effect=FileNotFoundError):
+            response = client.get("/api/github/open-prs")
         assert response.status_code == 200
         data = response.json()
         assert data["prs"] == []
         assert len(data["errors"]) == 1
-        assert "configuration" in data["errors"][0].lower()
+        assert "github" in data["errors"][0].lower()
 
     def test_returns_open_prs(self, client, codebase_with_repo, github_config):
         """Returns open PRs authored by the current user."""
@@ -253,14 +254,17 @@ class TestGetPRDetail:
         mock_repo = Mock(spec=GitHubRepository)
         mock_pr = Mock(spec=GitHubPR)
 
-        mock_pr.get_status = AsyncMock(
-            return_value=PRStatus(
-                pr_number=1,
-                state="open",
-                merged=False,
-                mergeable=True,
-                mergeable_state="clean",
-                ci_status="success",
+        mock_github.get_pull_request_status = AsyncMock(
+            return_value=PullRequest(
+                number=1,
+                title="Test PR",
+                html_url="https://github.com/owner/repo/pull/1",
+                mergeable_state="CLEAN",
+                repo_full_name="owner/repo",
+                updated_at=datetime(2026, 1, 1, tzinfo=UTC),
+                review_decision=None,
+                ci_status="SUCCESS",
+                comment_count=0,
                 ci_checks=[CICheck(context="ci/test", state="success", description="Tests passed")],
             )
         )
@@ -285,7 +289,7 @@ class TestGetPRDetail:
         assert response.status_code == 200
         data = response.json()
         assert data == {
-            "ci_status": "success",
+            "ci_status": "SUCCESS",
             "checks": [{"name": "ci/test", "state": "success", "description": "Tests passed"}],
             "reviews": [{"author": "reviewer1", "state": "APPROVED", "body": "LGTM"}],
             "review_comment_count": 2,

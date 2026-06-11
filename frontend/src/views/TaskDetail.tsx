@@ -98,11 +98,13 @@ function TaskDetail({ id }: TaskDetailProps) {
   // PR detail (CI checks) — fetched lazily when PR tab is first opened
   const [prDetail, setPrDetail] = useState<PRDetailResponse | null>(null)
   const [prDetailLoading, setPrDetailLoading] = useState(false)
+  const [prDetailError, setPrDetailError] = useState(false)
   const prDetailFetchedRef = useRef(false)
 
   // Fetch PR status and feedback when task has a PR (pr_open or complete)
   useEffect(() => {
     setPrDetail(null)
+    setPrDetailError(false)
     prDetailFetchedRef.current = false
 
     if (task?.id && task.github_pr_number && (task.status === TaskStatus.PR_OPEN || task.status === TaskStatus.COMPLETE)) {
@@ -129,10 +131,11 @@ function TaskDetail({ id }: TaskDetailProps) {
       .finally(() => setPrStatusLoading(false))
     if (task.codebase_id && task.github_pr_number) {
       setPrDetailLoading(true)
+      setPrDetailError(false)
       prDetailFetchedRef.current = true
       apiClient.getPRDetail(task.codebase_id, task.github_pr_number)
-        .then(setPrDetail)
-        .catch(() => setPrDetail(null))
+        .then(data => { setPrDetail(data); setPrDetailError(false) })
+        .catch(() => { setPrDetail(null); setPrDetailError(true) })
         .finally(() => setPrDetailLoading(false))
     }
   }, [task?.id, task?.codebase_id, task?.github_pr_number])
@@ -143,9 +146,10 @@ function TaskDetail({ id }: TaskDetailProps) {
     if (!task?.codebase_id || !task?.github_pr_number) return
     prDetailFetchedRef.current = true
     setPrDetailLoading(true)
+    setPrDetailError(false)
     apiClient.getPRDetail(task.codebase_id, task.github_pr_number)
-      .then(setPrDetail)
-      .catch(() => setPrDetail(null))
+      .then(data => { setPrDetail(data); setPrDetailError(false) })
+      .catch(() => { setPrDetail(null); setPrDetailError(true) })
       .finally(() => setPrDetailLoading(false))
   }, [activeTab, task?.codebase_id, task?.github_pr_number])
 
@@ -734,6 +738,7 @@ function TaskDetail({ id }: TaskDetailProps) {
                   prFeedback={prFeedback}
                   prDetail={prDetail}
                   prDetailLoading={prDetailLoading}
+                  prDetailError={prDetailError}
                   taskStatus={task.status}
                   onRefreshPrStatus={handleRefreshPrStatus}
                   onResolveConflicts={handleResolveConflicts}

@@ -2,6 +2,8 @@
 
 from enum import StrEnum
 
+from pydantic import Field
+
 from devboard.config.base import BaseConfig
 
 
@@ -26,7 +28,10 @@ class GitHubIntegrationConfig(BaseConfig):
     config_key = "integration.github.main"
     env_prefix = "GITHUB_"
 
-    api_token: str  # From GITHUB_API_TOKEN env var
+    api_token: str | None = Field(
+        default=None,
+        description="Personal access token or OAuth token. If not set, falls back to `gh auth token` from the GitHub CLI.",
+    )  # From GITHUB_API_TOKEN env var
     base_url: str = "https://api.github.com"
 
 

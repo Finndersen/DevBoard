@@ -13,6 +13,7 @@ interface PullRequestTabProps {
   prFeedback: PRFeedbackResponse | null
   prDetail: PRDetailResponse | null
   prDetailLoading: boolean
+  prDetailError: boolean
   taskStatus: TaskStatus
   onRefreshPrStatus: () => void
   onResolveConflicts: () => void
@@ -155,9 +156,11 @@ function StatusOverviewBar({
 function CiChecksSection({
   prDetail,
   prDetailLoading,
+  prDetailError,
 }: {
   prDetail: PRDetailResponse | null
   prDetailLoading: boolean
+  prDetailError: boolean
 }) {
   const [expanded, setExpanded] = useState(true)
   const checks = prDetail?.checks ?? []
@@ -186,6 +189,8 @@ function CiChecksSection({
               <div className={loadingSpinner} style={{ width: "1rem", height: "1rem" }} />
               <span className={`text-sm ${textColors.muted}`}>Loading CI checks…</span>
             </div>
+          ) : prDetailError ? (
+            <div className={`px-4 py-3 text-sm text-red-500`}>Failed to load CI checks</div>
           ) : checks.length === 0 ? (
             <div className={`px-4 py-3 text-sm ${textColors.muted}`}>No CI checks</div>
           ) : (
@@ -232,6 +237,7 @@ export function PullRequestTab({
   prFeedback,
   prDetail,
   prDetailLoading,
+  prDetailError,
   taskStatus,
   onRefreshPrStatus,
   onResolveConflicts,
@@ -251,6 +257,7 @@ export function PullRequestTab({
       <CiChecksSection
         prDetail={prDetail}
         prDetailLoading={prDetailLoading}
+        prDetailError={prDetailError}
       />
       <ReviewsSection
         prFeedback={prFeedback}
