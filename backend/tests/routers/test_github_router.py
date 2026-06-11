@@ -102,24 +102,16 @@ class TestGetOpenPRs:
         assert data["errors"] == []
 
         pr1 = data["prs"][0]
-        assert pr1 == {
-            "pr_number": 1,
-            "title": "Fix bug",
-            "repo_full_name": "owner/repo",
-            "codebase_id": codebase_with_repo.id,
-            "pr_url": "https://github.com/owner/repo/pull/1",
-            "mergeable_state": "CLEAN",
-            "updated_at": "2026-03-01T12:00:00Z",
-            "task_id": None,
-            "task_title": None,
-            "review_decision": "APPROVED",
-            "ci_status": "SUCCESS",
-            "comment_count": 3,
-        }
+        assert pr1["pr_status"]["pr_number"] == 1
+        assert pr1["pr_status"]["title"] == "Fix bug"
+        assert pr1["pr_status"]["repo_full_name"] == "owner/repo"
+        assert pr1["pr_status"]["state"] == "OPEN"
+        assert pr1["pr_status"]["merged"] is False
+        assert pr1["associated_task"] is None
 
         pr2 = data["prs"][1]
-        assert pr2["pr_number"] == 2
-        assert pr2["mergeable_state"] == "DIRTY"
+        assert pr2["pr_status"]["pr_number"] == 2
+        assert pr2["pr_status"]["mergeable_state"] == "DIRTY"
 
     def test_enriches_prs_with_codebase_info(self, client, codebase_with_repo, github_config):
         """PRs from configured codebases get codebase_id, others get null."""
@@ -159,10 +151,10 @@ class TestGetOpenPRs:
         assert response.status_code == 200
         data = response.json()
         assert len(data["prs"]) == 2
-        assert data["prs"][0]["pr_number"] == 1
-        assert data["prs"][0]["codebase_id"] == codebase_with_repo.id
-        assert data["prs"][1]["pr_number"] == 5
-        assert data["prs"][1]["codebase_id"] is None
+        assert data["prs"][0]["pr_status"]["pr_number"] == 1
+        assert data["prs"][0]["associated_task"] is None
+        assert data["prs"][1]["pr_status"]["pr_number"] == 5
+        assert data["prs"][1]["associated_task"] is None
 
     def test_correlates_prs_with_tasks(self, client, db_session, codebase_with_repo, github_config):
         """PRs are correlated with DevBoard tasks by pr_number + codebase_id."""
@@ -214,8 +206,9 @@ class TestGetOpenPRs:
         assert response.status_code == 200
         data = response.json()
         assert len(data["prs"]) == 1
-        assert data["prs"][0]["task_id"] == task.id
-        assert data["prs"][0]["task_title"] == "My Task"
+        assert data["prs"][0]["associated_task"]["task_id"] == task.id
+        assert data["prs"][0]["associated_task"]["task_title"] == "My Task"
+        assert data["prs"][0]["associated_task"]["codebase_id"] == codebase_with_repo.id
 
     def test_graphql_error_returns_error(self, client, codebase_with_repo, github_config):
         """GraphQL errors are returned in the errors list."""

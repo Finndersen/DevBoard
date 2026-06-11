@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import GitHubPRDropdown from '../GitHubPRDropdown'
-import type { OpenPRsResponse } from '../../../lib/api'
+import type { OpenPRItem } from '../../../lib/api'
 
 const mockRefetch = vi.fn()
 const mockNavigateTo = vi.fn()
@@ -12,46 +12,48 @@ vi.mock('../../../stores/uiStore', () => ({
   )
 }))
 
-const mockPRsResponse: OpenPRsResponse = {
-  prs: [
-    {
+const mockPRItems: OpenPRItem[] = [
+  {
+    pr_status: {
       pr_number: 1,
       title: 'Fix authentication bug',
       repo_full_name: 'owner/DevBoard',
-      codebase_id: 10,
       pr_url: 'https://github.com/owner/DevBoard/pull/1',
+      state: 'OPEN',
+      merged: false,
       mergeable_state: 'clean',
-      task_id: 42,
-      task_title: 'Auth fix task',
       review_decision: 'APPROVED',
       ci_status: 'SUCCESS',
       comment_count: 5,
       updated_at: '2026-03-01T12:00:00Z',
     },
-    {
+    associated_task: { task_id: 42, task_title: 'Auth fix task', codebase_id: 10 },
+  },
+  {
+    pr_status: {
       pr_number: 2,
       title: 'Add dark mode',
       repo_full_name: 'owner/DevBoard',
-      codebase_id: 10,
       pr_url: 'https://github.com/owner/DevBoard/pull/2',
+      state: 'OPEN',
+      merged: false,
       mergeable_state: 'dirty',
-      task_id: null,
-      task_title: null,
       review_decision: 'CHANGES_REQUESTED',
       ci_status: 'FAILURE',
       comment_count: 0,
       updated_at: '2026-02-28T10:00:00Z',
     },
-  ],
-  errors: [],
-}
+    associated_task: null,
+  },
+]
 
 function openDropdown() {
   fireEvent.click(screen.getByLabelText('Pull Requests'))
 }
 
 const defaultProps = {
-  data: mockPRsResponse,
+  prs: mockPRItems,
+  errors: [] as string[],
   loading: false,
   refetch: mockRefetch,
 }
@@ -80,7 +82,7 @@ describe('GitHubPRDropdown', () => {
   })
 
   it('shows loading state when data is loading', () => {
-    render(<GitHubPRDropdown data={null} loading={true} refetch={mockRefetch} />)
+    render(<GitHubPRDropdown prs={[]} errors={[]} loading={true} refetch={mockRefetch} />)
 
     openDropdown()
 
@@ -88,7 +90,7 @@ describe('GitHubPRDropdown', () => {
   })
 
   it('shows empty state when no PRs exist', () => {
-    render(<GitHubPRDropdown data={{ prs: [], errors: [] }} loading={false} refetch={mockRefetch} />)
+    render(<GitHubPRDropdown prs={[]} errors={[]} loading={false} refetch={mockRefetch} />)
 
     openDropdown()
 
@@ -96,7 +98,7 @@ describe('GitHubPRDropdown', () => {
   })
 
   it('shows error warning icon in header', () => {
-    render(<GitHubPRDropdown data={{ prs: [], errors: ['GitHub API error'] }} loading={false} refetch={mockRefetch} />)
+    render(<GitHubPRDropdown prs={[]} errors={['GitHub API error']} loading={false} refetch={mockRefetch} />)
 
     openDropdown()
 
@@ -171,27 +173,26 @@ describe('GitHubPRDropdown', () => {
   })
 
   it('shows merge conflicts indicator when mergeable state is dirty', () => {
-    const dirtyData: OpenPRsResponse = {
-      prs: [
-        {
+    const dirtyPRs: OpenPRItem[] = [
+      {
+        pr_status: {
           pr_number: 4,
           title: 'PR with merge conflicts',
           repo_full_name: 'owner/DevBoard',
-          codebase_id: 10,
           pr_url: 'https://github.com/owner/DevBoard/pull/4',
+          state: 'OPEN',
+          merged: false,
           mergeable_state: 'DIRTY',
-          task_id: null,
-          task_title: null,
           review_decision: 'APPROVED',
           ci_status: 'SUCCESS',
           comment_count: 0,
           updated_at: '2026-03-01T12:00:00Z',
         },
-      ],
-      errors: [],
-    }
+        associated_task: null,
+      },
+    ]
 
-    render(<GitHubPRDropdown data={dirtyData} loading={false} refetch={mockRefetch} />)
+    render(<GitHubPRDropdown prs={dirtyPRs} errors={[]} loading={false} refetch={mockRefetch} />)
     openDropdown()
 
     const conflictIndicator = screen.getByTitle('Has merge conflicts')
@@ -200,27 +201,26 @@ describe('GitHubPRDropdown', () => {
   })
 
   it('shows queued indicator for PR in merge queue', () => {
-    const queuedData: OpenPRsResponse = {
-      prs: [
-        {
+    const queuedPRs: OpenPRItem[] = [
+      {
+        pr_status: {
           pr_number: 3,
           title: 'Queued PR',
           repo_full_name: 'owner/DevBoard',
-          codebase_id: 10,
           pr_url: 'https://github.com/owner/DevBoard/pull/3',
+          state: 'OPEN',
+          merged: false,
           mergeable_state: 'QUEUED',
-          task_id: null,
-          task_title: null,
           review_decision: 'APPROVED',
           ci_status: 'SUCCESS',
           comment_count: 0,
           updated_at: '2026-03-01T12:00:00Z',
         },
-      ],
-      errors: [],
-    }
+        associated_task: null,
+      },
+    ]
 
-    render(<GitHubPRDropdown data={queuedData} loading={false} refetch={mockRefetch} />)
+    render(<GitHubPRDropdown prs={queuedPRs} errors={[]} loading={false} refetch={mockRefetch} />)
     openDropdown()
 
     const queuedIndicator = screen.getByTitle('Queued for merge')

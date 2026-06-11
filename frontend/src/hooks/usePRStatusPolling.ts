@@ -1,35 +1,24 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { apiClient } from '../lib/api'
-import type { OpenPRsResponse } from '../lib/api'
+import { useEffect, useCallback, useRef } from 'react'
+import { useGithubStore } from '../stores/githubStore'
 
 const POLL_INTERVAL_MS = 60_000
 
 export function usePRStatusPolling() {
-  const [data, setData] = useState<OpenPRsResponse | null>(null)
-  const [loading, setLoading] = useState(false)
+  const fetchAll = useGithubStore(s => s.fetchAll)
+  const loading = useGithubStore(s => s.loading)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const fetch = useCallback((forceRefresh?: boolean) => {
-    setLoading(true)
-    apiClient.getOpenPRs(forceRefresh)
-      .then(setData)
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
-
   useEffect(() => {
-    fetch()
-    intervalRef.current = setInterval(() => fetch(), POLL_INTERVAL_MS)
+    fetchAll()
+    intervalRef.current = setInterval(() => fetchAll(), POLL_INTERVAL_MS)
     return () => {
-      if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current)
-      }
+      if (intervalRef.current !== null) clearInterval(intervalRef.current)
     }
-  }, [fetch])
+  }, [fetchAll])
 
   const refetch = useCallback((forceRefresh?: boolean) => {
-    fetch(forceRefresh)
-  }, [fetch])
+    fetchAll(forceRefresh)
+  }, [fetchAll])
 
-  return { data, loading, refetch }
+  return { loading, refetch }
 }

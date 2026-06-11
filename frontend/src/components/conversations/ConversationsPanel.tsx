@@ -14,11 +14,11 @@ import { useConversations } from '../../hooks/useConversations'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { useUIStore } from '../../stores/uiStore'
 import type { ViewType } from '../../stores/uiStore'
-import type { ConversationResponse, GitHubPRStatusResponse } from '../../lib/api'
-import { apiClient } from '../../lib/api'
+import type { ConversationResponse } from '../../lib/api'
 import { textColors, surfaces, borderColors, hoverColors } from '../../styles/designSystem'
 import { useViewStreamStatus } from '../../hooks/useViewStreamStatus'
 import { StatusIndicator } from '../github/PRStatusComponents'
+import { useGithubStore } from '../../stores/githubStore'
 
 const AGENT_ROLE_LABELS: Record<string, string> = {
   project: 'Project',
@@ -136,8 +136,9 @@ export default function ConversationsPanel() {
     [modalDrafts]
   )
 
-  // PR status cache: taskId -> status (null = error/not found)
-  const [prStatusMap, setPrStatusMap] = useState<Map<number, GitHubPRStatusResponse | null>>(new Map())
+  // PR status from unified github store
+  const fetchForTask = useGithubStore(s => s.fetchForTask)
+  const getPrStatusForTask = useGithubStore(s => s.getPrStatusForTask)
 
   // Track "needs attention" conversations (previously streaming, now completed)
   const [needsAttentionIds, setNeedsAttentionIds] = useState<Set<number>>(new Set())
@@ -159,31 +160,14 @@ export default function ConversationsPanel() {
     const prReviewConversations = conversations.filter(c => c.agent_role === 'task_pr_review')
     if (prReviewConversations.length === 0) return
 
-    // Deduplicate by taskId
+    // Deduplicate by taskId, then fetch each into the github store
     const seenTaskIds = new Set<number>()
-    const uniqueConversations = prReviewConversations.filter(c => {
-      if (seenTaskIds.has(c.parent_entity_id)) return false
-      seenTaskIds.add(c.parent_entity_id)
-      return true
-    })
-
-    Promise.allSettled(
-      uniqueConversations.map(c =>
-        apiClient.getTaskPRStatus(c.parent_entity_id).then(status => ({ taskId: c.parent_entity_id, status }))
-      )
-    ).then(results => {
-      setPrStatusMap(prev => {
-        const next = new Map(prev)
-        for (const result of results) {
-          if (result.status === 'fulfilled') {
-            next.set(result.value.taskId, result.value.status)
-          } else {
-            // Keep existing cached value on error (new entries remain absent from map)
-          }
-        }
-        return next
-      })
-    })
+    for (const c of prReviewConversations) {
+      if (!seenTaskIds.has(c.parent_entity_id)) {
+        seenTaskIds.add(c.parent_entity_id)
+        fetchForTask(c.parent_entity_id)
+      }
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prReviewTaskIdsKey])
 
@@ -441,7 +425,7 @@ export default function ConversationsPanel() {
               )
               const hasDraft = draftKeys.has(`conversation:${item.id}`)
               const isPRReview = item.agent_role === 'task_pr_review'
-              const prStatus = isPRReview ? prStatusMap.get(item.parent_entity_id) ?? null : null
+              const prStatus = isPRReview ? (getPrStatusForTask(item.parent_entity_id) ?? null) : null
               const isTaskConversation = item.parent_entity_type.toUpperCase() === 'TASK'
               const primaryLabel = !isTaskConversation && item.title ? item.title : item.parent_entity_name
               const secondaryLabel = isTaskConversation ? item.project_name : item.parent_entity_name

@@ -8,12 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from devboard.api.dependencies.repositories import get_codebase_repository, get_task_repository
 from devboard.api.dependencies.services import get_integration_service
 from devboard.api.schemas.github import (
+    AssociatedTask,
     OpenPRItem,
     OpenPRsResponse,
     PRCheckItem,
     PRDetailResponse,
     PRReviewItem,
 )
+from devboard.api.schemas.task import GitHubPRStatusResponse
 from devboard.db.repositories import CodebaseRepository, TaskRepository
 from devboard.integrations.base import IntegrationConfigurationError, IntegrationError
 from devboard.integrations.github import GitHubIntegration
@@ -69,22 +71,29 @@ async def get_open_prs(
     for pr in all_user_prs:
         cb_id = repo_to_codebase.get(pr.repo_full_name.lower())
         task_info = task_lookup.get((cb_id, pr.number)) if cb_id is not None else None
-        prs.append(
-            OpenPRItem(
-                pr_number=pr.number,
-                title=pr.title,
-                repo_full_name=pr.repo_full_name,
-                codebase_id=cb_id,
-                pr_url=pr.html_url,
-                mergeable_state=pr.mergeable_state,
-                task_id=task_info[0] if task_info else None,
-                task_title=task_info[1] if task_info else None,
-                updated_at=pr.updated_at,
-                review_decision=pr.review_decision,
-                ci_status=pr.ci_status,
-                comment_count=pr.comment_count,
-            )
+        pr_status = GitHubPRStatusResponse(
+            pr_number=pr.number,
+            pr_url=pr.html_url,
+            title=pr.title,
+            state=pr.state,
+            merged=pr.state == "MERGED",
+            mergeable_state=pr.mergeable_state,
+            review_decision=pr.review_decision,
+            ci_status=pr.ci_status,
+            comment_count=pr.comment_count,
+            repo_full_name=pr.repo_full_name,
+            updated_at=pr.updated_at,
         )
+        associated_task = (
+            AssociatedTask(
+                task_id=task_info[0],
+                task_title=task_info[1],
+                codebase_id=cb_id,
+            )
+            if task_info and cb_id is not None
+            else None
+        )
+        prs.append(OpenPRItem(pr_status=pr_status, associated_task=associated_task))
 
     return OpenPRsResponse(prs=prs, errors=[])
 

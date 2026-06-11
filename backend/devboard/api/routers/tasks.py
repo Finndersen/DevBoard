@@ -606,6 +606,7 @@ async def get_task_pr_status(
     return GitHubPRStatusResponse(
         pr_number=pr.number,
         pr_url=pr.html_url,
+        title=pr.title,
         state=pr.state,
         merged=pr.state == "MERGED",
         mergeable_state=pr.mergeable_state,
@@ -613,6 +614,7 @@ async def get_task_pr_status(
         ci_status=pr.ci_status,
         comment_count=pr.comment_count,
         repo_full_name=f"{owner}/{repo}",
+        updated_at=pr.updated_at,
     )
 
 

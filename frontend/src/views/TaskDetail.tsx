@@ -9,6 +9,7 @@ import { useEventHandlerRegistryForStream } from '../hooks/useConversationEventH
 import { useDataStore } from '../stores/dataStore'
 import { useUIStore } from '../stores/uiStore'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
+import { useGithubStore } from '../stores/githubStore'
 import { ErrorMessage, Card } from '../components/ui'
 import { loadingSpinner, layouts, textColors } from '../styles/designSystem'
 import AgentChat, { type AgentChatHandle } from '../components/chat/AgentChat'
@@ -90,9 +91,10 @@ function TaskDetail({ id }: TaskDetailProps) {
 
   const [activeTab, setActiveTab] = useState<'specification' | 'plan' | 'changes' | 'pullrequest' | 'summary'>('specification')
 
-  // PR status for tasks with a PR (pr_open or complete)
-  const [prStatus, setPrStatus] = useState<GitHubPRStatusResponse | null>(null)
-  const [prStatusLoading, setPrStatusLoading] = useState(false)
+  // PR status sourced from the unified github store
+  const fetchForTask = useGithubStore(s => s.fetchForTask)
+  const prStatus = useGithubStore(s => s.getPrStatusForTask(task?.id ?? 0)) ?? null
+  const prStatusLoading = useGithubStore(s => s.loading)
   // PR feedback (reviews and comments) for tasks in PR_OPEN or COMPLETE state
   const [prFeedback, setPrFeedback] = useState<PRFeedbackResponse | null>(null)
   // PR detail (CI checks) — fetched lazily when PR tab is first opened
@@ -108,27 +110,18 @@ function TaskDetail({ id }: TaskDetailProps) {
     prDetailFetchedRef.current = false
 
     if (task?.id && task.github_pr_number && (task.status === TaskStatus.PR_OPEN || task.status === TaskStatus.COMPLETE)) {
-      setPrStatusLoading(true)
-      apiClient.getTaskPRStatus(task.id)
-        .then(setPrStatus)
-        .catch(() => setPrStatus(null))
-        .finally(() => setPrStatusLoading(false))
+      fetchForTask(task.id)
       apiClient.getTaskPRFeedback(task.id)
         .then(setPrFeedback)
         .catch(() => setPrFeedback(null))
     } else {
-      setPrStatus(null)
       setPrFeedback(null)
     }
-  }, [task?.id, task?.status, task?.github_pr_number])
+  }, [task?.id, task?.status, task?.github_pr_number, fetchForTask])
 
   const handleRefreshPrStatus = useCallback(() => {
     if (!task?.id) return
-    setPrStatusLoading(true)
-    apiClient.getTaskPRStatus(task.id, true)
-      .then(setPrStatus)
-      .catch(() => setPrStatus(null))
-      .finally(() => setPrStatusLoading(false))
+    fetchForTask(task.id, true)
     if (task.codebase_id && task.github_pr_number) {
       setPrDetailLoading(true)
       setPrDetailError(false)
@@ -138,7 +131,7 @@ function TaskDetail({ id }: TaskDetailProps) {
         .catch(() => { setPrDetail(null); setPrDetailError(true) })
         .finally(() => setPrDetailLoading(false))
     }
-  }, [task?.id, task?.codebase_id, task?.github_pr_number])
+  }, [task?.id, task?.codebase_id, task?.github_pr_number, fetchForTask])
 
   // Lazy-fetch PR detail (CI checks) when PR tab is first opened
   useEffect(() => {

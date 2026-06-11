@@ -192,6 +192,7 @@ class GitHubPRStatusResponse(BaseModel):
 
     pr_number: int
     pr_url: str
+    title: str
     state: str
     merged: bool
     mergeable_state: str | None
@@ -199,6 +200,7 @@ class GitHubPRStatusResponse(BaseModel):
     ci_status: str | None
     comment_count: int
     repo_full_name: str
+    updated_at: datetime.datetime
 
 
 class PRFeedbackCommentResponse(BaseModel):

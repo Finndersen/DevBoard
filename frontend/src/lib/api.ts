@@ -92,6 +92,7 @@ export interface TaskListItem {
 export interface GitHubPRStatusResponse {
   pr_number: number
   pr_url: string
+  title: string
   state: string
   merged: boolean
   mergeable_state: string | null
@@ -99,6 +100,7 @@ export interface GitHubPRStatusResponse {
   ci_status: string | null
   comment_count: number
   repo_full_name: string
+  updated_at: string
 }
 
 export interface PRFeedbackComment {
@@ -867,19 +869,15 @@ export interface McpServer {
 }
 
 // GitHub PR Status types
+export interface AssociatedTask {
+  task_id: number
+  task_title: string
+  codebase_id: number
+}
+
 export interface OpenPRItem {
-  pr_number: number
-  title: string
-  repo_full_name: string
-  codebase_id: number | null
-  pr_url: string
-  mergeable_state: string | null
-  task_id: number | null
-  task_title: string | null
-  updated_at: string
-  review_decision: string | null
-  ci_status: string | null
-  comment_count: number
+  pr_status: GitHubPRStatusResponse
+  associated_task: AssociatedTask | null
 }
 
 export interface OpenPRsResponse {

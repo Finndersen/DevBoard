@@ -2,11 +2,11 @@ import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { PlusIcon, ListBulletIcon, FunnelIcon, ChatBubbleLeftIcon, ArrowPathIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { useAllTasks, useProjects, useRefetchOnViewActivation } from '../hooks'
-import { useOpenPRs } from '../hooks/useGitHubPRs'
 import { Button, Card, ErrorMessage } from '../components/ui'
 import { textColors, loadingSpinner } from '../styles/designSystem'
 import { TaskStatus } from '../lib/api'
-import type { TaskListItem, OpenPRItem } from '../lib/api'
+import type { TaskListItem } from '../lib/api'
+import { useGithubStore } from '../stores/githubStore'
 import ViewHeader from '../components/layout/ViewHeader'
 import { StatusIndicator, ReviewBadge } from '../components/github/PRStatusComponents'
 import { useUIStore } from '../stores/uiStore'
@@ -46,32 +46,31 @@ export default function TasksList() {
   })
   const { data: tasks, loading: tasksLoading, error: tasksError, refetch: refetchTasks } = useAllTasks(selectedProjectId)
   const { data: projects } = useProjects()
-  const { data: openPRsData, refetch: refetchOpenPRs } = useOpenPRs()
+  const fetchAll = useGithubStore(s => s.fetchAll)
+  const openPRItems = useGithubStore(s => s.openPRItems)
   const { createAndOpenDraft } = useUIStore()
   const [refreshing, setRefreshing] = useState(false)
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      await Promise.all([refetchTasks(), refetchOpenPRs()])
+      await Promise.all([refetchTasks(), fetchAll(true)])
     } finally {
       setRefreshing(false)
     }
-  }, [refetchTasks, refetchOpenPRs])
+  }, [refetchTasks, fetchAll])
 
-  useRefetchOnViewActivation([refetchTasks, refetchOpenPRs])
+  useRefetchOnViewActivation([refetchTasks])
 
   const prByTaskId = useMemo(() => {
-    const map = new Map<number, OpenPRItem>()
-    if (openPRsData) {
-      for (const pr of openPRsData.prs) {
-        if (pr.task_id !== null) {
-          map.set(pr.task_id, pr)
-        }
+    const map = new Map<number, { mergeable_state: string | null; ci_status: string | null; review_decision: string | null; pr_url: string; pr_number: number; comment_count: number }>()
+    for (const item of openPRItems) {
+      if (item.associated_task) {
+        map.set(item.associated_task.task_id, item.pr_status)
       }
     }
     return map
-  }, [openPRsData])
+  }, [openPRItems])
 
   // Refetch when project filter changes
   useEffect(() => {

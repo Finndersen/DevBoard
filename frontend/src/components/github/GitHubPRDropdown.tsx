@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { ArrowPathIcon, ArrowTopRightOnSquareIcon, ChatBubbleLeftIcon, DocumentTextIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { useUIStore } from '../../stores/uiStore'
-import type { OpenPRItem, OpenPRsResponse } from '../../lib/api'
+import type { OpenPRItem } from '../../lib/api'
 import { StatusIndicator, ReviewBadge } from './PRStatusComponents'
 import { surfaces, borderColors, textColors } from '../../styles/designSystem'
 
@@ -32,18 +32,19 @@ function PRIcon({ className }: { className?: string }) {
 }
 
 interface GitHubPRDropdownProps {
-  data: OpenPRsResponse | null
+  prs: OpenPRItem[]
+  errors: string[]
   loading: boolean
   refetch: (forceRefresh?: boolean) => void
 }
 
-export default function GitHubPRDropdown({ data, loading, refetch }: GitHubPRDropdownProps) {
+export default function GitHubPRDropdown({ prs, errors, loading, refetch }: GitHubPRDropdownProps) {
   const navigateTo = useUIStore(s => s.navigateTo)
   const [isOpen, setIsOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
 
-  const prCount = data?.prs.length ?? 0
-  const hasErrors = (data?.errors.length ?? 0) > 0
+  const prCount = prs.length
+  const hasErrors = errors.length > 0
 
   const handleRefresh = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -52,8 +53,8 @@ export default function GitHubPRDropdown({ data, loading, refetch }: GitHubPRDro
 
   const handleOpenTask = (e: React.MouseEvent, pr: OpenPRItem) => {
     e.stopPropagation()
-    if (pr.task_id) {
-      navigateTo({ type: 'task', entityId: String(pr.task_id), title: pr.task_title || `Task #${pr.task_id}` })
+    if (pr.associated_task) {
+      navigateTo({ type: 'task', entityId: String(pr.associated_task.task_id), title: pr.associated_task.task_title || `Task #${pr.associated_task.task_id}` })
       setIsOpen(false)
     }
   }
@@ -98,7 +99,7 @@ export default function GitHubPRDropdown({ data, loading, refetch }: GitHubPRDro
             </h3>
             <div className="flex items-center gap-2">
               {hasErrors && (
-                <div title={data?.errors.join('\n')}>
+                <div title={errors.join('\n')}>
                   <ExclamationTriangleIcon className="w-4 h-4 text-yellow-500" />
                 </div>
               )}
@@ -114,14 +115,14 @@ export default function GitHubPRDropdown({ data, loading, refetch }: GitHubPRDro
 
           {/* Scrollable list */}
           <div className="max-h-96 overflow-y-auto">
-            {loading && !data && (
+            {loading && prs.length === 0 && (
               <div className="p-8 text-center">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto" />
                 <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading PRs...</p>
               </div>
             )}
 
-            {data && data.prs.length === 0 && !loading && (
+            {prs.length === 0 && !loading && (
               <div className="p-8 text-center">
                 <PRIcon className="mx-auto h-12 w-12 text-gray-400" />
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
@@ -130,20 +131,20 @@ export default function GitHubPRDropdown({ data, loading, refetch }: GitHubPRDro
               </div>
             )}
 
-            {data && data.prs.length > 0 && (
+            {prs.length > 0 && (
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {data.prs.map(pr => (
+                {prs.map(pr => (
                   <div
-                    key={`${pr.repo_full_name}#${pr.pr_number}`}
+                    key={`${pr.pr_status.repo_full_name}#${pr.pr_status.pr_number}`}
                     className="p-3 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
                   >
                     <div className="flex items-start gap-2">
                       {/* Combined status indicator */}
                       <div className="flex-shrink-0 mt-0.5">
                         <StatusIndicator
-                          mergeableState={pr.mergeable_state}
-                          ciStatus={pr.ci_status}
-                          reviewDecision={pr.review_decision}
+                          mergeableState={pr.pr_status.mergeable_state}
+                          ciStatus={pr.pr_status.ci_status}
+                          reviewDecision={pr.pr_status.review_decision}
                         />
                       </div>
 
@@ -151,21 +152,21 @@ export default function GitHubPRDropdown({ data, loading, refetch }: GitHubPRDro
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                            {getRepoShortName(pr.repo_full_name)} #{pr.pr_number}
+                            {getRepoShortName(pr.pr_status.repo_full_name)} #{pr.pr_status.pr_number}
                           </span>
                           <span className="text-xs text-gray-400 dark:text-gray-500">
-                            {formatRelativeTime(pr.updated_at)}
+                            {formatRelativeTime(pr.pr_status.updated_at)}
                           </span>
                         </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 truncate">{pr.title}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 truncate">{pr.pr_status.title}</p>
 
                         {/* Review and comments */}
                         <div className="flex items-center gap-2 mt-1">
-                          <ReviewBadge decision={pr.review_decision} />
-                          {pr.comment_count > 0 && (
-                            <span className="flex items-center gap-0.5 text-xs text-gray-400 dark:text-gray-500" title={`${pr.comment_count} comment${pr.comment_count !== 1 ? 's' : ''}`}>
+                          <ReviewBadge decision={pr.pr_status.review_decision} />
+                          {pr.pr_status.comment_count > 0 && (
+                            <span className="flex items-center gap-0.5 text-xs text-gray-400 dark:text-gray-500" title={`${pr.pr_status.comment_count} comment${pr.pr_status.comment_count !== 1 ? 's' : ''}`}>
                               <ChatBubbleLeftIcon className="w-3 h-3" />
-                              {pr.comment_count}
+                              {pr.pr_status.comment_count}
                             </span>
                           )}
                         </div>
@@ -174,13 +175,13 @@ export default function GitHubPRDropdown({ data, loading, refetch }: GitHubPRDro
                       {/* Action buttons */}
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button
-                          onClick={() => window.open(pr.pr_url, '_blank')}
+                          onClick={() => window.open(pr.pr_status.pr_url, '_blank')}
                           className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                           title="Open in GitHub"
                         >
                           <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
                         </button>
-                        {pr.task_id !== null && (
+                        {pr.associated_task !== null && (
                           <button
                             onClick={(e) => handleOpenTask(e, pr)}
                             className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"

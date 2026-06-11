@@ -17,6 +17,7 @@ import { useURLSync } from '../../hooks/useURLSync'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { webSocketManager } from '../../services/WebSocketManager'
 import { usePRStatusPolling } from '../../hooks/usePRStatusPolling'
+import { useGithubStore } from '../../stores/githubStore'
 
 export default function AppShell() {
   const {
@@ -68,7 +69,9 @@ export default function AppShell() {
   useKeyboardShortcuts()
 
   // Periodic polling to keep backend PR cache warm
-  const { data: prData, loading: prLoading, refetch: refetchPRs } = usePRStatusPolling()
+  const { loading: prLoading, refetch: refetchPRs } = usePRStatusPolling()
+  const prItems = useGithubStore(s => s.openPRItems)
+  const prErrors = useGithubStore(s => s.errors)
 
   return (
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-row">
@@ -112,7 +115,7 @@ export default function AppShell() {
 
           <div className="flex-1" />
           <div className="flex items-center gap-2 px-4">
-            <GitHubPRDropdown data={prData} loading={prLoading} refetch={refetchPRs} />
+            <GitHubPRDropdown prs={prItems} errors={prErrors} loading={prLoading} refetch={refetchPRs} />
             <NotificationsPanel />
           </div>
         </div>

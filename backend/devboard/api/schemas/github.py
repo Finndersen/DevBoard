@@ -1,23 +1,19 @@
 """GitHub-specific API response schemas."""
 
-from datetime import datetime
-
 from pydantic import BaseModel
+
+from devboard.api.schemas.task import GitHubPRStatusResponse
+
+
+class AssociatedTask(BaseModel):
+    task_id: int
+    task_title: str
+    codebase_id: int
 
 
 class OpenPRItem(BaseModel):
-    pr_number: int
-    title: str
-    repo_full_name: str
-    codebase_id: int | None
-    pr_url: str
-    mergeable_state: str | None
-    task_id: int | None
-    task_title: str | None
-    updated_at: datetime
-    review_decision: str | None
-    ci_status: str | None
-    comment_count: int
+    pr_status: GitHubPRStatusResponse
+    associated_task: AssociatedTask | None
 
 
 class OpenPRsResponse(BaseModel):
