@@ -43,33 +43,43 @@ describe('useApi', () => {
     expect(result.current.error).toBe('Network error')
   })
 
-  it('deduplicates concurrent refetch calls', async () => {
-    let resolveCall: (value: { id: number }) => void
+  it('deduplicates concurrent refetch calls and queues a follow-up', async () => {
+    const resolvers: Array<(value: { id: number }) => void> = []
+    let callCount = 0
     const apiCall = vi.fn().mockImplementation(() =>
-      new Promise(resolve => { resolveCall = resolve })
+      new Promise(resolve => { resolvers.push(resolve); callCount++ })
     )
 
     const { result } = renderHook(() => useApi(apiCall, { immediate: false }))
 
-    // Fire two refetch calls concurrently
+    // Fire two refetch calls concurrently — only one API call starts immediately
     act(() => {
       result.current.refetch()
       result.current.refetch()
     })
-
-    // Only one API call should have been made
     expect(apiCall).toHaveBeenCalledTimes(1)
 
-    // Resolve the in-flight request
+    // Resolve the first request — the pending flag should trigger a follow-up call
     await act(async () => {
-      resolveCall!({ id: 1 })
+      resolvers[0]!({ id: 1 })
+    })
+
+    // A second API call should now be in-flight (the pending refetch)
+    await waitFor(() => {
+      expect(apiCall).toHaveBeenCalledTimes(2)
+    })
+
+    // Resolve the follow-up request
+    await act(async () => {
+      resolvers[1]!({ id: 2 })
     })
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
     })
 
-    expect(result.current.data).toEqual({ id: 1 })
+    // Data reflects the follow-up (latest) response
+    expect(result.current.data).toEqual({ id: 2 })
   })
 
   it('allows refetch after previous request completes', async () => {

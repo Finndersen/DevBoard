@@ -202,7 +202,15 @@ export function useTaskEventHandlers({
         console.error('Failed to refresh git status after stream completion:', error)
       }
     }
-  }, [task?.status, task?.codebase_id, handleDiffRefresh, diffRefreshTimeoutRef, refreshGitStatus])
+
+    // Ensure implementation step statuses reflect final state — parallel steps may have
+    // completed while intermediate refetches were in-flight and read stale DB state.
+    try {
+      await refetchStructuredPlan()
+    } catch (error) {
+      console.error('Failed to refetch structured plan after stream completion:', error)
+    }
+  }, [task?.status, task?.codebase_id, handleDiffRefresh, diffRefreshTimeoutRef, refreshGitStatus, refetchStructuredPlan])
 
   useStreamCompleteHandler(streamCompleteHandler)
 }

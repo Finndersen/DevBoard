@@ -28,8 +28,13 @@ class WebSocketManager {
       this.reconnectTimeout = null
     }
     if (this.ws) {
-      this.ws.close()
+      const ws = this.ws
       this.ws = null
+      ws.onopen = null
+      ws.onmessage = null
+      ws.onerror = null
+      ws.onclose = null
+      ws.close()
     }
   }
 

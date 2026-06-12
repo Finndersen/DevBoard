@@ -27,9 +27,13 @@ export function useApi<T>(
   })
 
   const inFlightRef = useRef(false)
+  const pendingRefetchRef = useRef(false)
 
   const execute = useCallback(async () => {
-    if (inFlightRef.current) return
+    if (inFlightRef.current) {
+      pendingRefetchRef.current = true
+      return
+    }
     inFlightRef.current = true
     setState(prev => ({ ...prev, loading: true, error: null }))
 
@@ -41,6 +45,10 @@ export function useApi<T>(
       setState(prev => ({ ...prev, loading: false, error: errorMessage }))
     } finally {
       inFlightRef.current = false
+      if (pendingRefetchRef.current) {
+        pendingRefetchRef.current = false
+        void execute()
+      }
     }
   }, [])
 
