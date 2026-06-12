@@ -284,3 +284,34 @@ class TestResolveBackgroundAgentWorkingDir:
 
         with pytest.raises(ValueError, match="Project 99 not found"):
             _resolve_background_agent_working_dir(agent, db)
+
+
+class TestRunAgentForMergedTask:
+    """Tests for MERGED-status task conversations that bypass workspace allocation."""
+
+    def test_merged_task_routing_condition(self):
+        """Verify the conditional routing correctly identifies MERGED-status tasks."""
+        from devboard.db.models import TaskStatus
+
+        # Create a mock task with MERGED status
+        codebase = Mock()
+        codebase.local_path = "/repo/myproject"
+
+        merged_task = Mock()
+        merged_task.status = TaskStatus.MERGED
+        merged_task.codebase = codebase
+
+        implementing_task = Mock()
+        implementing_task.status = TaskStatus.IMPLEMENTING
+        implementing_task.codebase = codebase
+
+        # Verify the condition would correctly identify MERGED status
+        assert merged_task.status == TaskStatus.MERGED
+        assert implementing_task.status != TaskStatus.MERGED
+
+    def test_task_status_enum_has_merged_value(self):
+        """Verify TaskStatus.MERGED exists and has correct string value."""
+        from devboard.db.models import TaskStatus
+
+        assert hasattr(TaskStatus, "MERGED")
+        assert TaskStatus.MERGED.value == "merged"

@@ -336,6 +336,22 @@ async def _create_agent_stream(
     return exec_service.stream_events_for_message_or_approval(message_or_approvals)
 
 
+async def _run_agent_stream(
+    services: ExecutionServices,
+    conversation: Conversation,
+    message_or_approvals: str | ToolApprovals,
+    interrupt_event: asyncio.Event,
+    db: Session,
+    broadcast_queue: asyncio.Queue[tuple[int, ConversationEvent]],
+    conversation_id: int,
+    working_dir: str,
+) -> AgentRunCompletedEvent | None:
+    agent_stream = await _create_agent_stream(
+        services, conversation, message_or_approvals, interrupt_event, working_dir=working_dir
+    )
+    return await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
+
+
 async def _emit_stream_error(
     broadcast_queue: asyncio.Queue[tuple[int, ConversationEvent]],
     conversation_id: int,
@@ -379,7 +395,7 @@ def _map_execution_status_to_run_status(status: ExecutionStatus) -> BackgroundAg
             raise ValueError(f"Unhandled execution status: {status}")
 
 
-async def _run_task_agent(
+async def _run_task_agent_in_workspace(
     services: ExecutionServices,
     conversation: Conversation,
     task: Task,
@@ -504,34 +520,65 @@ async def _run_agent_for_conversation(
                     raise ValueError(
                         f"Cannot run agent for completed task {conversation_parent.id} (conversation {conversation_id})"
                     )
-                await _run_task_agent(
+                if conversation_parent.status == TaskStatus.MERGED:
+                    working_dir = conversation_parent.codebase.local_path
+                    await _run_agent_stream(
+                        services,
+                        conversation,
+                        message_or_approvals,
+                        interrupt_event,
+                        db,
+                        broadcast_queue,
+                        conversation_id,
+                        working_dir,
+                    )
+                else:
+                    await _run_task_agent_in_workspace(
+                        services,
+                        conversation,
+                        conversation_parent,
+                        message_or_approvals,
+                        interrupt_event,
+                        db,
+                        broadcast_queue,
+                        conversation_id,
+                    )
+            elif isinstance(conversation_parent, Project):
+                working_dir = str(ensure_project_directory(conversation_parent))
+                await _run_agent_stream(
                     services,
                     conversation,
-                    conversation_parent,
                     message_or_approvals,
                     interrupt_event,
                     db,
                     broadcast_queue,
                     conversation_id,
+                    working_dir,
                 )
-            elif isinstance(conversation_parent, Project):
-                working_dir = str(ensure_project_directory(conversation_parent))
-                agent_stream = await _create_agent_stream(
-                    services, conversation, message_or_approvals, interrupt_event, working_dir=working_dir
-                )
-                await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
             elif isinstance(conversation_parent, Codebase):
                 working_dir = conversation_parent.local_path
-                agent_stream = await _create_agent_stream(
-                    services, conversation, message_or_approvals, interrupt_event, working_dir=working_dir
+                await _run_agent_stream(
+                    services,
+                    conversation,
+                    message_or_approvals,
+                    interrupt_event,
+                    db,
+                    broadcast_queue,
+                    conversation_id,
+                    working_dir,
                 )
-                await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
             elif isinstance(conversation_parent, BackgroundAgent):  # pyright: ignore[reportUnnecessaryIsInstance]
                 working_dir = _resolve_background_agent_working_dir(conversation_parent, db)
-                agent_stream = await _create_agent_stream(
-                    services, conversation, message_or_approvals, interrupt_event, working_dir=working_dir
+                completed_event = await _run_agent_stream(
+                    services,
+                    conversation,
+                    message_or_approvals,
+                    interrupt_event,
+                    db,
+                    broadcast_queue,
+                    conversation_id,
+                    working_dir,
                 )
-                completed_event = await _drain_events(agent_stream, db, broadcast_queue, conversation_id)
             else:
                 raise ValueError(f"Unsupported parent entity type: {type(conversation_parent).__name__}")
         except AgentInterruptedError:
