@@ -177,19 +177,19 @@ def create_multi_codebase_investigation_tool(
         conversation_id: int | None = None,
         effort: Literal["low", "medium", "high"] | None = None,
     ) -> str:
-        """Investigate a specific codebase to answer questions about implementation details, architecture, and code organization.
+        """Investigate a specific codebase to answer questions about implementation, architecture, patterns, and  functionality across multiple files.
 
-        Use this tool when you need detailed information about:
-        - How specific features are implemented
-        - Where certain functionality is located in the codebase
-        - Architectural patterns and structure
-        - Specific functions, classes, or modules
-        - How workflows or processes work
-        - Code organization and conventions
+        **ONLY use this tool for discovery questions that require searching across multiple files** — e.g. finding where
+        functionality lives, understanding cross-cutting patterns, or tracing how data flows across components.
 
-        ONLY use this tool for questions that likely involve multi-step and multi-file investigation.
-        NEVER use this tool to read or return the implementation details or content of known components or files —
-        read them directly with the `Read` tool instead. This tool is for discovery and exploration, not retrieval.
+        **NEVER use this tool when you already know the file path** — read it directly with the `Read` tool instead.
+
+        Use this tool for questions like:
+        - Where is [functionality] implemented? Which files handle [feature]?
+        - What patterns does this codebase use for [concern]?
+        - How does [data/event] flow across the system?
+        - Are there existing utilities or helpers for [task]?
+        - What naming/structural conventions are used for [type of thing]?
 
         Guidelines:
         - Be specific about what you want to know and what level of detail is required.
@@ -207,9 +207,8 @@ def create_multi_codebase_investigation_tool(
                 investigation where the prior conversation already has relevant context, to resume rather than starting fresh.
             effort: Optional reasoning effort level for the investigation. Prefer lower effort levels — only escalate when the
                 query genuinely requires it:
-                - `low` (prefer this): Simple/targeted lookups, straightforward questions about a specific function, class, or file.
-                  Use this for most queries.
-                - `medium`: Questions requiring analysis across multiple files or discovery of cross-cutting patterns.
+                - `low`: Discovery across a small number of files, locating where something is implemented.
+                - `medium`: Questions requiring analysis across many files or discovery of cross-cutting patterns.
                 - `high`: Complex architectural reasoning or understanding deep cross-component interactions. Reserve for the most
                   demanding investigations.
                 - `None` (default): Uses the agent's configured default effort level
