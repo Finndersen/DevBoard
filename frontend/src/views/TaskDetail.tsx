@@ -501,6 +501,10 @@ function TaskDetail({ id }: TaskDetailProps) {
         await refreshGitStatus()
       }
 
+      if (actionKey === 'task.archive') {
+        invalidateConversations()
+      }
+
       if (result.conversation_id) {
         if (result.prompt) {
           addEvent(result.conversation_id, {
