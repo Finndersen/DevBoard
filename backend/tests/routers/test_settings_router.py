@@ -49,8 +49,11 @@ class TestSettingsRouter:
 
     # Integration testing endpoints
 
-    def test_test_integration_connection_github_no_config(self, client):
-        """Test GitHub integration test with no configuration."""
+    @patch("devboard.integrations.github.subprocess.run")
+    def test_test_integration_connection_github_no_config(self, mock_subprocess, client):
+        """Test GitHub integration test with no configuration and gh CLI also unavailable."""
+        mock_subprocess.return_value.returncode = 1
+        mock_subprocess.return_value.stdout = ""
         response = client.post("/api/settings/integrations/github/test")
 
         assert response.status_code == 200
@@ -58,7 +61,7 @@ class TestSettingsRouter:
         assert data["integration_type"] == "github"
         assert data["success"] is False
         assert data["error_type"] == "config_error"
-        assert "configuration" in data["error_message"].lower()
+        assert "token" in data["error_message"].lower()
 
     @patch("devboard.integrations.github.GitHubIntegration.test_connection")
     def test_test_integration_connection_github_success(self, mock_github_test, client, db_session, github_config_data):

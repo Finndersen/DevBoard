@@ -45,9 +45,8 @@ describe('useApi', () => {
 
   it('deduplicates concurrent refetch calls and queues a follow-up', async () => {
     const resolvers: Array<(value: { id: number }) => void> = []
-    let callCount = 0
     const apiCall = vi.fn().mockImplementation(() =>
-      new Promise(resolve => { resolvers.push(resolve); callCount++ })
+      new Promise(resolve => { resolvers.push(resolve) })
     )
 
     const { result } = renderHook(() => useApi(apiCall, { immediate: false }))
