@@ -175,11 +175,11 @@ export default function TasksList() {
                 ))}
               </select>
             </div>
-            {activeTab === 'active' && (
+            <div className={activeTab !== 'active' ? 'invisible' : undefined}>
               <Button onClick={handleCreateTask} icon={<PlusIcon />}>
                 New Task
               </Button>
-            )}
+            </div>
           </div>
         }
       />
