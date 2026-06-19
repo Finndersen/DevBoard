@@ -10,6 +10,13 @@ from devboard.services.task_git.types import GitHubConnectionError
 from devboard.services.task_git_service import TaskGitService
 from devboard.workflow_actions.base import TaskWorkflowAction
 
+_CHANGE_SUMMARY_PROMPT_GUIDANCE = (
+    "Include a change_summary grouping changes by type "
+    "(Functional / Bug Fix / Optimisation / Refactor / Cosmetic — omit empty categories). "
+    "If anything deviates from the agreed spec, include a Deviations from Specification section. "
+    "Optionally include a Learnings section for non-obvious discoveries useful for follow-up tasks or documentation."
+)
+
 
 async def _get_task_changes_prompt_context(task: Task) -> str:
     """Build a prompt context string describing the current state of changes on the task branch.
@@ -154,7 +161,8 @@ class ApproveAndMergeAction(TaskWorkflowAction):
             merge_method,
             "If there are uncommitted changes, create appropriate commit(s) with clear commit messages first.",
         )
-        return f"""## Git Status
+        return (
+            f"""## Git Status
 {changes_context}
 
 ## Instructions
@@ -162,11 +170,9 @@ IMPORTANT: The git status above already contains the current branch state includ
 
 {commit_instruction}
 
-Once all changes are committed, use the `merge_branch_and_finalise` tool to merge the feature branch and transition to finalisation. Include a change_summary with:
-- A brief overview of what was implemented
-- Key files that were added or modified
-- Any notable implementation decisions or trade-offs
-- Testing considerations or known limitations"""
+Once all changes are committed, use the `merge_branch_and_finalise` tool to merge the feature branch and transition to finalisation. """
+            + _CHANGE_SUMMARY_PROMPT_GUIDANCE
+        )
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
@@ -318,11 +324,8 @@ class MergeAndFinaliseAction(TaskWorkflowAction):
         )
         + """
 
-Once all changes are committed and pushed, use the `merge_pr_and_finalise` tool to merge the PR and complete the task. Include a change_summary with:
-- A brief overview of what was implemented
-- Key files that were added or modified
-- Any notable implementation decisions or trade-offs
-- Testing considerations or known limitations"""
+Once all changes are committed and pushed, use the `merge_pr_and_finalise` tool to merge the PR and complete the task. """
+        + _CHANGE_SUMMARY_PROMPT_GUIDANCE
     )
 
     @classmethod

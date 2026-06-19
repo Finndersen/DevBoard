@@ -45,11 +45,19 @@ def create_merge_branch_and_finalise_tool(
         (no uncommitted changes in workspace).
 
         Args:
-            change_summary: Markdown content summarizing the changes made. Include:
-                - A brief overview of what was implemented
-                - Key files that were added or modified
-                - Any notable implementation decisions or trade-offs
-                - Testing considerations or known limitations
+            change_summary: Concise Markdown document summarising what was delivered. Group changes
+                by type — omit empty categories:
+                - **Functional**: New features or behaviours (reference spec requirements met)
+                - **Bug Fix**: Issues resolved
+                - **Optimisation**: Performance or efficiency improvements
+                - **Refactor/Cleanup**: Internal restructuring without behaviour change
+                - **Cosmetic**: UI/style-only changes
+                If anything deviates from the agreed specification (scope reduced, approach changed,
+                requirement deferred), include a **Deviations from Specification** section — the most
+                critical thing to capture accurately. Omit if fully on-spec.
+                Optionally include a **Learnings** section for non-obvious discoveries made during
+                implementation not captured in the spec — unexpected constraints, useful patterns,
+                caveats — that may be valuable for follow-up tasks or documentation updates.
 
         Returns:
             Success message with merge details.
@@ -129,11 +137,19 @@ def create_merge_pr_and_finalise_tool(
         (no uncommitted changes in workspace).
 
         Args:
-            change_summary: Markdown content summarizing the changes made. Include:
-                - A brief overview of what was implemented
-                - Key files that were added or modified
-                - Any notable implementation decisions or trade-offs
-                - Testing considerations or known limitations
+            change_summary: Concise Markdown document summarising what was delivered. Group changes
+                by type — omit empty categories:
+                - **Functional**: New features or behaviours (reference spec requirements met)
+                - **Bug Fix**: Issues resolved
+                - **Optimisation**: Performance or efficiency improvements
+                - **Refactor/Cleanup**: Internal restructuring without behaviour change
+                - **Cosmetic**: UI/style-only changes
+                If anything deviates from the agreed specification (scope reduced, approach changed,
+                requirement deferred), include a **Deviations from Specification** section — the most
+                critical thing to capture accurately. Omit if fully on-spec.
+                Optionally include a **Learnings** section for non-obvious discoveries made during
+                implementation not captured in the spec — unexpected constraints, useful patterns,
+                caveats — that may be valuable for follow-up tasks or documentation updates.
 
         Returns:
             Success message with merge details.
