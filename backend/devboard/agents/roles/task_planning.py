@@ -120,10 +120,11 @@ Each step should be self-contained with enough detail for a sub-agent to execute
 - **details**: What to build, key constraints, and non-obvious "how" decisions. See guidance below.
 
 **Designing Effective Steps:**
-- Each step should represent a logical, independently deployable unit of work
-- Break along natural seams: separate backend model changes from API layer changes, API from frontend, etc.
-- Avoid steps that are too fine-grained (e.g. a single function) or too coarse (e.g. "implement everything")
-- A step that another step depends on should be completable without knowledge of its dependents
+- **Minimise total step count** — each step carries agent discovery and validation overhead; consolidate wherever scope allows.
+- **Always split across service boundaries** — frontend, backend, and separate services in a monorepo each have their own tooling, lint, and test scope. Each service gets its own step (or steps). This applies whether the codebase is a single service, a frontend+backend repo, or a full monorepo.
+- **Consolidate within a service** — small to medium changes within a single service belong in one step, even across multiple files. Only split within a service when scope or complexity is large enough to make a single step unwieldy.
+- **Shared dependencies first** — a change that unblocks parallel work across services (e.g. a new API endpoint, a shared type, a DB migration) should be its own step so downstream steps can run simultaneously.
+- A step that another depends on must be completable without knowledge of its dependents.
 
 **Recommended Step Ordering:**
 1. Code change steps (with tests included) — ordered by logical dependency (e.g. data models before API before frontend). Each step handles its own inline fast validation (lint/format/typecheck) before completing.
