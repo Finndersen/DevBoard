@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { TaskStatus } from '../../lib/api'
 import type { Task, ToolResult, SystemEvent } from '../../lib/api'
 import { useToolResultHandler, useSystemEventHandler, useStreamCompleteHandler } from '../../hooks/useConversationEventHandlers'
+import { useDataStore } from '../../stores/dataStore'
 
 interface UseTaskEventHandlersParams {
   task: Task | null
@@ -14,6 +15,7 @@ interface UseTaskEventHandlersParams {
   setActiveTab: (tab: 'specification' | 'plan' | 'changes' | 'summary') => void
   diffRefreshTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
   markStepRunning: (stepNumber: number, conversationId: number) => void
+  reconnectStream: (conversationId: number) => Promise<void>
 }
 
 export function useTaskEventHandlers({
@@ -27,6 +29,7 @@ export function useTaskEventHandlers({
   setActiveTab,
   diffRefreshTimeoutRef,
   markStepRunning,
+  reconnectStream,
 }: UseTaskEventHandlersParams) {
 
   const editTaskHandler = useCallback(async (toolName: string, result: ToolResult) => {
@@ -119,10 +122,16 @@ export function useTaskEventHandlers({
   useToolResultHandler(fileModificationHandler)
 
   const taskCompletionHandler = useCallback(async (toolName: string, _result: unknown) => {
-    if (toolName.includes('complete_task_with_local_merge')) {
+    if (toolName.includes('merge_branch_and_finalise')) {
       await refetch()
+      // After merging, the task's active conversation switches to the finalisation agent.
+      // Explicitly reconnect so the new conversation stream is picked up immediately.
+      const updatedTask = useDataStore.getState().tasks.get(String(task?.id))
+      if (updatedTask?.conversation_id) {
+        await reconnectStream(updatedTask.conversation_id)
+      }
     }
-  }, [refetch])
+  }, [refetch, task?.id, reconnectStream])
 
   useToolResultHandler(taskCompletionHandler)
 
@@ -135,10 +144,16 @@ export function useTaskEventHandlers({
   useToolResultHandler(createPRHandler)
 
   const mergePRAndCompleteHandler = useCallback(async (toolName: string, _result: unknown) => {
-    if (toolName.includes('merge_pr_and_complete_task')) {
+    if (toolName.includes('merge_pr_and_finalise')) {
       await refetch()
+      // After merging, the task's active conversation switches to the finalisation agent.
+      // Explicitly reconnect so the new conversation stream is picked up immediately.
+      const updatedTask = useDataStore.getState().tasks.get(String(task?.id))
+      if (updatedTask?.conversation_id) {
+        await reconnectStream(updatedTask.conversation_id)
+      }
     }
-  }, [refetch])
+  }, [refetch, task?.id, reconnectStream])
 
   useToolResultHandler(mergePRAndCompleteHandler)
 

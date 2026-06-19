@@ -390,6 +390,7 @@ function TaskDetail({ id }: TaskDetailProps) {
     setActiveTab,
     diffRefreshTimeoutRef,
     markStepRunning,
+    reconnectStream,
   })
 
   // CI polling and auto-reporting for PR_OPEN state

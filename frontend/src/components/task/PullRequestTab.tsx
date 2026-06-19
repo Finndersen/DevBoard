@@ -112,12 +112,16 @@ function StatusOverviewBar({
           }`}>
             {prStatus.merged ? 'Merged' : prStatus.state}
           </span>
-          <StatusIndicator
-            mergeableState={prStatus.mergeable_state}
-            ciStatus={prStatus.ci_status}
-            reviewDecision={prStatus.review_decision}
-          />
-          <ReviewBadge decision={prStatus.review_decision} />
+          {!prStatus.merged && (
+            <>
+              <StatusIndicator
+                mergeableState={prStatus.mergeable_state}
+                ciStatus={prStatus.ci_status}
+                reviewDecision={prStatus.review_decision}
+              />
+              <ReviewBadge decision={prStatus.review_decision} />
+            </>
+          )}
         </div>
       ) : prStatusLoading ? (
         <div className="flex items-center gap-2">
@@ -293,15 +297,17 @@ export function PullRequestTab({
         onResolveConflicts={onResolveConflicts}
         isConversationStreaming={isConversationStreaming}
       />
-      <CiChecksSection
-        prDetail={prDetail}
-        prDetailLoading={prDetailLoading}
-        prDetailError={prDetailError}
-        autoResolve={autoResolve}
-        onAutoResolveChange={onAutoResolveChange}
-        onReportCIIssues={onReportCIIssues}
-        isConversationStreaming={isConversationStreaming}
-      />
+      {!prStatus?.merged && (
+        <CiChecksSection
+          prDetail={prDetail}
+          prDetailLoading={prDetailLoading}
+          prDetailError={prDetailError}
+          autoResolve={autoResolve}
+          onAutoResolveChange={onAutoResolveChange}
+          onReportCIIssues={onReportCIIssues}
+          isConversationStreaming={isConversationStreaming}
+        />
+      )}
       <ReviewsSection
         prFeedback={prFeedback}
         onSubmitComments={onSubmitComments}

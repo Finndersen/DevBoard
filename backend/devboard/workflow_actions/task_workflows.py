@@ -318,7 +318,7 @@ class MergeAndFinaliseAction(TaskWorkflowAction):
         )
         + """
 
-Once all changes are committed and pushed, use the `merge_pr_and_complete_task` tool to merge the PR and complete the task. Include a change_summary with:
+Once all changes are committed and pushed, use the `merge_pr_and_finalise` tool to merge the PR and complete the task. Include a change_summary with:
 - A brief overview of what was implemented
 - Key files that were added or modified
 - Any notable implementation decisions or trade-offs

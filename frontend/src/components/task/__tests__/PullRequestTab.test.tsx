@@ -48,6 +48,7 @@ const defaultProps = {
   prFeedback: mockPrFeedback,
   prDetail: mockPrDetail,
   prDetailLoading: false,
+  prDetailError: false,
   taskStatus: TaskStatus.PR_OPEN,
   onRefreshPrStatus: vi.fn(),
   onResolveConflicts: vi.fn(),
@@ -80,6 +81,15 @@ describe('PullRequestTab', () => {
       const mergedStatus = { ...mockPrStatus, merged: true, state: 'closed' }
       render(<PullRequestTab {...defaultProps} prStatus={mergedStatus} />)
       expect(screen.getByText('Merged')).toBeInTheDocument()
+    })
+
+    it('hides StatusIndicator and ReviewBadge when PR is merged', () => {
+      const mergedStatus = { ...mockPrStatus, merged: true, state: 'closed', ci_status: 'PENDING', review_decision: 'APPROVED' }
+      render(<PullRequestTab {...defaultProps} prStatus={mergedStatus} taskStatus={TaskStatus.MERGED} />)
+      // Only "Merged" badge should represent status — no StatusIndicator circle or ReviewBadge pill
+      expect(screen.getByText('Merged')).toBeInTheDocument()
+      expect(screen.queryByTitle('CI checks pending')).not.toBeInTheDocument()
+      expect(screen.queryByTitle('Approved')).not.toBeInTheDocument()
     })
 
     it('shows loading state when prStatus is null and loading', () => {
@@ -136,6 +146,13 @@ describe('PullRequestTab', () => {
   })
 
   describe('CI Checks Section', () => {
+    it('hides CI checks section for merged PRs', () => {
+      const mergedStatus = { ...mockPrStatus, merged: true, state: 'closed' }
+      render(<PullRequestTab {...defaultProps} prStatus={mergedStatus} taskStatus={TaskStatus.MERGED} />)
+      expect(screen.queryByText('CI Checks')).not.toBeInTheDocument()
+      expect(screen.queryByText('ci/backend-tests')).not.toBeInTheDocument()
+    })
+
     it('renders CI check names', () => {
       render(<PullRequestTab {...defaultProps} />)
       expect(screen.getByText('ci/backend-tests')).toBeInTheDocument()

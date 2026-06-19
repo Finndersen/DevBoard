@@ -453,7 +453,7 @@ export default function ConversationsPanel() {
                     <span className={`text-sm truncate flex-1 ${textColors.primary}`}>
                       {primaryLabel}
                     </span>
-                    {prStatus && (
+                    {prStatus && !prStatus.merged && (
                       <StatusIndicator
                         mergeableState={prStatus.mergeable_state}
                         ciStatus={prStatus.ci_status}
