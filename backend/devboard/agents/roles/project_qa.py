@@ -26,7 +26,8 @@ from devboard.agents.tools.task_tools import (
     create_view_task_details_tool,
 )
 from devboard.db.models import Project, Task
-from devboard.db.repositories import CodebaseRepository, ConversationRepository, DocumentRepository
+from devboard.db.repositories import CodebaseRepository, ConversationRepository, DocumentRepository, LogEntryRepository
+from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_service import TaskService
 
 PROJECT_QA_ROLE_PROMPT = """
@@ -175,9 +176,22 @@ class ProjectQAAgentRole(AgentRole):
         Returns:
             List of document editing tools, task query tools, and codebase investigation tool
         """
+        log_entry_repo = LogEntryRepository(self.document_repository.db)
+        event_emitter = SystemEventEmitter(log_entry_repo)
+
         tools: list[Tool] = [
-            create_set_document_content_tool(self.project.specification, self.document_repository),
-            create_document_edit_tool(self.project.specification, self.document_repository),
+            create_set_document_content_tool(
+                self.project.specification,
+                self.document_repository,
+                document_parent=self.project,
+                system_event_emitter=event_emitter,
+            ),
+            create_document_edit_tool(
+                self.project.specification,
+                self.document_repository,
+                document_parent=self.project,
+                system_event_emitter=event_emitter,
+            ),
             # Task query tools
             create_list_tasks_tool(self.project, self.task_service),
             create_view_task_details_tool(self.project, self.task_service, self.conversation_repo),

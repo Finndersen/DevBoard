@@ -21,9 +21,10 @@ from devboard.agents.tools.implementation_plan_tools import (
 from devboard.agents.tools.sub_agent_tools import create_code_review_tool
 from devboard.db.models import Task
 from devboard.db.models.codebase import BranchHandling
-from devboard.db.repositories import ConversationRepository, DocumentRepository
+from devboard.db.repositories import ConversationRepository, DocumentRepository, LogEntryRepository
 from devboard.integrations.codebase import CodebaseIntegration
 from devboard.integrations.github import GitHubIntegration
+from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 
@@ -139,13 +140,26 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
 
         codebase_integration = CodebaseIntegration(self.working_dir)
 
+        log_entry_repo = LogEntryRepository(self.document_repository.db)
+        event_emitter = SystemEventEmitter(log_entry_repo)
+
         tools = super().get_tools()
 
         tools.extend(
             [
                 # Tools for task specification document (uses default approval behavior)
-                create_set_document_content_tool(self.task.specification, self.document_repository),
-                create_document_edit_tool(self.task.specification, self.document_repository),
+                create_set_document_content_tool(
+                    self.task.specification,
+                    self.document_repository,
+                    document_parent=self.task,
+                    system_event_emitter=event_emitter,
+                ),
+                create_document_edit_tool(
+                    self.task.specification,
+                    self.document_repository,
+                    document_parent=self.task,
+                    system_event_emitter=event_emitter,
+                ),
             ]
         )
 

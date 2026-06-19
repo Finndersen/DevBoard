@@ -231,3 +231,49 @@ class TestEmitProjectDeleted:
         entry = emitter.emit_project_deleted(project_id=test_task.project_id, project_name="My Project")
         assert entry.project_id == test_task.project_id
         assert entry.task_id is None
+
+
+class TestEmitDocumentUpdated:
+    def test_correct_source_and_type_with_task_parent(self, emitter: SystemEventEmitter, test_task):
+        entry = emitter.emit_document_updated(test_task, "task_specification", "Added implementation steps")
+        assert entry.source == LogEntrySource.SYSTEM
+        assert entry.type == "document.updated"
+
+    def test_correct_source_and_type_with_project_parent(self, emitter: SystemEventEmitter, test_task):
+        entry = emitter.emit_document_updated(test_task.project, "project_specification", "Updated architecture")
+        assert entry.source == LogEntrySource.SYSTEM
+        assert entry.type == "document.updated"
+
+    def test_content_includes_humanized_document_type_and_summary(self, emitter: SystemEventEmitter, test_task):
+        entry = emitter.emit_document_updated(test_task, "task_specification", "Refined requirements")
+        assert "Task Specification" in entry.content
+        assert "Refined requirements" in entry.content
+
+    def test_metadata_with_task_parent(self, emitter: SystemEventEmitter, test_task):
+        entry = emitter.emit_document_updated(test_task, "task_specification", "Added steps")
+        assert entry.entry_metadata == {
+            "document_type": "task_specification",
+            "edit_summary": "Added steps",
+        }
+
+    def test_metadata_with_project_parent(self, emitter: SystemEventEmitter, test_task):
+        entry = emitter.emit_document_updated(test_task.project, "project_specification", "Updated goals")
+        assert entry.entry_metadata == {
+            "document_type": "project_specification",
+            "edit_summary": "Updated goals",
+        }
+
+    def test_foreign_keys_with_task_parent(self, emitter: SystemEventEmitter, test_task):
+        entry = emitter.emit_document_updated(test_task, "task_specification", "Changes made")
+        assert entry.project_id == test_task.project_id
+        assert entry.task_id == test_task.id
+
+    def test_foreign_keys_with_project_parent(self, emitter: SystemEventEmitter, test_task):
+        entry = emitter.emit_document_updated(test_task.project, "project_specification", "Changes made")
+        assert entry.project_id == test_task.project.id
+        assert entry.task_id is None
+
+    def test_defaults(self, emitter: SystemEventEmitter, test_task):
+        entry = emitter.emit_document_updated(test_task, "task_specification", "Summary")
+        assert entry.status == LogEntryStatus.ACTIVE
+        assert entry.pinned is False

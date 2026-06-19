@@ -45,6 +45,7 @@ class TestTaskPlanningRoleWithSpec:
         """Create a mock document repository."""
         repo = Mock(spec=DocumentRepository)
         repo.update_content = Mock()
+        repo.db = Mock()
         return repo
 
     @pytest.fixture
@@ -142,6 +143,7 @@ class TestTaskPlanningRoleWithPlan:
         """Create a mock document repository."""
         repo = Mock(spec=DocumentRepository)
         repo.update_content = Mock()
+        repo.db = Mock()
         return repo
 
     @pytest.fixture
@@ -230,15 +232,21 @@ class TestDocumentEditTool:
         return doc
 
     @pytest.fixture
+    def mock_task(self):
+        """Create a mock task."""
+        return create_mock_task(task_id=100, title="Test Task", specification_content="Original content")
+
+    @pytest.fixture
     def mock_document_repo(self):
         """Create a mock document repository."""
         repo = Mock(spec=DocumentRepository)
         repo.update_content = Mock()
+        repo.db = Mock()
         return repo
 
-    def test_tool_creation(self, mock_document, mock_document_repo):
+    def test_tool_creation(self, mock_document, mock_task, mock_document_repo):
         """Test document edit tool is created correctly with proper metadata."""
-        tool = create_document_edit_tool(mock_document, mock_document_repo)
+        tool = create_document_edit_tool(mock_document, mock_document_repo, document_parent=mock_task)
 
         # Verify tool name
         assert tool.name == f"edit_{mock_document.document_type}"
@@ -254,30 +262,30 @@ class TestDocumentEditTool:
         json_schema = tool.function_schema.json_schema
         properties = json_schema["properties"]
         assert properties["edits"]["description"] == "List of find-replace edits to apply"
-        assert properties["reasoning"]["description"] == "Optional CONCISE reasoning for why these edits are being made"
+        assert properties["edit_summary"]["description"] == "Concise summary/description of the edit being made"
 
         # Verify edits field is an array
         assert properties["edits"]["type"] == "array"
 
-    def test_tool_pre_validation_failure(self, mock_document, mock_document_repo):
+    def test_tool_pre_validation_failure(self, mock_document, mock_task, mock_document_repo):
         """Test tool returns error for invalid edits."""
-        tool = create_document_edit_tool(mock_document, mock_document_repo)
+        tool = create_document_edit_tool(mock_document, mock_document_repo, document_parent=mock_task)
 
         # Invalid edit (text not found)
         edits = [DocumentEdit(old_string="NonExistent", new_string="Modified")]
 
         # Should raise ModelRetry for invalid edits
         with pytest.raises(ModelRetry, match="Failed to apply edits"):
-            tool.function(edits, "Test edit")
+            tool.function(edits=edits, edit_summary="Test edit")
 
-    def test_tool_applies_valid_edits(self, mock_document, mock_document_repo):
+    def test_tool_applies_valid_edits(self, mock_document, mock_task, mock_document_repo):
         """Test tool validates and applies valid edits successfully."""
-        tool = create_document_edit_tool(mock_document, mock_document_repo)
+        tool = create_document_edit_tool(mock_document, mock_document_repo, document_parent=mock_task)
 
         edits = [DocumentEdit(old_string="Original", new_string="Modified")]
 
         # Tool function should execute successfully for valid edits
-        result = tool.function(edits, "Test edit")
+        result = tool.function(edits=edits, edit_summary="Test edit")
 
         assert "successfully" in result.lower()
         # Verify repository update was called
@@ -287,9 +295,11 @@ class TestDocumentEditTool:
         assert args[0] == mock_document
         assert "Modified content" == args[1]
 
-    def test_tool_creation_without_approval(self, mock_document, mock_document_repo):
+    def test_tool_creation_without_approval(self, mock_document, mock_task, mock_document_repo):
         """Test document edit tool can be created without approval requirement."""
-        tool = create_document_edit_tool(mock_document, mock_document_repo, requires_approval=False)
+        tool = create_document_edit_tool(
+            mock_document, mock_document_repo, document_parent=mock_task, requires_approval=False
+        )
 
         # Verify tool name
         assert tool.name == f"edit_{mock_document.document_type}"
@@ -297,9 +307,11 @@ class TestDocumentEditTool:
         # Verify tool does NOT require approval when explicitly set to False
         assert tool.requires_approval is False
 
-    def test_tool_creation_with_explicit_approval(self, mock_document, mock_document_repo):
+    def test_tool_creation_with_explicit_approval(self, mock_document, mock_task, mock_document_repo):
         """Test document edit tool respects explicit approval requirement."""
-        tool = create_document_edit_tool(mock_document, mock_document_repo, requires_approval=True)
+        tool = create_document_edit_tool(
+            mock_document, mock_document_repo, document_parent=mock_task, requires_approval=True
+        )
 
         # Verify tool requires approval when explicitly set to True
         assert tool.requires_approval is True
@@ -327,41 +339,47 @@ class TestSetDocumentContentTool:
         return doc
 
     @pytest.fixture
+    def mock_task(self):
+        """Create a mock task."""
+        return create_mock_task(task_id=200, title="Test Task")
+
+    @pytest.fixture
     def mock_document_repo(self):
         """Create a mock document repository."""
         repo = Mock(spec=DocumentRepository)
         repo.update_content = Mock()
+        repo.db = Mock()
         return repo
 
-    def test_tool_creation(self, mock_blank_document, mock_document_repo):
+    def test_tool_creation(self, mock_blank_document, mock_task, mock_document_repo):
         """Test set document content tool is created correctly."""
-        tool = create_set_document_content_tool(mock_blank_document, mock_document_repo)
+        tool = create_set_document_content_tool(mock_blank_document, mock_document_repo, document_parent=mock_task)
 
         assert tool.name == f"set_{mock_blank_document.document_type}_content"
 
-    def test_tool_rejects_empty_content(self, mock_blank_document, mock_document_repo):
+    def test_tool_rejects_empty_content(self, mock_blank_document, mock_task, mock_document_repo):
         """Test tool rejects empty or whitespace-only content."""
-        tool = create_set_document_content_tool(mock_blank_document, mock_document_repo)
+        tool = create_set_document_content_tool(mock_blank_document, mock_document_repo, document_parent=mock_task)
 
         # Empty content should raise ModelRetry
         from pydantic_ai.exceptions import ModelRetry
 
         with pytest.raises(ModelRetry, match="Content cannot be empty"):
-            tool.function("")
+            tool.function(content="", edit_summary="test")
 
         # Whitespace-only content should also raise ModelRetry
         with pytest.raises(ModelRetry, match="Content cannot be empty"):
-            tool.function("   \n  ")
+            tool.function(content="   \n  ", edit_summary="test")
 
-    def test_tool_sets_content_directly_for_blank_document(self, mock_blank_document, mock_document_repo):
+    def test_tool_sets_content_directly_for_blank_document(self, mock_blank_document, mock_task, mock_document_repo):
         """Test tool sets content directly without requiring approval for blank documents."""
-        tool = create_set_document_content_tool(mock_blank_document, mock_document_repo)
+        tool = create_set_document_content_tool(mock_blank_document, mock_document_repo, document_parent=mock_task)
 
         # Verify tool does NOT require approval for blank documents (non-destructive)
         assert tool.requires_approval is False
 
         new_content = "# New Document\n\nThis is the initial content."
-        result = tool.function(new_content)
+        result = tool.function(content=new_content, edit_summary="Initial content")
 
         assert "successfully" in result.lower()
         # Verify repository update was called
@@ -371,28 +389,34 @@ class TestSetDocumentContentTool:
         assert args[0] == mock_blank_document
         assert args[1] == new_content
 
-    def test_tool_requires_approval_for_document_with_content(self, mock_document_with_content, mock_document_repo):
+    def test_tool_requires_approval_for_document_with_content(
+        self, mock_document_with_content, mock_task, mock_document_repo
+    ):
         """Test tool requires approval when setting content on document that already has content."""
-        tool = create_set_document_content_tool(mock_document_with_content, mock_document_repo)
+        tool = create_set_document_content_tool(
+            mock_document_with_content, mock_document_repo, document_parent=mock_task
+        )
 
         # Verify tool requires approval for documents with existing content (framework handles this)
         assert tool.requires_approval is True
 
         # Tool function should execute successfully when called
-        result = tool.function("New content replacing existing")
+        result = tool.function(content="New content replacing existing", edit_summary="Updated content")
         assert "successfully" in result.lower()
 
     def test_tool_sets_content_when_approved_for_document_with_content(
-        self, mock_document_with_content, mock_document_repo
+        self, mock_document_with_content, mock_task, mock_document_repo
     ):
         """Test tool sets content for document with existing content (approval handled by framework)."""
-        tool = create_set_document_content_tool(mock_document_with_content, mock_document_repo)
+        tool = create_set_document_content_tool(
+            mock_document_with_content, mock_document_repo, document_parent=mock_task
+        )
 
         # Verify tool requires approval
         assert tool.requires_approval is True
 
         new_content = "# Replaced Document\n\nThis replaces the existing content."
-        result = tool.function(new_content)
+        result = tool.function(content=new_content, edit_summary="Replaced content")
 
         assert "successfully" in result.lower()
         # Verify repository update was called
@@ -402,31 +426,39 @@ class TestSetDocumentContentTool:
         assert args[0] == mock_document_with_content
         assert args[1] == new_content
 
-    def test_tool_override_approval_for_blank_document(self, mock_blank_document, mock_document_repo):
+    def test_tool_override_approval_for_blank_document(self, mock_blank_document, mock_task, mock_document_repo):
         """Test tool can require approval for blank document when explicitly set."""
-        tool = create_set_document_content_tool(mock_blank_document, mock_document_repo, requires_approval=True)
+        tool = create_set_document_content_tool(
+            mock_blank_document, mock_document_repo, document_parent=mock_task, requires_approval=True
+        )
 
         # Verify tool requires approval even for blank document when explicitly set
         assert tool.requires_approval is True
 
-    def test_tool_override_approval_for_document_with_content(self, mock_document_with_content, mock_document_repo):
+    def test_tool_override_approval_for_document_with_content(
+        self, mock_document_with_content, mock_task, mock_document_repo
+    ):
         """Test tool can skip approval for document with content when explicitly set."""
-        tool = create_set_document_content_tool(mock_document_with_content, mock_document_repo, requires_approval=False)
+        tool = create_set_document_content_tool(
+            mock_document_with_content, mock_document_repo, document_parent=mock_task, requires_approval=False
+        )
 
         # Verify tool does not require approval when explicitly set to False
         assert tool.requires_approval is False
 
     def test_tool_smart_approval_logic_with_none(
-        self, mock_blank_document, mock_document_with_content, mock_document_repo
+        self, mock_blank_document, mock_document_with_content, mock_task, mock_document_repo
     ):
         """Test tool uses smart approval logic when requires_approval is None (default)."""
         # Blank document should not require approval
-        tool_blank = create_set_document_content_tool(mock_blank_document, mock_document_repo, requires_approval=None)
+        tool_blank = create_set_document_content_tool(
+            mock_blank_document, mock_document_repo, document_parent=mock_task, requires_approval=None
+        )
         assert tool_blank.requires_approval is False
 
         # Document with content should require approval
         tool_with_content = create_set_document_content_tool(
-            mock_document_with_content, mock_document_repo, requires_approval=None
+            mock_document_with_content, mock_document_repo, document_parent=mock_task, requires_approval=None
         )
         assert tool_with_content.requires_approval is True
 
@@ -470,7 +502,9 @@ class TestRoleToolSelection:
     @pytest.fixture
     def mock_document_repo(self):
         """Create a mock document repository."""
-        return Mock(spec=DocumentRepository)
+        repo = Mock(spec=DocumentRepository)
+        repo.db = Mock()
+        return repo
 
     @pytest.fixture
     def mock_agent_config_service(self):

@@ -16,7 +16,8 @@ from devboard.agents.tools.implementation_plan_tools import (
 )
 from devboard.agents.tools.task_tools import create_edit_own_task_tool
 from devboard.db.models import Task
-from devboard.db.repositories import ConversationRepository, DocumentRepository
+from devboard.db.repositories import ConversationRepository, DocumentRepository, LogEntryRepository
+from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 
@@ -188,12 +189,21 @@ class TaskPlanningAgentRole(TaskAgentRoleBase):
         """
         tools = super().get_tools()
 
+        log_entry_repo = LogEntryRepository(self.document_repository.db)
+        event_emitter = SystemEventEmitter(log_entry_repo)
+
         # Tool to edit task metadata and/or specification content (always available)
         tools.append(create_edit_own_task_tool(self.task, self.task_service, self.document_repository))
 
         # Tool to edit task specification (always included; raises ModelRetry if no content yet)
         tools.append(
-            create_document_edit_tool(self.task.specification, self.document_repository, requires_approval=False)
+            create_document_edit_tool(
+                self.task.specification,
+                self.document_repository,
+                requires_approval=False,
+                document_parent=self.task,
+                system_event_emitter=event_emitter,
+            )
         )
 
         # Structured implementation plan tools — full tool set always provided;

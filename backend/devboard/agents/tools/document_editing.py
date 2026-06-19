@@ -2,12 +2,19 @@ from pydantic_ai import ModelRetry, Tool
 
 from devboard.api.schemas import DocumentEdit
 from devboard.db.models import Document
+from devboard.db.models.project import Project
+from devboard.db.models.task import Task
 from devboard.db.repositories import DocumentRepository
 from devboard.services.document_editor import DocumentEditorService
+from devboard.services.system_event_emitter import SystemEventEmitter
 
 
 def create_document_edit_tool(
-    document: Document, document_repo: DocumentRepository, requires_approval: bool = True
+    document: Document,
+    document_repo: DocumentRepository,
+    document_parent: Task | Project,
+    requires_approval: bool = True,
+    system_event_emitter: SystemEventEmitter | None = None,
 ) -> Tool:
     """Create an engine-agnostic document editing tool.
 
@@ -16,10 +23,12 @@ def create_document_edit_tool(
     Args:
         document: Document model to edit
         document_repo: Repository for document operations
+        document_parent: The entity that owns the document (Task or Project)
         requires_approval: Whether to require approval before executing edits (default: True)
+        system_event_emitter: Optional emitter for document.updated events
     """
 
-    def edit_document_tool(edits: list[DocumentEdit], reasoning: str = "") -> str:
+    def edit_document_tool(edits: list[DocumentEdit], edit_summary: str) -> str:
         """
         Apply targeted find-replace edits to an EXISTING virtual document that already has content.
         This document DOES NOT exist on the file system, but is managed by the application.
@@ -37,7 +46,7 @@ def create_document_edit_tool(
 
         Args:
             edits: List of find-replace edits to apply
-            reasoning: Optional CONCISE reasoning for why these edits are being made
+            edit_summary: Concise summary/description of the edit being made
         """
         if not document.content:
             raise ModelRetry(
@@ -58,6 +67,10 @@ def create_document_edit_tool(
         # Commit immediately so the frontend can display updated content during the stream
         document_repo.commit()
 
+        # Emit document.updated event if emitter is available
+        if system_event_emitter:
+            system_event_emitter.emit_document_updated(document_parent, document.document_type, edit_summary)
+
         return f"Edits applied successfully to {document.document_type}."
 
     return Tool(
@@ -69,7 +82,11 @@ def create_document_edit_tool(
 
 
 def create_set_document_content_tool(
-    document: Document, document_repo: DocumentRepository, requires_approval: bool | None = None
+    document: Document,
+    document_repo: DocumentRepository,
+    document_parent: Task | Project,
+    requires_approval: bool | None = None,
+    system_event_emitter: SystemEventEmitter | None = None,
 ) -> Tool:
     """Create an engine-agnostic tool for setting the content of a document.
 
@@ -80,18 +97,20 @@ def create_set_document_content_tool(
     Args:
         document: Document model to set content for
         document_repo: Repository for document operations
+        document_parent: The entity that owns the document (Task or Project)
         requires_approval: Whether to require approval. If None, uses smart logic:
             requires approval only if document already has content (default: None)
+        system_event_emitter: Optional emitter for document.updated events
     """
 
-    def set_document_content_tool(content: str, reasoning: str = "") -> str:
+    def set_document_content_tool(content: str, edit_summary: str) -> str:
         """Set the content of a virtual document.
         This document DOES NOT exist on the file system, but managed by the application.
         ONLY call this tool after discussing with the user and arriving at an understanding of the changes to be made.
 
         Args:
             content: The full content to set for the document
-            reasoning: Optional CONCISE reasoning for the content being set
+            edit_summary: Concise summary/description of the content being set
 
         Returns:
             Success message or error details
@@ -104,6 +123,10 @@ def create_set_document_content_tool(
         document_repo.update_content(document, content)
         # Commit immediately so the frontend can display updated content during the stream
         document_repo.commit()
+
+        # Emit document.updated event if emitter is available
+        if system_event_emitter:
+            system_event_emitter.emit_document_updated(document_parent, document.document_type, edit_summary)
 
         return f"Successfully set content for {document.document_type}."
 

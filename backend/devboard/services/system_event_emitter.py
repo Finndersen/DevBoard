@@ -144,3 +144,31 @@ class SystemEventEmitter:
             status=LogEntryStatus.ACTIVE,
             pinned=False,
         )
+
+    def emit_document_updated(self, document_parent: Task | Project, document_type: str, edit_summary: str) -> LogEntry:
+        """Emit a document.updated event.
+
+        Args:
+            document_parent: The entity that owns the document (Task or Project)
+            document_type: The type of document being updated (e.g. "task_specification")
+            edit_summary: A concise description of what was changed in the document
+        """
+        project_id: int | None = None
+        task_id: int | None = None
+        if isinstance(document_parent, Task):
+            task_id = document_parent.id
+            project_id = document_parent.project_id
+        elif isinstance(document_parent, Project):
+            project_id = document_parent.id
+
+        document_type_label = document_type.replace("_", " ").title()
+        return self.log_entry_repo.create(
+            source=LogEntrySource.SYSTEM,
+            type="document.updated",
+            content=f"{document_type_label} was updated: {edit_summary}",
+            project_id=project_id,
+            task_id=task_id,
+            entry_metadata={"document_type": document_type, "edit_summary": edit_summary},
+            status=LogEntryStatus.ACTIVE,
+            pinned=False,
+        )
