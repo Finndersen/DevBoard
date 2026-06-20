@@ -165,7 +165,7 @@ describe('TasksList', () => {
       expect(screen.getByText('Complete Task Two')).toBeInTheDocument()
     })
 
-    it('hides "New Task" button on archived tab', async () => {
+    it('keeps "New Task" button visible on archived tab', async () => {
       renderTasksList()
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /new task/i })).toBeInTheDocument()
@@ -174,8 +174,10 @@ describe('TasksList', () => {
       fireEvent.click(screen.getByText('Archived'))
 
       await waitFor(() => {
-        expect(screen.queryByRole('button', { name: /new task/i })).not.toBeInTheDocument()
+        expect(screen.getByText('Complete Task One')).toBeInTheDocument()
       })
+      // Button should still be visible on archived tab
+      expect(screen.getByRole('button', { name: /new task/i })).toBeInTheDocument()
     })
 
     it('shows archived count badge from task counts endpoint', async () => {

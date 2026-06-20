@@ -128,20 +128,40 @@ describe('ProjectDetail', () => {
             ]
           }
         })
+      }),
+      http.get('*/api/log-entries', () => {
+        return HttpResponse.json([])
       })
     )
   })
 
   it('renders project information', async () => {
     renderProjectDetail()
-    
+
     await waitFor(() => {
       expect(screen.getByText('Test Project')).toBeInTheDocument()
     })
-    
+
     // Project should be rendered with basic information and navigation tabs
     expect(screen.getByText('Home')).toBeInTheDocument()
+    expect(screen.getByText('Events')).toBeInTheDocument()
     expect(screen.getByText('Settings')).toBeInTheDocument()
+  })
+
+  it('can switch to events tab', async () => {
+    const user = userEvent.setup()
+    renderProjectDetail()
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Project')).toBeInTheDocument()
+    })
+
+    // Click on Events tab
+    const eventsTab = screen.getByText('Events')
+    await user.click(eventsTab)
+
+    // Verify the tab is active (has blue styling)
+    expect(eventsTab).toHaveClass('border-blue-500')
   })
 
   it('can switch to settings tab', async () => {
@@ -168,9 +188,24 @@ describe('ProjectDetail', () => {
     )
 
     renderProjectDetail('999')
-    
+
     await waitFor(() => {
       expect(screen.getByText('Project not found')).toBeInTheDocument()
+    })
+  })
+
+  it('shows events tab content when clicked', async () => {
+    const user = userEvent.setup()
+    renderProjectDetail()
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Project')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('Events'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-bar')).toBeInTheDocument()
     })
   })
 

@@ -4,6 +4,7 @@ import { ArrowLeftIcon, PlusIcon, PencilIcon, CheckIcon, ChatBubbleLeftIcon, XMa
 import AgentChat from '../components/chat/AgentChat'
 import ProjectConversationSelector from '../components/chat/ProjectConversationSelector'
 import CreateCodebaseModal from '../components/modals/CreateCodebaseModal'
+import ProjectEventsTab from '../components/events/ProjectEventsTab'
 import { Button, Card, Input } from '../components/ui'
 import { MarkdownDocumentEditor } from '../components/MarkdownDocumentEditor'
 import { textColors, borderColors, layouts, loadingSpinner } from '../styles/designSystem'
@@ -70,13 +71,13 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   // Get tab from URL query params, default to 'home'
   const getTabFromUrl = useCallback(() => {
     const params = new URLSearchParams(location.search)
-    const tab = params.get('tab') as 'home' | 'settings'
-    return ['home', 'settings'].includes(tab) ? tab : 'home'
+    const tab = params.get('tab') as 'home' | 'events' | 'settings'
+    return ['home', 'events', 'settings'].includes(tab) ? tab : 'home'
   }, [location.search])
 
-  const [activeTab, setActiveTab] = useState<'editor' | 'settings'>(() => {
+  const [activeTab, setActiveTab] = useState<'editor' | 'events' | 'settings'>(() => {
     const tab = getTabFromUrl()
-    return tab === 'settings' ? 'settings' : 'editor'
+    return tab === 'settings' ? 'settings' : tab === 'events' ? 'events' : 'editor'
   })
 
   // Get UI store actions
@@ -105,7 +106,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const descriptionField = useEditableField(project?.description || '', saveDescriptionField)
 
   // Update URL when tab changes
-  const handleTabChange = (tab: 'editor' | 'settings') => {
+  const handleTabChange = (tab: 'editor' | 'events' | 'settings') => {
     setActiveTab(tab)
     const urlTab = tab === 'editor' ? 'home' : tab
     const params = new URLSearchParams(location.search)
@@ -116,7 +117,13 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   // Update activeTab when URL changes
   useEffect(() => {
     const urlTab = getTabFromUrl()
-    setActiveTab(urlTab === 'settings' ? 'settings' : 'editor')
+    if (urlTab === 'settings') {
+      setActiveTab('settings')
+    } else if (urlTab === 'events') {
+      setActiveTab('events')
+    } else {
+      setActiveTab('editor')
+    }
   }, [getTabFromUrl])
 
   const updateConversationUrl = useCallback((conversationId: number | null) => {
@@ -394,6 +401,7 @@ function ProjectDetail({ id }: ProjectDetailProps) {
           <nav className="-mb-px flex space-x-8 shrink-0">
             {[
               { id: 'editor' as const, name: 'Home', icon: ChatBubbleLeftIcon },
+              { id: 'events' as const, name: 'Events', icon: null },
               { id: 'settings' as const, name: 'Settings', icon: null },
             ].map((tab) => (
               <button
@@ -562,6 +570,8 @@ function ProjectDetail({ id }: ProjectDetailProps) {
           }
         />
       )}
+
+      {activeTab === 'events' && <ProjectEventsTab projectId={project.id} />}
 
       {activeTab === 'settings' && (
         <div className="space-y-6">
