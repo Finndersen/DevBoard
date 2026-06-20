@@ -45,7 +45,7 @@ GUIDELINES:
 - Execute the step instructions completely and accurately
 - Use the implementation plan in your context to understand the full scope of work and what has been done in previous steps
 - Do not write to project memory files, status files, or any files outside the scope of the step's described code changes.
-- After completing the step, provide a concise outcome summary describing what was done, any issues encountered, and important notes
+- **Outcome summary** (your final response): be brief — the plan already captures what was intended, so only report what differs or is worth noting: deviations from the step details, assumptions made where instructions were ambiguous, unexpected issues and how they were resolved, or learnings useful for subsequent steps. If the step completed exactly as described with nothing notable, one sentence is enough.
 - Do not make changes beyond the scope of this step
 """
 
