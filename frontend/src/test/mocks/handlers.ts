@@ -62,6 +62,10 @@ const mockProjects: Project[] = [
     description: 'A comprehensive testing platform for automated QA workflows and continuous integration pipelines',
     default_conversation_id: 1,
     created_at: '2024-01-01T00:00:00Z',
+    custom_fields: null,
+    parent_project_id: null,
+    parent_project_name: null,
+    complete: false,
   },
   {
     id: 2,
@@ -70,6 +74,10 @@ const mockProjects: Project[] = [
     description: 'Enterprise dashboard for real-time analytics and business intelligence reporting',
     default_conversation_id: 2,
     created_at: '2024-01-02T00:00:00Z',
+    custom_fields: null,
+    parent_project_id: null,
+    parent_project_name: null,
+    complete: false,
   },
 ]
 
@@ -134,12 +142,18 @@ const mockConfigurationResponse: ConfigurationDetailResponse = {
 
 export const handlers = [
   // Projects endpoints
-  http.get('*/api/projects', () => {
-    return HttpResponse.json(mockProjects)
+  http.get('*/api/projects', ({ request }) => {
+    const url = new URL(request.url)
+    const completeParam = url.searchParams.get('complete')
+    if (completeParam === 'true') {
+      return HttpResponse.json(mockProjects.filter(p => p.complete))
+    }
+    // Default: return only non-complete projects
+    return HttpResponse.json(mockProjects.filter(p => !p.complete))
   }),
 
   http.post('*/api/projects', async ({ request }) => {
-    const newProject = await request.json() as { name: string; description: string }
+    const newProject = await request.json() as { name: string; description: string; parent_project_id?: number | null }
     const now = new Date().toISOString()
     const project: Project = {
       id: Date.now(),
@@ -148,8 +162,22 @@ export const handlers = [
       specification_document_id: Date.now() + 1,
       default_conversation_id: null,
       created_at: now,
+      custom_fields: null,
+      parent_project_id: newProject.parent_project_id ?? null,
+      parent_project_name: null,
+      complete: false,
     }
     return HttpResponse.json(project)
+  }),
+
+  http.patch('*/api/projects/:id', async ({ params, request }) => {
+    const updates = await request.json() as Partial<Project>
+    const project = mockProjects.find(p => p.id === Number(params.id))
+    if (!project) {
+      return new HttpResponse(null, { status: 404 })
+    }
+    const updatedProject = { ...project, ...updates }
+    return HttpResponse.json(updatedProject)
   }),
 
   // Documents endpoint

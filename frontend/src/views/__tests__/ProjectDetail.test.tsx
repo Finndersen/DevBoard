@@ -194,6 +194,44 @@ describe('ProjectDetail', () => {
     })
   })
 
+  it('shows initiative breadcrumb with parent project link when viewing an initiative', async () => {
+    const initiative = createMockProject({
+      id: 1,
+      name: 'My Initiative',
+      parent_project_id: 99,
+      parent_project_name: 'Parent Project',
+    })
+    server.use(
+      http.get('*/api/projects/1', () => HttpResponse.json(initiative)),
+    )
+
+    renderProjectDetail('1')
+
+    await waitFor(() => {
+      expect(screen.getAllByText('My Initiative').length).toBeGreaterThan(0)
+    })
+
+    // Breadcrumb should show parent project name as a link
+    const parentLink = screen.getByRole('link', { name: /Parent Project/ })
+    expect(parentLink).toBeInTheDocument()
+    expect(parentLink).toHaveAttribute('href', '/projects/99')
+
+    // Breadcrumb should show the ◆ and ▸ symbols
+    expect(screen.getByText('◆')).toBeInTheDocument()
+    expect(screen.getByText('▸')).toBeInTheDocument()
+  })
+
+  it('does not show breadcrumb for a top-level project', async () => {
+    renderProjectDetail()
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Project')).toBeInTheDocument()
+    })
+
+    // No breadcrumb separator should appear for a top-level project
+    expect(screen.queryByText('›')).not.toBeInTheDocument()
+  })
+
   it('shows events tab content when clicked', async () => {
     const user = userEvent.setup()
     renderProjectDetail()

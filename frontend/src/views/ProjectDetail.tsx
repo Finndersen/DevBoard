@@ -7,7 +7,7 @@ import CreateCodebaseModal from '../components/modals/CreateCodebaseModal'
 import ProjectEventsTab from '../components/events/ProjectEventsTab'
 import { Button, Card, Input } from '../components/ui'
 import { MarkdownDocumentEditor } from '../components/MarkdownDocumentEditor'
-import { textColors, borderColors, layouts, loadingSpinner } from '../styles/designSystem'
+import { textColors, borderColors, layouts, loadingSpinner, projectColors, initiativeColors } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
 import type { Codebase, CustomFieldDefinition } from '../lib/api'
 import { useModal, useEditableField, useProject, useProjectCodebases, useLinkCodebaseToProject, useUnlinkCodebaseFromProject, useDocument } from '../hooks'
@@ -394,6 +394,25 @@ function ProjectDetail({ id }: ProjectDetailProps) {
 
   return (
     <div className="h-full flex flex-col">
+      {/* Initiative breadcrumb — shown when viewing a sub-project */}
+      {project.parent_project_id && project.parent_project_name && (
+        <div className={`flex items-center gap-1.5 text-sm px-1 pb-2 flex-shrink-0`}>
+          <Link
+            to={`/projects/${project.parent_project_id}`}
+            className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+            title={project.parent_project_name}
+          >
+            <span className={`${projectColors.icon} font-medium`}>◆</span>
+            <span className="max-w-[200px] truncate">{project.parent_project_name}</span>
+          </Link>
+          <span className={textColors.muted}>›</span>
+          <span className={`flex items-center gap-1 ${textColors.secondary}`}>
+            <span className={`${initiativeColors.icon} font-medium`}>▸</span>
+            <span className="font-medium">{project.name}</span>
+          </span>
+        </div>
+      )}
+
       {/* Navigation Tabs with Project Name and Actions */}
       <div className={`border-b ${borderColors.default} mb-4 flex-shrink-0`}>
         <div className="flex items-center justify-between">

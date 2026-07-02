@@ -13,6 +13,7 @@ from devboard.api.dependencies.entities import get_verified_task
 from devboard.api.dependencies.repositories import (
     get_conversation_repository,
     get_document_repository,
+    get_project_repository,
     get_task_repository,
     get_worktree_slot_repository,
 )
@@ -55,6 +56,7 @@ from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories import (
     ConversationRepository,
     DocumentRepository,
+    ProjectRepository,
     TaskRepository,
     WorktreeSlotRepository,
 )
@@ -70,6 +72,34 @@ from devboard.services.workspace.pool_manager import WorktreePoolManager
 from devboard.workflow_actions.registry import workflow_action_registry
 
 router = APIRouter()
+
+
+def _build_task_list_response(task: Task) -> TaskListResponse:
+    """Build a TaskListResponse from a Task, populating initiative fields when applicable."""
+    project = task.project
+    # When the task's project is an initiative (has a parent), populate initiative fields
+    # and use the top-level project name for project_name.
+    if project.parent_project_id is not None:
+        project_name = project.parent.name if project.parent else project.name
+        initiative_id: int | None = project.id
+        initiative_name: str | None = project.name
+    else:
+        project_name = project.name
+        initiative_id = None
+        initiative_name = None
+
+    return TaskListResponse(
+        id=task.id,
+        title=task.title,
+        project_id=task.project_id,
+        project_name=project_name,
+        codebase_id=task.codebase_id,
+        status=task.status,
+        created_at=task.created_at,
+        updated_at=task.updated_at,
+        initiative_id=initiative_id,
+        initiative_name=initiative_name,
+    )
 
 
 def _get_available_workflow_actions(task: Task) -> list[WorkflowActionInfo]:
@@ -88,23 +118,27 @@ async def list_all_tasks(
     project_id: int | None = Query(None),
     status: list[TaskStatus] | None = Query(None),
     task_repo: TaskRepository = Depends(get_task_repository),
+    project_repo: ProjectRepository = Depends(get_project_repository),
 ) -> list[TaskListResponse]:
-    """Fetch all tasks across projects with optional project and status filtering."""
-    tasks = task_repo.get_list(project_id=project_id, statuses=status, with_project=True)
+    """Fetch all tasks across projects with optional project and status filtering.
 
-    return [
-        TaskListResponse(
-            id=task.id,
-            title=task.title,
-            project_id=task.project_id,
-            project_name=task.project.name,
-            codebase_id=task.codebase_id,
-            status=task.status,
-            created_at=task.created_at,
-            updated_at=task.updated_at,
-        )
-        for task in tasks
-    ]
+    When filtering by a top-level project_id, tasks from its initiatives are also included.
+    When filtering by an initiative project_id, only that initiative's tasks are returned.
+    """
+    include_initiative_tasks = False
+    if project_id is not None:
+        filtered_project = project_repo.get_by_id(project_id)
+        # Top-level projects (no parent) should also return tasks from their initiatives
+        if filtered_project is not None and filtered_project.parent_project_id is None:
+            include_initiative_tasks = True
+
+    tasks = task_repo.get_list(
+        project_id=project_id,
+        statuses=status,
+        with_project=True,
+        include_initiative_tasks=include_initiative_tasks,
+    )
+    return [_build_task_list_response(task) for task in tasks]
 
 
 @router.get("/counts", response_model=TaskCountsResponse)
@@ -127,19 +161,7 @@ async def list_archived_tasks(
     """Return paginated COMPLETE tasks, optionally filtered by project."""
     tasks, total = task_repo.get_archived_paginated(project_id, page, page_size)
     return PaginatedTaskListResponse(
-        items=[
-            TaskListResponse(
-                id=task.id,
-                title=task.title,
-                project_id=task.project_id,
-                project_name=task.project.name,
-                codebase_id=task.codebase_id,
-                status=task.status,
-                created_at=task.created_at,
-                updated_at=task.updated_at,
-            )
-            for task in tasks
-        ],
+        items=[_build_task_list_response(task) for task in tasks],
         total=total,
         page=page,
         page_size=page_size,

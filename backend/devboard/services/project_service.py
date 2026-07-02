@@ -27,24 +27,36 @@ class ProjectService:
         project_repo: ProjectRepository,
         system_event_emitter: SystemEventEmitter,
     ):
-        """Initialize service.
-
-        Args:
-            conversation_service: Service for conversation operations
-            document_repo: Repository for document operations
-            project_repo: Repository for project operations
-            system_event_emitter: Emitter for system lifecycle events
-        """
         self.conversation_service = conversation_service
         self.document_repo = document_repo
         self.project_repo = project_repo
         self.system_event_emitter = system_event_emitter
+
+    def validate_parent(self, parent_project_id: int, project_id: int | None = None) -> None:
+        """Validate parent project constraints.
+
+        Args:
+            parent_project_id: ID of the proposed parent project
+            project_id: ID of the project being updated (None for creation)
+
+        Raises:
+            ValueError: If the parent is invalid (not found, self-reference, or too deep)
+        """
+        if project_id is not None and parent_project_id == project_id:
+            raise ValueError("A project cannot be its own parent")
+
+        parent = self.project_repo.get_by_id(parent_project_id)
+        if not parent:
+            raise ValueError(f"Parent project {parent_project_id} not found")
+        if parent.parent_project_id is not None:
+            raise ValueError("Cannot nest more than one level deep: the target parent is already an initiative")
 
     def create_project(
         self,
         name: str,
         description: str | None = None,
         custom_fields: dict[str, Any] | None = None,
+        parent_project_id: int | None = None,
     ) -> Project:
         """Create a new project with initial conversation.
 
@@ -55,10 +67,14 @@ class ProjectService:
             name: Project name
             description: Optional project description
             custom_fields: Optional custom field values
+            parent_project_id: Optional parent project ID (makes this an initiative)
 
         Returns:
             Created Project instance with active conversation
         """
+        if parent_project_id is not None:
+            self.validate_parent(parent_project_id)
+
         # Create specification document
         specification_doc = self.document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
 
@@ -68,6 +84,7 @@ class ProjectService:
             description=description,
             specification=specification_doc,
             custom_fields=custom_fields,
+            parent_project_id=parent_project_id,
         )
 
         # Create project working directory eagerly

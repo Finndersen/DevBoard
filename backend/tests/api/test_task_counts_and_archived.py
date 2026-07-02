@@ -184,6 +184,8 @@ class TestListArchivedTasks:
             "title",
             "project_id",
             "project_name",
+            "initiative_id",
+            "initiative_name",
             "codebase_id",
             "status",
             "created_at",

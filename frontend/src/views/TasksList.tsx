@@ -3,9 +3,9 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { PlusIcon, ListBulletIcon, FunnelIcon, ChatBubbleLeftIcon, ArrowPathIcon, ArrowTopRightOnSquareIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
 import { useAllTasks, useProjects, useRefetchOnViewActivation, useTaskCounts, useArchivedTasks } from '../hooks'
 import { Button, Card, ErrorMessage } from '../components/ui'
-import { textColors, loadingSpinner, borderColors, statusColors, surfaces, hoverColors } from '../styles/designSystem'
+import { textColors, loadingSpinner, borderColors, statusColors, surfaces, hoverColors, projectColors, initiativeColors } from '../styles/designSystem'
 import { TaskStatus } from '../lib/api'
-import type { TaskListItem } from '../lib/api'
+import type { TaskListItem, Project } from '../lib/api'
 import { useGithubStore } from '../stores/githubStore'
 import ViewHeader from '../components/layout/ViewHeader'
 import { StatusIndicator, ReviewBadge } from '../components/github/PRStatusComponents'
@@ -101,6 +101,21 @@ export default function TasksList() {
     refetchArchived()
   }, [archivedPage, selectedProjectId, refetchArchived])
 
+  // Group projects into top-level and initiatives for the filter dropdown
+  const { topLevelProjects, initiativesByParentId } = useMemo(() => {
+    if (!projects) return { topLevelProjects: [] as Project[], initiativesByParentId: new Map<number, Project[]>() }
+    const topLevel = projects.filter(p => !p.parent_project_id)
+    const byParent = new Map<number, Project[]>()
+    for (const p of projects) {
+      if (p.parent_project_id) {
+        const arr = byParent.get(p.parent_project_id) ?? []
+        arr.push(p)
+        byParent.set(p.parent_project_id, arr)
+      }
+    }
+    return { topLevelProjects: topLevel, initiativesByParentId: byParent }
+  }, [projects])
+
   // Group active tasks by status
   const taskGroups = useMemo(() => {
     if (!tasks) return {} as Record<string, TaskListItem[]>
@@ -168,11 +183,12 @@ export default function TasksList() {
                 className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white min-w-[180px]"
               >
                 <option value="">All Projects</option>
-                {projects?.map(project => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
+                {topLevelProjects.flatMap(project => [
+                  <option key={`project-${project.id}`} value={project.id}>◆ {project.name}</option>,
+                  ...(initiativesByParentId.get(project.id)?.map(initiative => (
+                    <option key={`initiative-${initiative.id}`} value={initiative.id}>  ▸ {initiative.name}</option>
+                  )) ?? []),
+                ])}
               </select>
             </div>
             <Button onClick={handleCreateTask} icon={<PlusIcon />}>
@@ -243,9 +259,15 @@ export default function TasksList() {
                               </span>
                               <div className="flex items-center gap-1.5 min-w-0">
                                 <span className={`text-xs shrink-0 ${textColors.muted}`}>#{task.id}</span>
-                                <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                                  {task.project_name}
-                                </span>
+                                {task.initiative_id ? (
+                                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0 max-w-[100px] truncate ${initiativeColors.badge}`} title={task.initiative_name ?? undefined}>
+                                    ▸ {task.initiative_name}
+                                  </span>
+                                ) : (
+                                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0 max-w-[100px] truncate ${projectColors.badge}`} title={task.project_name}>
+                                    ◆ {task.project_name}
+                                  </span>
+                                )}
                               </div>
                             </div>
                             {pr && (
@@ -324,7 +346,16 @@ export default function TasksList() {
                         </td>
                         <td className={`py-3 px-3 ${textColors.muted}`}>#{task.id}</td>
                         <td className={`py-3 px-3 ${textColors.primary}`}>{task.title}</td>
-                        <td className={`py-3 px-3 ${textColors.secondary}`}>{task.project_name}</td>
+                        <td className={`py-3 px-3 ${textColors.secondary}`}>
+                          {task.initiative_id ? (
+                            <span>
+                              {task.project_name}
+                              <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full font-medium ${initiativeColors.badge}`}>
+                                ▸ {task.initiative_name}
+                              </span>
+                            </span>
+                          ) : task.project_name}
+                        </td>
                         <td className={`py-3 px-3 ${textColors.muted}`}>{formatDate(task.updated_at)}</td>
                       </tr>
                     ))}

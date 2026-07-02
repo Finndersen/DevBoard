@@ -1,6 +1,6 @@
 """Project API endpoints."""
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.execution.registry import get_execution_manager
@@ -86,13 +86,34 @@ async def _resolve_model_id_override(
     return agent_config_service.get_model_id_for_type(auto_model_type, effective_config.engine)
 
 
+def _build_project_response(project: Project, conversation_id: int | None = None) -> ProjectResponse:
+    return ProjectResponse(
+        id=project.id,
+        name=project.name,
+        description=project.description,
+        created_at=project.created_at,
+        specification_document_id=project.specification.id,
+        default_conversation_id=conversation_id,
+        custom_fields=project.custom_fields,
+        parent_project_id=project.parent_project_id,
+        parent_project_name=project.parent_project_name,
+        complete=project.complete,
+    )
+
+
 @router.get("/", response_model=list[ProjectResponse])
 async def list_projects(
+    parent_project_id: int | None = Query(None),
+    complete: bool | None = Query(None),
     project_repo: ProjectRepository = Depends(get_project_repository),
 ):
-    """List all projects."""
-    projects = project_repo.get_all()
-    return projects
+    """List projects with optional hierarchy and completion filters.
+
+    By default, only non-complete projects are returned. Pass complete=true to get completed ones.
+    Pass parent_project_id to list initiatives under a specific project.
+    """
+    projects = project_repo.get_all(parent_project_id=parent_project_id, complete=complete)
+    return [_build_project_response(p) for p in projects]
 
 
 @router.post("/", response_model=ProjectResponse)
@@ -103,7 +124,7 @@ async def create_project(
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     custom_field_repo: CustomFieldRepository = Depends(get_custom_field_repository),
 ):
-    """Create a new project with initial conversation."""
+    """Create a new project (or initiative when parent_project_id is provided)."""
     mandatory_fields = custom_field_repo.get_mandatory_fields(entity_type=EntityType.PROJECT)
     if mandatory_fields:
         custom_fields = project.custom_fields or {}
@@ -118,12 +139,16 @@ async def create_project(
                 detail=f"Missing required custom fields: {', '.join(missing_fields)}",
             )
 
-    # Create project using service (creates project + document + conversation)
-    created_project = project_service.create_project(
-        name=project.name,
-        description=project.description,
-        custom_fields=project.custom_fields,
-    )
+    try:
+        created_project = project_service.create_project(
+            name=project.name,
+            description=project.description,
+            custom_fields=project.custom_fields,
+            parent_project_id=project.parent_project_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
     project_repo.db.commit()
     project_repo.db.refresh(created_project)
 
@@ -132,15 +157,7 @@ async def create_project(
         ParentEntityType.PROJECT, created_project.id
     )
 
-    return ProjectResponse(
-        id=created_project.id,
-        name=created_project.name,
-        description=created_project.description,
-        created_at=created_project.created_at,
-        specification_document_id=created_project.specification.id,
-        default_conversation_id=conversation.id if conversation else None,
-        custom_fields=created_project.custom_fields,
-    )
+    return _build_project_response(created_project, conversation_id=conversation.id if conversation else None)
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -151,16 +168,7 @@ async def get_project(
 ) -> ProjectResponse:
     """Get a specific project with active conversation_id."""
     conversation = conversation_repo.get_most_recent_conversation_for_entity(ParentEntityType.PROJECT, project_id)
-
-    return ProjectResponse(
-        id=project.id,
-        name=project.name,
-        description=project.description,
-        created_at=project.created_at,
-        specification_document_id=project.specification.id,
-        default_conversation_id=conversation.id if conversation else None,
-        custom_fields=project.custom_fields,
-    )
+    return _build_project_response(project, conversation_id=conversation.id if conversation else None)
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
@@ -168,8 +176,10 @@ async def update_project(
     project_id: int,
     project_update: ProjectUpdate,
     project: Project = Depends(get_verified_project),
+    project_repo: ProjectRepository = Depends(get_project_repository),
     document_repo: DocumentRepository = Depends(get_document_repository),
     system_event_emitter: SystemEventEmitter = Depends(get_system_event_emitter),
+    project_service: ProjectService = Depends(get_project_service),
 ):
     """Update a project and its specification content."""
     update_data = project_update.model_dump(exclude_unset=True)
@@ -178,8 +188,24 @@ async def update_project(
     # Handle specification content update separately
     specification = update_data.pop("specification", None)
     if specification is not None:
-        # Update the specification document content
         document_repo.update_content(project.specification, specification)
+
+    # Validate and apply parent_project_id update
+    if "parent_project_id" in update_data:
+        new_parent_id = update_data.pop("parent_project_id")
+        if new_parent_id is not None:
+            if project.initiatives:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot make a project with initiatives into an initiative itself",
+                )
+            try:
+                project_service.validate_parent(new_parent_id, project_id=project_id)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+        project.parent_project_id = new_parent_id
+        # Expire the cached parent relationship so parent_project_name is fresh
+        project_repo.db.expire(project, ["parent"])
 
     # Handle custom fields with merge semantics: merge provided fields, remove keys set to None
     custom_fields = update_data.pop("custom_fields", None)
@@ -192,13 +218,14 @@ async def update_project(
                 merged[key] = value
         project.custom_fields = merged
 
-    # Update other project fields
+    # Update remaining project fields (name, description, etc.), excluding None for non-nullable columns
     for field, value in update_data.items():
-        setattr(project, field, value)
+        if value is not None:
+            setattr(project, field, value)
 
     system_event_emitter.emit_project_updated(project, changed_fields)
 
-    return project
+    return _build_project_response(project)
 
 
 @router.delete("/{project_id}", response_model=DeleteResponse)
@@ -211,6 +238,12 @@ async def delete_project(
     project = project_repo.get_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.initiatives:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete a project that has initiatives. Delete or re-parent the initiatives first.",
+        )
 
     project_name = project.name
     system_event_emitter.emit_project_deleted(project_id, project_name)

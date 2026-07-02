@@ -5,7 +5,7 @@ import { http, HttpResponse } from 'msw'
 import { render } from '../../test/utils'
 import { server } from '../../test/setup'
 import { ViewContextProvider } from '../../contexts/ViewContext'
-import type { TaskListItem, TaskCountsResponse, PaginatedTaskListResponse } from '../../lib/api'
+import type { TaskListItem, TaskCountsResponse, PaginatedTaskListResponse, Project } from '../../lib/api'
 import { TaskStatus } from '../../lib/api'
 import TasksList from '../TasksList'
 
@@ -16,6 +16,9 @@ function makeTaskListItem(overrides: Partial<TaskListItem> & Pick<TaskListItem, 
     project_name: 'Test Project',
     codebase_id: 1,
     created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    initiative_id: null,
+    initiative_name: null,
     ...overrides,
   }
 }
@@ -48,17 +51,25 @@ function setupHandlers({
   activeTasks = mockActiveTasks,
   archivedResponse = makeArchivedResponse(mockArchivedTasks, 2),
   counts = mockTaskCounts,
+  projects,
 }: {
   activeTasks?: TaskListItem[]
   archivedResponse?: PaginatedTaskListResponse
   counts?: TaskCountsResponse
+  projects?: Project[]
 } = {}) {
-  server.use(
+  const handlers = [
     http.get('*/api/tasks', () => HttpResponse.json(activeTasks)),
     http.get('*/api/tasks/counts', () => HttpResponse.json(counts)),
     http.get('*/api/tasks/archived', () => HttpResponse.json(archivedResponse)),
     http.get('*/api/github/open-prs', () => HttpResponse.json({ prs: [], errors: [] })),
-  )
+  ]
+  if (projects !== undefined) {
+    handlers.push(
+      http.get('*/api/projects', () => HttpResponse.json(projects))
+    )
+  }
+  server.use(...handlers)
 }
 
 function renderTasksList() {
@@ -245,6 +256,35 @@ describe('TasksList', () => {
     })
   })
 
+  describe('Task card badges', () => {
+    it('shows purple project badge when task has no initiative', async () => {
+      setupHandlers({
+        activeTasks: [makeTaskListItem({ id: 10, title: 'Direct Task', status: TaskStatus.PLANNING, project_name: 'My Project', initiative_id: null, initiative_name: null })],
+      })
+      renderTasksList()
+      await waitFor(() => expect(screen.getByText('Direct Task')).toBeInTheDocument())
+      // Purple badge with ◆ symbol
+      const badge = screen.getByTitle('My Project')
+      expect(badge).toBeInTheDocument()
+      expect(badge.textContent).toContain('◆')
+      expect(badge.className).toMatch(/purple/)
+    })
+
+    it('shows amber initiative badge when task is in an initiative', async () => {
+      setupHandlers({
+        activeTasks: [makeTaskListItem({ id: 10, title: 'Initiative Task', status: TaskStatus.PLANNING, project_name: 'Parent Project', initiative_id: 5, initiative_name: 'My Initiative' })],
+      })
+      renderTasksList()
+      await waitFor(() => expect(screen.getByText('Initiative Task')).toBeInTheDocument())
+      // Amber badge with ▸ symbol and initiative name
+      const badge = screen.getByTitle('My Initiative')
+      expect(badge).toBeInTheDocument()
+      expect(badge.textContent).toContain('▸')
+      expect(badge.textContent).toContain('My Initiative')
+      expect(badge.className).toMatch(/amber/)
+    })
+  })
+
   describe('Project filter', () => {
     it('refetches active tasks when project filter changes', async () => {
       let lastProjectId: string | null = null
@@ -290,6 +330,30 @@ describe('TasksList', () => {
       await waitFor(() => {
         expect(archivedProjectId).toBe('1')
       })
+    })
+
+    it('renders initiatives indented under their parent projects in the filter dropdown', async () => {
+      const projectsWithHierarchy: Project[] = [
+        { id: 1, name: 'Top Project', specification_document_id: 1, description: '', default_conversation_id: null, created_at: '2026-01-01T00:00:00Z', custom_fields: null, parent_project_id: null, parent_project_name: null, complete: false },
+        { id: 2, name: 'Sub Initiative', specification_document_id: 2, description: '', default_conversation_id: null, created_at: '2026-01-01T00:00:00Z', custom_fields: null, parent_project_id: 1, parent_project_name: 'Top Project', complete: false },
+      ]
+      setupHandlers({ projects: projectsWithHierarchy })
+      renderTasksList()
+
+      await waitFor(() => expect(screen.getByText('Planning Task')).toBeInTheDocument())
+
+      const select = screen.getByRole('combobox')
+      const options = select.querySelectorAll('option')
+      const optionTexts = Array.from(options).map(o => o.textContent ?? '')
+
+      // Top-level project comes before initiative
+      const topIdx = optionTexts.findIndex(t => t.includes('Top Project'))
+      const subIdx = optionTexts.findIndex(t => t.includes('Sub Initiative'))
+      expect(topIdx).toBeGreaterThan(-1)
+      expect(subIdx).toBeGreaterThan(topIdx)
+      // Top-level has ◆ prefix, initiative has ▸ prefix
+      expect(optionTexts[topIdx]).toContain('◆')
+      expect(optionTexts[subIdx]).toContain('▸')
     })
   })
 })

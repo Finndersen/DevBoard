@@ -80,6 +80,10 @@ class TaskListResponse(BaseModel):
     created_at: datetime.datetime
     updated_at: datetime.datetime
 
+    # Initiative fields: populated when the task's project is an initiative (has a parent)
+    initiative_id: int | None = None
+    initiative_name: str | None = None
+
     model_config = {"from_attributes": True}
 
 

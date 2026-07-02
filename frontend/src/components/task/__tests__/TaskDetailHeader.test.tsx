@@ -95,6 +95,45 @@ describe('TaskDetailHeader', () => {
     vi.clearAllMocks()
   })
 
+  describe('Project breadcrumb', () => {
+    it('shows ◆ symbol and project name when task is directly under a project', () => {
+      renderWithRouter(<TaskDetailHeader {...defaultProps} />)
+      expect(screen.getByText('◆')).toBeInTheDocument()
+      expect(screen.getByText('Test Project')).toBeInTheDocument()
+    })
+
+    it('shows parent project and initiative when task is in an initiative', () => {
+      const initiativeProject = {
+        id: 2,
+        name: 'My Initiative',
+        parent_project_id: 1,
+        parent_project_name: 'Parent Project',
+      }
+      renderWithRouter(
+        <TaskDetailHeader {...defaultProps} project={initiativeProject} />
+      )
+      expect(screen.getByText('◆')).toBeInTheDocument()
+      expect(screen.getByText('Parent Project')).toBeInTheDocument()
+      expect(screen.getByText('›')).toBeInTheDocument()
+      expect(screen.getByText('▸')).toBeInTheDocument()
+      expect(screen.getByText('My Initiative')).toBeInTheDocument()
+    })
+
+    it('parent project name is a link to the parent project', () => {
+      const initiativeProject = {
+        id: 2,
+        name: 'My Initiative',
+        parent_project_id: 5,
+        parent_project_name: 'Parent Project',
+      }
+      renderWithRouter(
+        <TaskDetailHeader {...defaultProps} project={initiativeProject} />
+      )
+      const parentLink = screen.getByTitle('Parent Project').closest('a')
+      expect(parentLink).toHaveAttribute('href', '/projects/5')
+    })
+  })
+
   describe('Status badge variant', () => {
     it('renders COMPLETE status with success variant', () => {
       const completeTask = { ...mockTask, status: TaskStatus.COMPLETE }

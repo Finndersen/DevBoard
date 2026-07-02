@@ -7,13 +7,12 @@ import {
   ChevronDownIcon,
   CodeBracketIcon,
   TrashIcon,
-  FolderIcon,
 } from '@heroicons/react/24/outline'
 import { TaskStatus } from '../../lib/api'
 import type { Task, Codebase, TaskGitStatus, CustomFieldDefinition } from '../../lib/api'
 import { useEditableField } from '../../hooks/useEditableField'
 import { Button, Input, StatusBadge, ConfirmDialog } from '../ui'
-import { textColors, borderColors, surfaces } from '../../styles/designSystem'
+import { textColors, borderColors, surfaces, hoverColors, projectColors, initiativeColors } from '../../styles/designSystem'
 import { CustomFieldsPopover } from '../common/CustomFieldsPanel'
 
 // Git branch icon (Y-shape: trunk at bottom splitting into branch at top-right)
@@ -29,7 +28,7 @@ const GitBranchIcon = ({ className }: { className?: string }) => (
 
 interface TaskDetailHeaderProps {
   task: Task
-  project: { id: number; name: string } | null | undefined
+  project: { id: number; name: string; parent_project_id?: number | null; parent_project_name?: string | null } | null | undefined
   titleField: ReturnType<typeof useEditableField<string>>
   codebases: Codebase[] | null | undefined
   selectedCodebase: Codebase | null | undefined
@@ -188,14 +187,38 @@ export function TaskDetailHeader({
         {/* Compact project / codebase display */}
         <div className="flex items-center text-sm flex-shrink-0">
           {project && (
-            <Link
-              to={`/projects/${project.id}`}
-              className="flex items-center space-x-1 px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              title="View project"
-            >
-              <FolderIcon className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
-              <span className="text-blue-600 dark:text-blue-400 hover:underline max-w-[100px] truncate">{project.name}</span>
-            </Link>
+            <div className="flex items-center gap-1">
+              {project.parent_project_id && project.parent_project_name ? (
+                <>
+                  <Link
+                    to={`/projects/${project.parent_project_id}`}
+                    title={project.parent_project_name}
+                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${hoverColors.default} transition-colors`}
+                  >
+                    <span className={`${projectColors.icon} font-medium`}>◆</span>
+                    <span className={`${textColors.accent} hover:underline max-w-[80px] truncate`}>{project.parent_project_name}</span>
+                  </Link>
+                  <span className={textColors.muted}>›</span>
+                  <Link
+                    to={`/projects/${project.id}`}
+                    title={project.name}
+                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${hoverColors.default} transition-colors`}
+                  >
+                    <span className={`${initiativeColors.icon} font-medium`}>▸</span>
+                    <span className={`${textColors.accent} hover:underline max-w-[80px] truncate`}>{project.name}</span>
+                  </Link>
+                </>
+              ) : (
+                <Link
+                  to={`/projects/${project.id}`}
+                  title={project.name}
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${hoverColors.default} transition-colors`}
+                >
+                  <span className={`${projectColors.icon} font-medium`}>◆</span>
+                  <span className={`${textColors.accent} hover:underline max-w-[100px] truncate`}>{project.name}</span>
+                </Link>
+              )}
+            </div>
           )}
           {project && selectedCodebase && (
             <span className="text-gray-400 dark:text-gray-600 mx-0.5">/</span>

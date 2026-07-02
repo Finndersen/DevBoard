@@ -99,3 +99,14 @@ export const hoverColors = {
   subtle: 'hover:bg-gray-50 dark:hover:bg-white/[0.05]',
   default: 'hover:bg-gray-100 dark:hover:bg-white/[0.08]'
 }
+
+// Project hierarchy colors
+export const projectColors = {
+  icon: 'text-purple-600 dark:text-purple-400',
+  badge: 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400',
+}
+
+export const initiativeColors = {
+  icon: 'text-amber-500 dark:text-amber-400',
+  badge: 'bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400',
+}

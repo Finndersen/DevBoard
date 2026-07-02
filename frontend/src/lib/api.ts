@@ -14,6 +14,16 @@ export interface Project {
   default_conversation_id: number | null
   created_at: string
   custom_fields: Record<string, unknown> | null
+  parent_project_id: number | null
+  parent_project_name: string | null
+  complete: boolean
+}
+
+export interface ProjectCreate {
+  name: string
+  description: string
+  parent_project_id?: number | null
+  custom_fields?: Record<string, unknown> | null
 }
 
 export interface WorkflowActionInfo {
@@ -89,6 +99,8 @@ export interface TaskListItem {
   status: TaskStatus
   created_at: string
   updated_at: string
+  initiative_id: number | null
+  initiative_name: string | null
 }
 
 export type TaskCountsResponse = Partial<Record<TaskStatus, number>>
@@ -1085,11 +1097,15 @@ export class ApiClient {
   }
 
   // Projects
-  async getProjects(): Promise<Project[]> {
-    return this.request<Project[]>('/api/projects')
+  async getProjects(params?: { parentProjectId?: number; complete?: boolean }): Promise<Project[]> {
+    const searchParams = new URLSearchParams()
+    if (params?.parentProjectId !== undefined) searchParams.set('parent_project_id', String(params.parentProjectId))
+    if (params?.complete !== undefined) searchParams.set('complete', String(params.complete))
+    const query = searchParams.toString()
+    return this.request<Project[]>(`/api/projects${query ? `?${query}` : ''}`)
   }
 
-  async createProject(project: Omit<Project, 'id' | 'created_at'>): Promise<Project> {
+  async createProject(project: ProjectCreate): Promise<Project> {
     return this.request<Project>('/api/projects', {
       method: 'POST',
       body: JSON.stringify(project),

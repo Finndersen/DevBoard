@@ -3,10 +3,10 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
-from devboard.db.models import Codebase, Conversation, Document, ParentEntityType, Task, TaskStatus
+from devboard.db.models import Codebase, Conversation, Document, ParentEntityType, Project, Task, TaskStatus
 from devboard.db.models.implementation_plan import ImplementationPlan
 from devboard.db.repositories.base import BaseRepository
 
@@ -94,21 +94,32 @@ class TaskRepository(BaseRepository[Task]):
         project_id: int | None = None,
         statuses: list[TaskStatus] | None = None,
         with_project: bool = False,
+        include_initiative_tasks: bool = False,
     ) -> list[Task]:
         """Get tasks with optional filtering.
 
         Args:
             project_id: Optional project ID to filter by
             statuses: Optional list of task statuses to filter by
-            with_project: If True, eager load project relationship
+            with_project: If True, eager load project (and its parent) relationship
+            include_initiative_tasks: If True and project_id is set, also include tasks
+                from initiatives (sub-projects) under the given project_id
         """
         stmt = select(Task)
         if project_id is not None:
-            stmt = stmt.where(Task.project_id == project_id)
+            if include_initiative_tasks:
+                stmt = stmt.where(
+                    or_(
+                        Task.project_id == project_id,
+                        Task.project.has(Project.parent_project_id == project_id),
+                    )
+                )
+            else:
+                stmt = stmt.where(Task.project_id == project_id)
         if statuses:
             stmt = stmt.where(Task.status.in_(statuses))
         if with_project:
-            stmt = stmt.options(joinedload(Task.project))
+            stmt = stmt.options(joinedload(Task.project).joinedload(Project.parent))
         return list(self.db.execute(stmt).unique().scalars().all())
 
     def update(self, task: Task) -> Task:
@@ -197,7 +208,10 @@ class TaskRepository(BaseRepository[Task]):
 
         offset = (page - 1) * page_size
         data_stmt = (
-            base_stmt.options(joinedload(Task.project)).order_by(Task.created_at.desc()).offset(offset).limit(page_size)
+            base_stmt.options(joinedload(Task.project).joinedload(Project.parent))
+            .order_by(Task.created_at.desc())
+            .offset(offset)
+            .limit(page_size)
         )
         tasks = list(self.db.execute(data_stmt).unique().scalars().all())
         return tasks, total
