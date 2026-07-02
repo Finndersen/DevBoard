@@ -10,13 +10,14 @@ DevBoard provides **AI-assisted task development** with clear lifecycle manageme
 
 Tasks progress through defined states, each with specific purposes and agent support:
 
-### Planning → Implementing → PR Open → Complete
+### Planning → Implementing → [PR Open →] Merged → Complete
 
 **State Descriptions**:
 
 - **Planning**: Collaborative specification development and implementation planning with AI
 - **Implementing**: Execute development work with AI assistance (TaskImplementationRole agent)
-- **PR Open**: GitHub PR created for the task; displays PR status and review comments inline
+- **PR Open** *(optional)*: GitHub PR created for the task; displays PR status and review comments inline
+- **Merged**: Branch merged; post-merge housekeeping with TaskFinalisationRole (project spec updates, follow-up tasks)
 - **Complete**: Task finished and delivered
 
 ## Core Workflow
@@ -28,13 +29,13 @@ Create tasks manually or by linking external tickets:
 - **Manual Creation**: Enter task name, description, and project association
 - **External Linking**: Link to Jira tickets, GitHub issues, or other work items
 - **Project Association**: Every task belongs to a project
-- **Initial State**: Tasks start in "Defining" state
+- **Initial State**: Tasks start in Planning state
 
 ### 2. Interactive Specification
 
 Collaboratively develop detailed task requirements with AI:
 
-- **Specification Agent**: TaskSpecificationRole guides requirement gathering
+- **Planning Agent**: TaskPlanningRole guides requirement gathering and planning
 - **Structured Document**: Task specification follows consistent template
   - Objective: Clear, specific goal statement
   - Context & Background: Current state and problem description
@@ -154,9 +155,9 @@ Maintain living specification and implementation plan documents:
 ### New Feature Development
 1. Create task in project for new feature
 2. Converse with specification agent to develop detailed requirements
-3. Transition to planning state and develop implementation plan
+3. Create implementation plan with the planning agent
 4. Transition to implementing and work with implementation agent
-5. Complete implementation, move to review, then mark complete
+5. Complete implementation, create PR, address review feedback, and merge
 
 ### Bug Fix Task
 1. Create task linked to GitHub issue
@@ -176,5 +177,6 @@ Maintain living specification and implementation plan documents:
 
 - **Planning**: TaskPlanningRole guides specification and implementation planning
 - **Implementing**: TaskImplementationRole assists with coding
-- **PR Open**: No specific agent (PR review and feedback handling)
+- **PR Open**: TaskPRReviewRole handles PR reviews, CI status detection, and inline comments
+- **Merged**: TaskFinalisationRole handles post-merge housekeeping (project spec updates, follow-up tasks, archiving)
 - **Complete**: No agent (task finished)

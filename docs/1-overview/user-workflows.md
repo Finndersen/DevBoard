@@ -33,7 +33,7 @@ DevBoard is designed around **conversational workflows** where users collaborate
 **Key Activities**:
 - Create task linked to project
 - Converse with specification agent to develop requirements
-- Transition task through states (Defining → Planning → Implementing)
+- Transition task through states (Planning → Implementing → [PR Open →] Merged → Complete)
 - Review and approve agent-proposed document edits
 - Link external resources (Jira tickets, GitHub PRs)
 - Complete task and update project status

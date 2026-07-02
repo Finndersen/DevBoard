@@ -83,7 +83,7 @@ Each `BackgroundAgentRun` records `state_before` and `state_after` snapshots for
 
 ## UI
 
-Background agents are managed under **Settings → Background Agents**:
+Background agents are managed in their own **top-level navigation section** at `/background-agents`:
 
 - List view with status indicators (enabled/disabled, currently running)
 - Create/edit form for agent configuration and triggers

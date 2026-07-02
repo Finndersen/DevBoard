@@ -95,15 +95,8 @@ Roles define agent behavior independently of the execution engine, encapsulating
 - Engine Support: INTERNAL or CLAUDE_CODE
 - Location: `backend/devboard/agents/roles/project_qa.py`
 
-**TaskSpecificationRole**:
-- Purpose: Guide task requirement gathering during SPECIFICATION phase
-- Context: Task details, specification document, project context
-- Tools: `edit_task_specification`, `set_task_specification_content`, `search_codebase`, `read_codebase_files`
-- Engine Support: INTERNAL or CLAUDE_CODE
-- Location: `backend/devboard/agents/roles/task_specification.py`
-
 **TaskPlanningRole**:
-- Purpose: Create structured implementation plans during PLANNING phase
+- Purpose: Guide task specification development and create structured implementation plans during PLANNING phase (handles both spec refinement and plan generation)
 - Context: Task specification, project specification, codebase info
 - Tools: `set_implementation_plan_steps` (bulk creation), `add_implementation_step`, `edit_implementation_step`, `remove_implementation_step`, `edit_implementation_plan_overview`, `read_implementation_step_details`, `create_task`, `search_code_structure`, `show_directory_tree`, `investigate_codebase`
 - Creates structured `ImplementationPlan` with discrete `ImplementationStep` records
@@ -131,6 +124,14 @@ Roles define agent behavior independently of the execution engine, encapsulating
 - Engine Support: CLAUDE_CODE
 - Location: `backend/devboard/agents/roles/task_pr_review.py`
 
+**TaskFinalisationRole**:
+- Purpose: Manage tasks in MERGED state — post-merge housekeeping after code has been merged
+- Context: Task specification, change summary, and step outcomes
+- Behavior: Reviews what was built, proposes a structured plan of follow-up actions (spec updates, follow-up task creation, external resource updates), waits for user approval, then executes
+- Tools: `edit_project_specification`, `create_task`, plus read-only built-in tools (`Read`, `Grep`, `Glob`, `WebFetch`, `WebSearch`)
+- Engine Support: CLAUDE_CODE
+- Location: `backend/devboard/agents/roles/task_finalisation.py`
+
 **CodebaseInvestigationRole** (sub-agent only):
 - Purpose: Investigate codebase implementation details in response to `investigate_codebase` tool calls
 - Context: Codebase metadata and directory tree; query passed at run time
@@ -154,9 +155,10 @@ The system automatically selects the appropriate role based on entity type and s
 **Selection Logic**:
 - Project Conversations: Always use ProjectQARole
 - Task Conversations: Select based on task.state
-  - DEFINING/DESIGNING → TaskSpecificationRole
   - PLANNING → TaskPlanningRole
-  - IMPLEMENTING/IN_REVIEW/COMPLETE → TaskImplementationRole
+  - IMPLEMENTING → TaskImplementationRole
+  - PR_OPEN → TaskPRReviewRole
+  - MERGED → TaskFinalisationRole
 - Codebase Conversations: Reserved for future investigation agent roles
 
 ## Tool System
@@ -232,16 +234,45 @@ Workflow actions are reusable, named operations that orchestrate task state tran
 **Implemented Actions**:
 
 **CreateImplementationPlanAction** (`task.create_implementation_plan`):
-- Transitions task from DEFINING → PLANNING
-- Reuses conversation if same engine, otherwise creates new one
-- Emits SystemEvent (TASK_UPDATED) with `status`, `conversation_id`, and `implementation_plan_id` fields
-- Streams agent's implementation plan generation
+- Does NOT change task status — task stays in PLANNING throughout
+- Available when task is in PLANNING state with a specification but no implementation plan yet
+- Prompts the planning agent to generate an implementation plan
+- The agent creates the plan via the `set_implementation_plan_steps` tool
 
 **BeginImplementationAction** (`task.begin_implementation`):
 - Transitions task from PLANNING → IMPLEMENTING
-- Always creates new conversation for clean implementation context
+- Always creates a new conversation for clean implementation context
 - Emits SystemEvent (TASK_UPDATED) with `status` and `conversation_id` fields
-- Streams agent's implementation work
+- Available when task is in PLANNING state with a structured plan in `pending` status
+
+**RebaseTaskBranchAction** (`task.rebase_branch`):
+- Rebases the task's feature branch onto its base branch
+- Available in PLANNING and IMPLEMENTING states
+- On conflict, returns a conflict-resolution prompt for the agent to handle; on success with base changes, informs the agent of the update
+
+**ApproveAndMergeAction** (`task.approve_and_merge`):
+- Approves implementation changes and directs the agent to merge the feature branch locally via `merge_branch_and_finalise`
+- Available in IMPLEMENTING state with `DIRECT_MERGE` branch handling
+- Auto-rebases if the branch is behind; validates no conflicting uncommitted changes in the main repo
+- Provides commit instructions tailored to the configured merge method (squash/rebase/merge commit)
+
+**ApproveAndCreatePRAction** (`task.approve_and_create_pr`):
+- Approves changes and directs the agent to commit and create a GitHub PR via the `create_pull_request` tool
+- Transitions task to PR_OPEN on PR creation
+- Available in IMPLEMENTING state with `GITHUB_PR` branch handling and a configured repository URL
+- Auto-rebases if the branch is behind before pushing
+
+**MergeAndFinaliseAction** (`task.merge_and_finalise`):
+- Directs the agent to merge an open GitHub PR and complete the task via the `merge_pr_and_finalise` tool
+- Available in PR_OPEN state with a `github_pr_number` set
+
+**FinaliseAction** (`task.finalise`):
+- Directly transitions a task to complete when `MANUAL` branch handling is configured (no merge needed)
+- Available in IMPLEMENTING state with `MANUAL` branch handling
+
+**ArchiveTaskAction** (`task.archive`):
+- Archives a task after post-merge finalisation is complete
+- Available in MERGED state
 
 **Execution Flow**:
 1. Frontend calls `/api/conversations/{id}/workflow-action` with action key
@@ -267,7 +298,7 @@ Workflow actions are reusable, named operations that orchestrate task state tran
 
 **Workflow Actions**:
 - `backend/devboard/workflow_actions/base.py`: Base WorkflowAction class
-- `backend/devboard/workflow_actions/task_workflows.py`: Task workflow actions (CreateImplementationPlanAction, BeginImplementationAction)
+- `backend/devboard/workflow_actions/task_workflows.py`: Task workflow actions (CreateImplementationPlanAction, BeginImplementationAction, RebaseTaskBranchAction, ApproveAndMergeAction, ApproveAndCreatePRAction, MergeAndFinaliseAction, FinaliseAction, ArchiveTaskAction)
 - `backend/devboard/workflow_actions/registry.py`: Workflow action registry for lookup by key
 
 **Agent Engines**:
@@ -279,11 +310,11 @@ Workflow actions are reusable, named operations that orchestrate task state tran
 **Agent Roles**:
 - `backend/devboard/agents/roles/base.py`: Role abstract class
 - `backend/devboard/agents/roles/project_qa.py`: Project Q&A role
-- `backend/devboard/agents/roles/task_specification.py`: Task specification role
-- `backend/devboard/agents/roles/task_planning.py`: Task planning role
+- `backend/devboard/agents/roles/task_planning.py`: Task planning role (specification and plan generation)
 - `backend/devboard/agents/roles/task_implementation.py`: Task implementation role
 - `backend/devboard/agents/roles/task_pr_review.py`: Task PR review role
-- `backend/devboard/agents/roles/types.py`: Role type definitions
+- `backend/devboard/agents/roles/task_finalisation.py`: Task finalisation role (post-merge housekeeping)
+- `backend/devboard/agents/roles/role_types.py`: Role type definitions
 
 **Agent Tools**:
 - `backend/devboard/agents/tools/`: Tool factory functions directory

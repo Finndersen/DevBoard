@@ -30,7 +30,10 @@ Structured document editing with AI agents through approval workflows, conflict 
 Browse, search, and inspect Claude Code conversation sessions from the DevBoard UI. Sessions are organized by project and enriched with task association links when linked to a DevBoard task.
 
 ### [GitHub PR Status Bar](./github-pr-status-bar.md)
-At-a-glance visibility into all open GitHub pull requests across connected codebases, displayed in the header bar with on-demand CI check and review detail.
+At-a-glance visibility into all open GitHub pull requests across connected codebases, displayed in the header bar with on-demand CI check and review detail. Also covers the TaskPRReviewRole agent for addressing reviewer feedback and merging PRs.
+
+### [Events Log](./events-log.md)
+System-wide activity stream recording all developer, system, and agent actions. Filterable event view at `/events` with pinned entries, status tracking, and background agent trigger integration.
 
 ## Feature Status
 
@@ -45,6 +48,7 @@ All core features are production-ready and fully functional:
 - ✅ Context Provider Integrations
 - ✅ Claude Code Session Viewer
 - ✅ GitHub PR Status Bar
+- ✅ Events Log
 
 ## Related Sections
 

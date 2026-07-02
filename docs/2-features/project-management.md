@@ -54,6 +54,17 @@ Attach arbitrary metadata to projects using globally-defined custom fields:
 - **Inline Editing**: View and edit custom field values via the collapsible panel in project detail (TagIcon button in the header)
 - **Merge Semantics**: Updates merge provided values into existing fields; set a value to `null` to remove it
 
+### Events Tab
+
+The Project Detail view has three tabs: **Home**, **Events**, and **Settings**.
+
+The **Events** tab shows all log entries scoped to the project — the same entries visible in the global [Events Log](./events-log.md) view, filtered to this project. This includes developer actions, system state transitions, and agent activity related to the project and its tasks.
+
+Use the Events tab to:
+- Monitor what agents have been doing within the project
+- Review state transition history for tasks
+- Track developer and system actions without leaving the project context
+
 ### Conversational Interface
 
 Ask questions and get AI-powered insights about project status:

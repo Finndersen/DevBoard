@@ -69,6 +69,31 @@ Returns detailed status for a single PR (available for programmatic use).
 - Review summary with author and review state
 - Review comment count
 
+## PR Review Agent (TaskPRReviewRole)
+
+When a task is in `PR_OPEN` state, the **TaskPRReviewRole** agent is available in the Task Detail conversation. This role uses the CLAUDE_CODE engine and provides tools for reading and responding to PR feedback directly from the DevBoard UI.
+
+### Available Tools
+
+- **`get_pr_status`** — Checks the current PR state, CI check results (pass/fail/pending), review decision, and merge readiness. Use this to assess whether a PR is ready to merge before taking action.
+- **`get_pr_feedback`** — Fetches all review comments and code-level feedback from GitHub reviewers, including inline comments tied to specific lines of code.
+- **`merge_pr_and_finalise`** — Merges the PR on GitHub and transitions the task to `MERGED` state, completing the PR workflow.
+- **Codebase tools** — `code_structure_search` and `directory_tree` for exploring the codebase, plus Claude Code's built-in Read, Grep, Glob, Bash, Edit, and Write tools for making changes.
+
+### Workflow
+
+1. Open the task conversation with the task in `PR_OPEN` state
+2. Ask the agent to check CI status or summarise reviewer feedback
+3. The agent reads the PR comments and proposes or makes code changes
+4. Changes are committed and pushed; the agent can rebase if needed
+5. Once the PR is approved and CI passes, use `merge_pr_and_finalise` to merge and complete the task
+
+### Notes
+
+- Codebase editing (Edit/Write) is provided by the Claude Code engine, not via explicit tools
+- The agent works in the task's checked-out worktree directory
+- Commits should be focused and atomic; the agent avoids adding attribution messages
+
 ## Architecture
 
 - **Backend**: Router (`api/routers/github.py`) with two endpoints; GraphQL query enriched with CI/review/comment data
