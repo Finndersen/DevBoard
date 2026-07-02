@@ -102,7 +102,9 @@ make install
 
 if [ "$SKIP_MIGRATIONS" = false ]; then
     info "Running database migrations..."
-    make migrate
+    # Migrate the real, persistent application database (same location start.sh uses),
+    # not the repo-local dev database that make migrate defaults to otherwise.
+    DATABASE_URL="sqlite:///${HOME}/.devboard/data/devboard.db" make migrate
 else
     warn "Skipping database migrations (--skip-migrations flag set)"
 fi

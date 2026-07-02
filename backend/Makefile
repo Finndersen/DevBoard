@@ -1,6 +1,6 @@
 # DevBoard Backend - Development Commands
 
-.PHONY: help install dev lint typecheck validate test start migrate clean
+.PHONY: help install dev lint typecheck validate test start migrate migrate-auto migrate-heads migrate-merge clean
 
 help:		## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -31,10 +31,16 @@ start:		## Start development server (use BACKEND_PORT=XXXX to override default 8
 	uv run --frozen uvicorn devboard.api.main:app --host 0.0.0.0 --port $${BACKEND_PORT:-8000} --reload --log-level debug
 
 migrate:	## Run database migrations
-	mkdir -p ~/.devboard/data && uv run --frozen alembic upgrade head
+	uv run --frozen alembic upgrade head
 
-migrate-auto:	## Generate new migration
+migrate-auto:	## Generate new migration (always run `make migrate` first, see README)
 	uv run --frozen alembic revision --autogenerate
+
+migrate-heads:	## Show current migration head(s) - more than one means a merge migration is needed
+	uv run --frozen alembic heads
+
+migrate-merge:	## Merge multiple migration heads into one (run after migrate-heads shows >1 head)
+	uv run --frozen alembic merge heads -m "merge heads"
 
 clean:		## Clean up generated files
 	rm -rf .venv __pycache__ .pytest_cache .ruff_cache

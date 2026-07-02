@@ -9,8 +9,11 @@ import logfire
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-# Database URL from environment or default to ~/.devboard/data/devboard.db
-_default_db_dir = Path.home() / ".devboard" / "data"
+# Database URL from environment, defaulting to a repo-relative dev/test database.
+# The real application database (~/.devboard/data/devboard.db) is only used when
+# DATABASE_URL is explicitly set — see start.sh. Defaulting to a repo-relative path
+# means each worktree/checkout gets its own isolated database.
+_default_db_dir = Path(__file__).resolve().parents[2] / "data"
 _default_db_dir.mkdir(parents=True, exist_ok=True)
 _DEFAULT_DATABASE_URL = f"sqlite:///{_default_db_dir / 'devboard.db'}"
 

@@ -29,7 +29,16 @@ cd "$SCRIPT_DIR/frontend"
 pnpm dev &
 FRONTEND_PID=$!
 
+# The real, persistent application database lives outside the repo so it survives
+# across worktrees/checkouts. Everywhere else (make migrate, tests, agents) falls
+# back to a repo-local dev database instead.
+export DATABASE_URL="sqlite:///${HOME}/.devboard/data/devboard.db"
+
+cd "$SCRIPT_DIR/backend"
+
+echo "Applying database migrations..."
+make migrate
+
 # Start backend in foreground (shows console output)
 echo "Starting backend on port $BACKEND_PORT..."
-cd "$SCRIPT_DIR/backend"
 BACKEND_PORT="$BACKEND_PORT" make start
