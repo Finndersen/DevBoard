@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { Project, Task, ConfigurationDetailResponse, IntegrationTestResponse, DocumentResponse } from '../../lib/api'
+import type { Project, Task, ConfigurationDetailResponse, IntegrationTestResponse, DocumentResponse, GlobalContextResponse } from '../../lib/api'
 
 // Mock documents data for separate document API calls
 const mockDocuments: Record<number, DocumentResponse> = {
@@ -514,4 +514,24 @@ export const handlers = [
   }),
 
   // Architecture document endpoints - let tests set their own handlers
+
+  // Global Context endpoints
+  http.get('*/api/global-context', () => {
+    const response: GlobalContextResponse = {
+      content: '',
+      content_hash: 'd41d8cd98f00b204e9800998ecf8427e',
+      updated_at: '2024-01-01T00:00:00Z',
+    }
+    return HttpResponse.json(response)
+  }),
+
+  http.put('*/api/global-context', async ({ request }) => {
+    const body = await request.json() as { content: string }
+    const response: GlobalContextResponse = {
+      content: body.content,
+      content_hash: 'abc123updated',
+      updated_at: new Date().toISOString(),
+    }
+    return HttpResponse.json(response)
+  }),
 ]

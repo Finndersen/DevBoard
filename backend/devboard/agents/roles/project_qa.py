@@ -27,6 +27,7 @@ from devboard.agents.tools.task_tools import (
 )
 from devboard.db.models import Project, Task
 from devboard.db.repositories import CodebaseRepository, ConversationRepository, DocumentRepository, LogEntryRepository
+from devboard.services.global_context_service import GlobalContextService
 from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_service import TaskService
 
@@ -128,10 +129,13 @@ def build_project_qa_context(
     project: Project,
     active_tasks: list[Task],
     recent_completed_tasks: list[Task],
+    *,
+    global_context: str | None = None,
 ) -> str:
     spec_content = project.specification.content or _INITIAL_SETUP_GUIDANCE
+    global_context_section = f"# Global Context\n<document>\n{global_context}\n</document>\n" if global_context else ""
     context = f"""
-PROJECT NAME: {project.name}
+{global_context_section}PROJECT NAME: {project.name}
 
 PROJECT SPECIFICATION DOCUMENT:
 <document>
@@ -233,8 +237,9 @@ class ProjectQAAgentRole(AgentRole):
         Returns:
             Formatted context containing project details, specification, and task summaries
         """
+        gc = GlobalContextService().get().content or None
         active_tasks, recent_completed = self.task_service.get_project_task_summaries(self.project.id)
-        return build_project_qa_context(self.project, active_tasks, recent_completed)
+        return build_project_qa_context(self.project, active_tasks, recent_completed, global_context=gc)
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

@@ -29,6 +29,7 @@ from devboard.api.routers import (
     documents,
     executions,
     github,
+    global_context,
     language_models,
     log_entries,
     mcp_servers,
@@ -263,6 +264,7 @@ app.include_router(github.router, prefix="/api/github", tags=["github"])
 app.include_router(log_entries.router, prefix="/api/log-entries", tags=["log-entries"])
 app.include_router(executions.router, prefix="/api/executions", tags=["executions"])
 app.include_router(language_models.router, prefix="/api/language-models", tags=["language-models"])
+app.include_router(global_context.router, prefix="/api/global-context", tags=["global-context"])
 
 
 @app.get("/")

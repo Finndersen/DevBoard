@@ -43,6 +43,7 @@ from devboard.db.repositories.implementation_plan import TaskImplementationPlanR
 from devboard.services.codebase_investigation import CodebaseInvestigationService
 from devboard.services.config_service import ConfigService
 from devboard.services.conversation_service import ConversationService
+from devboard.services.global_context_service import GlobalContextService
 from devboard.services.integration_service import IntegrationService
 from devboard.services.language_model_service import LanguageModelService
 from devboard.services.log_entry_service import LogEntryService
@@ -55,6 +56,11 @@ from devboard.services.task_service import TaskService
 from devboard.services.template_service import TemplateService
 from devboard.services.workspace import WorkspaceService
 from devboard.services.workspace.pool_manager import WorktreePoolManager
+
+
+def get_global_context_service() -> GlobalContextService:
+    """Get GlobalContextService instance."""
+    return GlobalContextService()
 
 
 def get_config_service(

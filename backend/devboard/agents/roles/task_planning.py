@@ -17,6 +17,7 @@ from devboard.agents.tools.implementation_plan_tools import (
 from devboard.agents.tools.task_tools import create_edit_own_task_tool
 from devboard.db.models import Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository, LogEntryRepository
+from devboard.services.global_context_service import GlobalContextService
 from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
@@ -228,7 +229,10 @@ class TaskPlanningAgentRole(TaskAgentRoleBase):
             Formatted context containing task details, project spec, and task spec.
             Implementation plan is excluded (won't exist yet at planning time).
         """
-        return build_task_context(self.task, working_dir=self.working_dir, include_implementation_plan=False)
+        gc = GlobalContextService().get().content or None
+        return build_task_context(
+            self.task, working_dir=self.working_dir, global_context=gc, include_implementation_plan=False
+        )
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

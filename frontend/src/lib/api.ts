@@ -1065,6 +1065,12 @@ export interface PRDetailResponse {
   review_comment_count: number
 }
 
+export interface GlobalContextResponse {
+  content: string
+  content_hash: string
+  updated_at: string
+}
+
 export class ApiClient {
   private readonly baseURL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -1810,6 +1816,18 @@ export class ApiClient {
 
   async getBackgroundAgentRunConversation(runId: number | string): Promise<ConversationResponse> {
     return this.request<ConversationResponse>(`/api/background-agent-runs/${runId}/conversation`)
+  }
+
+  // Global Context
+  async getGlobalContext(): Promise<GlobalContextResponse> {
+    return this.request<GlobalContextResponse>('/api/global-context')
+  }
+
+  async updateGlobalContext(content: string): Promise<GlobalContextResponse> {
+    return this.request<GlobalContextResponse>('/api/global-context', {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    })
   }
 }
 

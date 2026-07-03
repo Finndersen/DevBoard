@@ -9,6 +9,7 @@ from devboard.agents.tools import create_edit_project_specification_tool
 from devboard.db.models import Task
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.db.repositories.project import ProjectRepository
+from devboard.services.global_context_service import GlobalContextService
 from devboard.services.task_service import TaskService
 
 TASK_FINALISATION_ROLE_PROMPT = """
@@ -68,7 +69,10 @@ class TaskFinalisationAgentRole(TaskAgentRoleBase):
         return tools
 
     async def get_context_content(self) -> str:
-        return build_task_context(self.task, working_dir=self.working_dir, include_step_outcomes=True)
+        gc = GlobalContextService().get().content or None
+        return build_task_context(
+            self.task, working_dir=self.working_dir, include_step_outcomes=True, global_context=gc
+        )
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

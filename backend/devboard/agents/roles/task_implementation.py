@@ -24,6 +24,7 @@ from devboard.db.models.codebase import BranchHandling
 from devboard.db.repositories import ConversationRepository, DocumentRepository, LogEntryRepository
 from devboard.integrations.codebase import CodebaseIntegration
 from devboard.integrations.github import GitHubIntegration
+from devboard.services.global_context_service import GlobalContextService
 from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
@@ -216,8 +217,13 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
             Step statuses are excluded from the plan — use get_implementation_plan_overview tool
             to check current step statuses during execution.
         """
+        gc = GlobalContextService().get().content or None
         return build_task_context(
-            self.task, working_dir=self.working_dir, include_project_specification=False, include_step_status=False
+            self.task,
+            working_dir=self.working_dir,
+            global_context=gc,
+            include_project_specification=False,
+            include_step_status=False,
         )
 
     @property

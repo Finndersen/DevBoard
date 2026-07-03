@@ -6,6 +6,7 @@ from devboard.agents.roles.base import AgentRole
 from devboard.agents.roles.context_helpers import build_task_context
 from devboard.db.models.implementation_plan import ImplementationStep, ImplementationStepType
 from devboard.db.models.task import Task
+from devboard.services.global_context_service import GlobalContextService
 
 STEP_TYPE_PREAMBLES = {
     ImplementationStepType.CODE_CHANGE: (
@@ -71,8 +72,13 @@ class StepExecutionAgentRole(AgentRole):
         return []
 
     async def get_context_content(self) -> str:
+        gc = GlobalContextService().get().content or None
         return build_task_context(
-            self.task, working_dir=self._working_dir, include_project_specification=False, include_step_outcomes=True
+            self.task,
+            working_dir=self._working_dir,
+            global_context=gc,
+            include_project_specification=False,
+            include_step_outcomes=True,
         )
 
     @property

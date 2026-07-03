@@ -13,6 +13,7 @@ from devboard.agents.tools.codebase_tools import (
 )
 from devboard.db.models import Task
 from devboard.integrations.codebase import CodebaseIntegration
+from devboard.services.global_context_service import GlobalContextService
 
 CODE_REVIEW_ROLE_PROMPT = """
 You are a senior code reviewer performing a self-review of the current task's implementation changes before finalisation.
@@ -142,4 +143,7 @@ class CodeReviewAgentRole(AgentRole):
         return False
 
     async def get_context_content(self) -> str:
-        return build_task_context(self._task, working_dir=self._working_dir, include_step_outcomes=True)
+        gc = GlobalContextService().get().content or None
+        return build_task_context(
+            self._task, working_dir=self._working_dir, include_step_outcomes=True, global_context=gc
+        )

@@ -216,6 +216,27 @@ class TestBuildProjectQAContext:
         assert "ID|Status|Title|Created" in context
         assert f"{task.id}|pr_open|Add user authentication|2026-03-10" in context
 
+    def test_global_context_prepended_when_provided(self, project_with_spec: Project):
+        """Non-empty global context appears before project name and spec."""
+        gc = "Platform: Internal developer tooling."
+        context = build_project_qa_context(project_with_spec, [], [], global_context=gc)
+
+        assert "# Global Context" in context
+        assert gc in context
+        assert context.index("# Global Context") < context.index("PROJECT NAME:")
+
+    def test_global_context_omitted_when_none(self, project_with_spec: Project):
+        """No global context section when global_context is None."""
+        context = build_project_qa_context(project_with_spec, [], [], global_context=None)
+
+        assert "# Global Context" not in context
+
+    def test_global_context_omitted_when_empty_string(self, project_with_spec: Project):
+        """No global context section when global_context is empty string."""
+        context = build_project_qa_context(project_with_spec, [], [], global_context="")
+
+        assert "# Global Context" not in context
+
 
 class TestGetProjectTaskSummaries:
     """Tests for TaskService.get_project_task_summaries."""

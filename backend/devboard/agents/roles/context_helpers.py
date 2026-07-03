@@ -164,6 +164,7 @@ def build_task_context(
     task: Task,
     *,
     working_dir: str,
+    global_context: str | None = None,
     include_project_specification: bool = True,
     include_step_outcomes: bool = False,
     include_implementation_plan: bool = True,
@@ -174,6 +175,7 @@ def build_task_context(
     Args:
         task: Task instance with eager-loaded relationships
         working_dir: Working directory path for the task's codebase
+        global_context: Optional workspace-level global context to prepend
         include_project_specification: Whether to include the full project specification document
         include_step_outcomes: Whether to include full step outcomes in the structured plan
         include_implementation_plan: Whether to include the implementation plan section
@@ -183,10 +185,17 @@ def build_task_context(
         Formatted context string with consistent structure.
         PR number and implementation plan are automatically included if present.
     """
-    sections = [
-        "You are working on a task associated with a project and a codebase repository.",
-        _format_project_metadata(task),
-    ]
+    sections = []
+
+    if global_context:
+        sections.append(f"# Global Context\n<document>\n{global_context}\n</document>")
+
+    sections.extend(
+        [
+            "You are working on a task associated with a project and a codebase repository.",
+            _format_project_metadata(task),
+        ]
+    )
 
     if task.custom_fields:
         sections.append(_format_custom_fields(task))

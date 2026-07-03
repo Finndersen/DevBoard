@@ -358,6 +358,29 @@ class TestBuildTaskContext:
 
         assert "Worktree directory: /custom/working/dir" in result
 
+    def test_global_context_prepended_when_provided(self, mock_task: MagicMock):
+        """Non-empty global context appears as first section before project metadata."""
+        gc = "Domain: SaaS platform for developers."
+        result = build_task_context(mock_task, working_dir="/tmp/worktree", global_context=gc)
+
+        assert "# Global Context" in result
+        assert "<document>" in result
+        assert gc in result
+        # Global context must appear before project metadata
+        assert result.index("# Global Context") < result.index("# Project")
+
+    def test_global_context_omitted_when_none(self, mock_task: MagicMock):
+        """No global context section when global_context is None."""
+        result = build_task_context(mock_task, working_dir="/tmp/worktree", global_context=None)
+
+        assert "# Global Context" not in result
+
+    def test_global_context_omitted_when_empty_string(self, mock_task: MagicMock):
+        """No global context section when global_context is empty string."""
+        result = build_task_context(mock_task, working_dir="/tmp/worktree", global_context="")
+
+        assert "# Global Context" not in result
+
 
 def _make_step(
     number: int, *, status: str = "pending", dependencies: list[int] | None = None, title: str = ""

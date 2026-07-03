@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { CogIcon, Cog6ToothIcon, LinkIcon, CpuChipIcon, TagIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import { CogIcon, Cog6ToothIcon, GlobeAltIcon, LinkIcon, CpuChipIcon, TagIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import ViewHeader from '../components/layout/ViewHeader'
 import { ConfigurationForm } from '../components/configuration/ConfigurationForm'
 import { ConfigurationList } from '../components/configuration/ConfigurationList'
@@ -13,6 +13,41 @@ import type { ConfigurationDetailResponse } from '../lib/api'
 import { Card } from '../components/ui'
 import { textColors, borderColors } from '../styles/designSystem'
 import { apiClient } from '../lib/api'
+import { useGlobalContext } from '../hooks/useGlobalContext'
+import { MarkdownDocumentEditor } from '../components/MarkdownDocumentEditor'
+
+type SettingsTab = 'integrations' | 'models' | 'agents' | 'custom-fields' | 'general' | 'global-context'
+const VALID_TABS: SettingsTab[] = ['integrations', 'models', 'agents', 'custom-fields', 'general', 'global-context']
+
+function GlobalContextTab() {
+  const { content, field, isLoading } = useGlobalContext()
+
+  if (isLoading) {
+    return (
+      <Card className="p-6">
+        <div className="animate-pulse space-y-3">
+          <div className="h-4 bg-gray-200 dark:bg-white/[0.06] rounded w-2/3"></div>
+          <div className="h-64 bg-gray-200 dark:bg-white/[0.06] rounded"></div>
+        </div>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="p-6 h-[600px] flex flex-col">
+      <p className={`text-sm ${textColors.secondary} mb-4 shrink-0`}>
+        Global context is shared with all agents across all projects. Keep it concise — include domain knowledge, platform conventions, and key business context.
+      </p>
+      <div className="flex-1 min-h-0">
+        <MarkdownDocumentEditor
+          content={content}
+          field={field}
+          emptyText="No global context defined. Click Edit to add domain knowledge, platform conventions, and key business context shared with all agents."
+        />
+      </div>
+    </Card>
+  )
+}
 
 export default function Settings() {
   const navigate = useNavigate()
@@ -22,11 +57,11 @@ export default function Settings() {
   // Get tab from URL query params, default to 'integrations'
   const getTabFromUrl = useCallback(() => {
     const params = new URLSearchParams(location.search)
-    const tab = params.get('tab') as 'integrations' | 'models' | 'agents' | 'custom-fields' | 'general'
-    return ['integrations', 'models', 'agents', 'custom-fields', 'general'].includes(tab) ? tab : 'integrations'
+    const tab = params.get('tab') as SettingsTab
+    return VALID_TABS.includes(tab) ? tab : 'integrations'
   }, [location.search])
 
-  const [activeTab, setActiveTab] = useState<'integrations' | 'models' | 'agents' | 'custom-fields' | 'general'>(getTabFromUrl())
+  const [activeTab, setActiveTab] = useState<SettingsTab>(getTabFromUrl())
   
   const integrationConfigs = [
     { key: 'integration.github.main', title: 'GitHub', type: 'github' },
@@ -163,7 +198,7 @@ export default function Settings() {
   }
 
   // Update URL when tab changes
-  const handleTabChange = (newTab: 'integrations' | 'models' | 'agents' | 'custom-fields' | 'general') => {
+  const handleTabChange = (newTab: SettingsTab) => {
     setActiveTab(newTab)
     const params = new URLSearchParams(location.search)
     params.set('tab', newTab)
@@ -229,6 +264,7 @@ export default function Settings() {
             { id: 'agents' as const, name: 'Agents', icon: CpuChipIcon },
             { id: 'custom-fields' as const, name: 'Task Custom Fields', icon: TagIcon },
             { id: 'general' as const, name: 'General', icon: CogIcon },
+            { id: 'global-context' as const, name: 'Global Context', icon: GlobeAltIcon },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -440,6 +476,10 @@ export default function Settings() {
 
       {activeTab === 'custom-fields' && (
         <CustomFieldSettings />
+      )}
+
+      {activeTab === 'global-context' && (
+        <GlobalContextTab />
       )}
 
       {activeTab === 'general' && (

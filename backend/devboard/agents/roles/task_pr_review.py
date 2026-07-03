@@ -16,6 +16,7 @@ from devboard.db.models import Task
 from devboard.db.repositories.conversation import ConversationRepository
 from devboard.integrations.codebase import CodebaseIntegration
 from devboard.integrations.github import GitHubIntegration
+from devboard.services.global_context_service import GlobalContextService
 from devboard.services.task_service import TaskService
 
 PR_REVIEW_ROLE_PROMPT = """
@@ -44,9 +45,9 @@ IMPORTANT:
 """
 
 
-def build_task_pr_review_context(task: Task, *, working_dir: str) -> str:
+def build_task_pr_review_context(task: Task, *, working_dir: str, global_context: str | None = None) -> str:
     """Build context for PR review agent."""
-    return build_task_context(task, working_dir=working_dir, include_step_outcomes=True)
+    return build_task_context(task, working_dir=working_dir, global_context=global_context, include_step_outcomes=True)
 
 
 class TaskPRReviewAgentRole(TaskAgentRoleBase):
@@ -104,7 +105,8 @@ class TaskPRReviewAgentRole(TaskAgentRoleBase):
         return tools
 
     async def get_context_content(self) -> str:
-        return build_task_pr_review_context(self.task, working_dir=self.working_dir)
+        gc = GlobalContextService().get().content or None
+        return build_task_pr_review_context(self.task, working_dir=self.working_dir, global_context=gc)
 
     @property
     def allowed_builtin_tools(self) -> list[str]:
