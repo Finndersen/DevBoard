@@ -178,6 +178,10 @@ class TaskPlanningAgentRole(TaskAgentRoleBase):
         self.document_repository = document_repository
         self.plan_service = plan_service
 
+    @property
+    def event_context_types(self) -> list[str]:
+        return ["task.merged", "document.updated", "project.updated"]
+
     def get_system_prompt(self) -> str:
         """Get the system prompt for task planning role."""
         return PLANNING_ROLE_PROMPT.format(task_title=self.task.title)

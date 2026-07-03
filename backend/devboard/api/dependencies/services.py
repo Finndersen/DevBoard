@@ -234,6 +234,7 @@ class ExecutionServices:
     task_service: TaskService
     workspace_service: WorkspaceService
     integration_service: IntegrationService
+    log_entry_repo: LogEntryRepository
 
 
 def get_execution_services(
@@ -244,6 +245,7 @@ def get_execution_services(
     task_service: TaskService = Depends(get_task_service),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
     integration_service: IntegrationService = Depends(get_integration_service),
+    log_entry_repo: LogEntryRepository = Depends(get_log_entry_repository),
 ) -> ExecutionServices:
     """Get all services needed for background agent execution.
 
@@ -258,4 +260,5 @@ def get_execution_services(
         task_service=task_service,
         workspace_service=workspace_service,
         integration_service=integration_service,
+        log_entry_repo=log_entry_repo,
     )

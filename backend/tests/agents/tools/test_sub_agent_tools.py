@@ -722,7 +722,9 @@ class TestRunSubAgentExecution:
 
     @pytest.fixture
     def mock_conv_repo(self):
-        return Mock(spec=ConversationRepository)
+        repo = Mock(spec=ConversationRepository)
+        repo.db = Mock()
+        return repo
 
     @pytest.fixture
     def mock_agent_config_service(self):

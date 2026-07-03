@@ -55,8 +55,10 @@ class CodexAgentExecutionService(AgentExecutionService):
         message_or_approvals: str | ToolApprovals,
         extra_tools: list[Tool],
     ) -> AsyncIterator[ConversationEvent | ContextUsage]:
-        if isinstance(message_or_approvals, str) and self.thread_id is None:
-            message_or_approvals = await self._build_context_message(message_or_approvals)
+        if isinstance(message_or_approvals, str):
+            message_or_approvals = await self._enrich_message(
+                message_or_approvals, is_first_message=self.thread_id is None
+            )
 
         mcp_host, config_overrides = await self._setup_mcp_host(extra_tools)
 
@@ -99,8 +101,7 @@ class CodexAgentExecutionService(AgentExecutionService):
         message: str,
         extra_tools: list[Tool],
     ) -> TextMessage:
-        if self.thread_id is None:
-            message = await self._build_context_message(message)
+        message = await self._enrich_message(message, is_first_message=self.thread_id is None)
 
         mcp_host, config_overrides = await self._setup_mcp_host(extra_tools)
 

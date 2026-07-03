@@ -206,6 +206,10 @@ function MetaMessageDisplay({ message, highlightRing }: { message: MetaMessage; 
     compact_summary: 'Conversation compacted',
     skill_content: 'Skill activated',
     initial_context: 'Initial context',
+    event_context: 'Recent events',
+    git_status: 'Git status',
+    execution_context: 'Execution context',
+    rebase_result: 'Rebase result',
   }
   const label = metaLabels[message.meta_type]
   const [isModalOpen, setIsModalOpen] = useState(false)

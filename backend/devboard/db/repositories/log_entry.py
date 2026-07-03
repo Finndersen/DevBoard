@@ -81,6 +81,7 @@ class LogEntryRepository(BaseRepository[LogEntry]):
         project_id: int | None = None,
         task_id: int | None = None,
         type_pattern: str | None = None,
+        types: list[str] | None = None,
         since: datetime | None = None,
         until: datetime | None = None,
         status: LogEntryStatus | None = None,
@@ -96,6 +97,7 @@ class LogEntryRepository(BaseRepository[LogEntry]):
             task_id: Filter by task scope
             type_pattern: Filter by log entry type; supports '*' as a wildcard
                           (e.g. "task.*" matches "task.created", "task.completed")
+            types: Filter by exact list of log entry types (IN filter)
             since: Include only log entries at or after this datetime
             until: Include only log entries at or before this datetime
             status: Filter by log entry status
@@ -119,6 +121,8 @@ class LogEntryRepository(BaseRepository[LogEntry]):
                 stmt = stmt.where(LogEntry.type.like(sql_pattern))
             else:
                 stmt = stmt.where(LogEntry.type == type_pattern)
+        if types is not None:
+            stmt = stmt.where(LogEntry.type.in_(types))
         if since is not None:
             stmt = stmt.where(LogEntry.timestamp >= since)
         if until is not None:

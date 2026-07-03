@@ -1,4 +1,5 @@
 from devboard.agents.roles.context_helpers import build_execution_graph_context
+from devboard.agents.system_message_tags import wrap_system_message
 from devboard.agents.tools.rebase_tools import execute_rebase_with_result
 from devboard.db.models import ParentEntityType, Task
 from devboard.db.models.codebase import BranchHandling, MergeMethod
@@ -86,7 +87,7 @@ class BeginImplementationAction(TaskWorkflowAction):
 
     KEY = "task.begin_implementation"
 
-    PROMPT_TEMPLATE = "The implementation plan has been approved. Review the plan and begin execution — use `execute_implementation_step` to run each step, consulting the execution graph below to identify steps that can run in parallel."
+    PROMPT_TEMPLATE = "The implementation plan has been approved. Review the plan and begin execution — use `execute_implementation_step` to run each step, consulting the execution graph above to identify steps that can run in parallel."
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
@@ -105,7 +106,8 @@ class BeginImplementationAction(TaskWorkflowAction):
         )
         self.conversation_repo.commit()
         execution_graph = build_execution_graph_context(self.task, include_step_status=False)
-        return self.PROMPT_TEMPLATE + "\n\n" + execution_graph
+        execution_context = wrap_system_message(execution_graph, "execution_context")
+        return execution_context + "\n\n" + self.PROMPT_TEMPLATE
 
 
 class RebaseTaskBranchAction(TaskWorkflowAction):
@@ -129,19 +131,19 @@ class RebaseTaskBranchAction(TaskWorkflowAction):
 
         if not result.success:
             # Return conflict prompt for agent to resolve and continue
-            return result.message
+            return wrap_system_message(result.message, "rebase_result")
 
         # Success: only prompt agent if there were base branch changes to review
-        return result.message if result.has_base_changes else None
+        return wrap_system_message(result.message, "rebase_result") if result.has_base_changes else None
 
 
-_FINALISATION_PREAMBLE = """## Git Status
-{changes_context}
-
-## Instructions
-IMPORTANT: The git status above already contains the current branch state including commits and uncommitted changes. Do NOT run git status, git log, or git diff commands to inspect the branch — use the information provided above.
-
-If there are uncommitted changes, create appropriate commit(s) using `git add -A && git commit -m "..."` with clear commit messages first."""
+_FINALISATION_INSTRUCTIONS = (
+    "## Instructions\n"
+    "IMPORTANT: The git status above already contains the current branch state including commits and uncommitted changes. "
+    "Do NOT run git status, git log, or git diff commands to inspect the branch — use the information provided above.\n\n"
+    'If there are uncommitted changes, create appropriate commit(s) using `git add -A && git commit -m "..."` '
+    "with clear commit messages first."
+)
 
 
 class ApproveAndMergeAction(TaskWorkflowAction):
@@ -161,18 +163,14 @@ class ApproveAndMergeAction(TaskWorkflowAction):
             merge_method,
             "If there are uncommitted changes, create appropriate commit(s) with clear commit messages first.",
         )
-        return (
-            f"""## Git Status
-{changes_context}
-
-## Instructions
-IMPORTANT: The git status above already contains the current branch state including commits and uncommitted changes. Do NOT run git status, git log, or git diff commands to inspect the branch — use the information provided above.
-
-{commit_instruction}
-
-Once all changes are committed, use the `merge_branch_and_finalise` tool to merge the feature branch and transition to finalisation. """
+        git_status = wrap_system_message(f"## Git Status\n{changes_context}", "git_status")
+        instructions = (
+            _FINALISATION_INSTRUCTIONS
+            + f"\n\n{commit_instruction}"
+            + "\n\nOnce all changes are committed, use the `merge_branch_and_finalise` tool to merge the feature branch and transition to finalisation. "
             + _CHANGE_SUMMARY_PROMPT_GUIDANCE
         )
+        return git_status + "\n\n" + instructions
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
@@ -206,13 +204,21 @@ Once all changes are committed, use the `merge_branch_and_finalise` tool to merg
                         self.task.codebase.merge_method,
                         "(git status available once stash conflicts are resolved)",
                     )
-                    return rebase_result.message + "\n\nOnce stash conflicts are resolved:\n\n" + merge_instructions
+                    return (
+                        wrap_system_message(rebase_result.message, "rebase_result")
+                        + "\n\nOnce stash conflicts are resolved:\n\n"
+                        + merge_instructions
+                    )
                 else:
                     # CONFLICT: rebase still in progress
                     merge_instructions = self._build_prompt(
                         self.task.codebase.merge_method, "(git status will be available once rebase is complete)"
                     )
-                    return rebase_result.message + "\n\nOnce the rebase is complete:\n\n" + merge_instructions
+                    return (
+                        wrap_system_message(rebase_result.message, "rebase_result")
+                        + "\n\nOnce the rebase is complete:\n\n"
+                        + merge_instructions
+                    )
 
             rebase_note = f"The task branch was rebased onto `{self.task.base_branch}` before merging.\n\n"
 
@@ -255,16 +261,11 @@ The PR will be created against the base branch and the task will transition to P
             merge_method,
             'If there are uncommitted changes, create appropriate commit(s) using `git add -A && git commit -m "..."` with clear commit messages first.',
         )
-        return (
-            f"""## Git Status
-{changes_context}
-
-## Instructions
-IMPORTANT: The git status above already contains the current branch state including commits and uncommitted changes. Do NOT run git status, git log, or git diff commands to inspect the branch — use the information provided above.
-
-{commit_instruction}"""
-            + ApproveAndCreatePRAction._PR_INSTRUCTIONS
+        git_status = wrap_system_message(f"## Git Status\n{changes_context}", "git_status")
+        instructions = (
+            _FINALISATION_INSTRUCTIONS + f"\n\n{commit_instruction}" + ApproveAndCreatePRAction._PR_INSTRUCTIONS
         )
+        return git_status + "\n\n" + instructions
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
@@ -296,13 +297,21 @@ IMPORTANT: The git status above already contains the current branch state includ
                         self.task.codebase.merge_method,
                         "(git status available once stash conflicts are resolved)",
                     )
-                    return rebase_result.message + "\n\nOnce stash conflicts are resolved:\n\n" + pr_instructions
+                    return (
+                        wrap_system_message(rebase_result.message, "rebase_result")
+                        + "\n\nOnce stash conflicts are resolved:\n\n"
+                        + pr_instructions
+                    )
                 else:
                     # CONFLICT: rebase still in progress
                     pr_instructions = self._build_prompt(
                         self.task.codebase.merge_method, "(git status will be available once rebase is complete)"
                     )
-                    return rebase_result.message + "\n\nOnce the rebase is complete:\n\n" + pr_instructions
+                    return (
+                        wrap_system_message(rebase_result.message, "rebase_result")
+                        + "\n\nOnce the rebase is complete:\n\n"
+                        + pr_instructions
+                    )
 
             rebase_note = f"The task branch was rebased onto `{self.task.base_branch}` before creating the PR.\n\n"
 
@@ -317,16 +326,6 @@ class MergeAndFinaliseAction(TaskWorkflowAction):
     """Merge an open PR via GitHub and complete the task."""
 
     KEY = "task.merge_and_finalise"
-    PROMPT_TEMPLATE = (
-        _FINALISATION_PREAMBLE.replace(
-            "commit messages first.",
-            "commit messages and push them first.",
-        )
-        + """
-
-Once all changes are committed and pushed, use the `merge_pr_and_finalise` tool to merge the PR and complete the task. """
-        + _CHANGE_SUMMARY_PROMPT_GUIDANCE
-    )
 
     @classmethod
     def is_available(cls, task: Task) -> bool:
@@ -339,7 +338,13 @@ Once all changes are committed and pushed, use the `merge_pr_and_finalise` tool 
             raise GitHubConnectionError(f"GitHub connection failed: {connection_result.message}")
 
         changes_context = await _get_task_changes_prompt_context(self.task)
-        return self.PROMPT_TEMPLATE.format(changes_context=changes_context)
+        git_status = wrap_system_message(f"## Git Status\n{changes_context}", "git_status")
+        instructions = (
+            _FINALISATION_INSTRUCTIONS.replace("commit messages first.", "commit messages and push them first.")
+            + "\n\nOnce all changes are committed and pushed, use the `merge_pr_and_finalise` tool to merge the PR and complete the task. "
+            + _CHANGE_SUMMARY_PROMPT_GUIDANCE
+        )
+        return git_status + "\n\n" + instructions
 
 
 class FinaliseAction(TaskWorkflowAction):

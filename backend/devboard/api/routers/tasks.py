@@ -393,11 +393,11 @@ async def execute_workflow_action(
 
     cid = conversation.id
     try:
-        get_execution_manager().start_agent_execution(cid, prompt)
+        get_execution_manager().start_agent_execution(cid, prompt, emit_user_event=True)
     except ConversationBusyError as err:
         raise HTTPException(status_code=409, detail="An execution is already active for this conversation") from err
 
-    return {"conversation_id": cid, "prompt": prompt}
+    return {"conversation_id": cid}
 
 
 # Git endpoints

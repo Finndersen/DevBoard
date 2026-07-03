@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Literal
 
 import logfire
 from pydantic_ai import Tool
+from sqlalchemy.orm import object_session
 
 from devboard.agents.conversation_history import ConversationHistoryService
 from devboard.agents.events import (
@@ -24,7 +25,9 @@ from devboard.agents.roles.base import AgentRole
 from devboard.agents.system_message_tags import wrap_system_message
 from devboard.api.schemas.agent_conversation import ToolApprovals
 from devboard.db.models import Conversation
+from devboard.db.models.enums import EntityType
 from devboard.db.repositories import ConversationRepository
+from devboard.db.repositories.log_entry import LogEntryRepository
 from devboard.mcp.mcp_tool_factory import MCPToolFactory
 from devboard.services.oauth_service import OAuthService
 
@@ -57,23 +60,8 @@ class AgentExecutionService(ABC):
         interrupt_event: asyncio.Event | None = None,
         additional_write_dirs: list[str] | None = None,
         effort: Literal["low", "medium", "high"] | None = None,
+        log_entry_repo: LogEntryRepository | None = None,
     ):
-        """Initialize the agent execution service.
-
-        Args:
-            conversation: The conversation instance to manage
-            role: The Role defining agent behavior
-            conversation_repository: Repository for conversation operations
-            history_service: Service for retrieving conversation history
-            agent_config_service: Service for loading agent configuration
-            working_dir: Working directory for agent execution
-            additional_tools: Optional list of additional tools to provide to the agent,
-                beyond those defined by the role. Used for workflow-action-specific tools.
-            oauth_service: Optional OAuthService for OAuth-authenticated MCP servers.
-            interrupt_event: Optional asyncio.Event that signals graceful interrupt when set.
-            additional_write_dirs: Optional list of additional directories to grant write access via Edit tool rules.
-            effort: Optional effort level for Claude Code engine ("low", "medium", "high")
-        """
         self.conversation = conversation
         self.role = role
         self.conversation_repo = conversation_repository
@@ -85,25 +73,100 @@ class AgentExecutionService(ABC):
         self._interrupt_event = interrupt_event
         self.additional_write_dirs = additional_write_dirs
         self._effort = effort
+        self._log_entry_repo = log_entry_repo
 
-    async def _build_context_message(self, user_message: str) -> str:
-        """Wrap context snapshot into the user message for the first run.
+    async def _enrich_message(self, user_message: str, is_first_message: bool) -> str:
+        """Enrich a user message with system context blocks.
 
-        Context is injected here (not in the system prompt) to enable Claude API prompt caching.
-        System prompts must remain static for caching to work; context is delivered as a
-        one-time user message on the first run and persisted in conversation history thereafter.
-
-        Callers are responsible for only calling this on the first run.
+        Prepends an initial_context block on the first message (enabling Claude API prompt
+        caching by keeping the system prompt static), and an event_context block on every
+        message when the role has configured event types to watch.
 
         Args:
             user_message: The raw user message string
+            is_first_message: Whether this is the first message in the conversation
 
         Returns:
-            The augmented message string with context prepended
+            The enriched message with any system context blocks prepended
         """
-        context_content = await self.role.get_context_content()
-        wrapped = wrap_system_message(context_content, "initial_context")
-        return f"{wrapped}\n\n{user_message}"
+        parts: list[str] = []
+
+        if is_first_message:
+            context_content = await self.role.get_context_content()
+            parts.append(wrap_system_message(context_content, "initial_context"))
+
+        if self.role.event_context_types and self._log_entry_repo is not None:
+            event_context = self._build_event_context()
+            if event_context:
+                parts.append(wrap_system_message(event_context, "event_context"))
+
+        parts.append(user_message)
+        return "\n\n".join(parts)
+
+    def _build_event_context(self) -> str | None:
+        """Query relevant log entries and format them as an event context string.
+
+        Returns None if there are no relevant events to inject.
+        """
+        from devboard.db.models.background_agent import BackgroundAgent
+        from devboard.db.models.task import Task
+
+        assert self._log_entry_repo is not None
+
+        conversation = self.conversation
+        entity_type = conversation.parent_entity_type
+
+        if entity_type == EntityType.TASK:
+            session = object_session(conversation)
+            assert session is not None, "Conversation must be attached to a session"
+            task = session.get(Task, conversation.parent_entity_id)
+            if task is None:
+                return None
+            project_id = task.project_id
+        elif entity_type == EntityType.PROJECT:
+            project_id = conversation.parent_entity_id
+        elif entity_type == EntityType.BACKGROUND_AGENT:
+            session = object_session(conversation)
+            assert session is not None, "Conversation must be attached to a session"
+            agent = session.get(BackgroundAgent, conversation.parent_entity_id)
+            if agent is None or agent.project_id is None:
+                return None
+            project_id = agent.project_id
+        else:
+            return None
+
+        since = conversation.last_activity_at or conversation.created_at
+
+        entries = self._log_entry_repo.query(
+            project_id=project_id,
+            types=self.role.event_context_types,
+            since=since,
+        )
+
+        # Exclude events generated by this conversation itself
+        entries = [
+            e for e in entries if not (e.entry_metadata and e.entry_metadata.get("conversation_id") == conversation.id)
+        ]
+
+        if not entries:
+            return None
+
+        lines = ["The following system events occurred since your last interaction and may or may not be relevant"]
+        for entry in reversed(entries):  # reverse to chronological order (repo returns desc)
+            timestamp_str = entry.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")
+            line = f"- [{timestamp_str}] {entry.content}"
+            if (
+                entry.type == "task.merged"
+                and entity_type == EntityType.TASK
+                and entry.task_id != conversation.parent_entity_id
+            ):
+                line += (
+                    "\n  Note: Another task's changes have been merged to the base branch. "
+                    "Consider rebasing the current task branch to incorporate these changes if they may be relevant."
+                )
+            lines.append(line)
+
+        return "\n".join(lines)
 
     def get_custom_instructions(self) -> str | None:
         """Get custom instructions for this agent role from config service."""

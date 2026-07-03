@@ -230,6 +230,10 @@ class ProjectQAAgentRole(AgentRole):
         self.conversation_repo = conversation_repo
         self.conversation_id = conversation_id
 
+    @property
+    def event_context_types(self) -> list[str]:
+        return ["task.created", "task.merged", "task.deleted", "document.updated", "project.updated"]
+
     def get_system_prompt(self) -> str:
         """Get the system prompt for project Q&A role."""
         if self.project.parent:

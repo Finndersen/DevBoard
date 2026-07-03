@@ -639,7 +639,10 @@ class TestWorkflowActions:
         assert response.status_code == 200
         data = response.json()
         assert "conversation_id" in data
+        assert "prompt" not in data
         mock_manager.start_agent_execution.assert_called_once()
+        _, kwargs = mock_manager.start_agent_execution.call_args
+        assert kwargs.get("emit_user_event") is True
 
     def test_workflow_action_returns_completed_when_no_prompt(
         self, client_with_mock_workflow_deps, test_task_for_workflow, db_session

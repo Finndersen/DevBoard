@@ -213,7 +213,7 @@ export type MessageRole = 'user' | 'agent'
 
 export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system' | 'meta_message' | 'local_command' | 'thinking' | 'agent_run_started' | 'agent_run_completed'
 
-export type MetaMessageType = 'compact_summary' | 'skill_content' | 'initial_context'
+export type MetaMessageType = 'compact_summary' | 'skill_content' | 'initial_context' | 'event_context' | 'git_status' | 'execution_context' | 'rebase_result'
 
 export interface MetaMessage {
   event_type: 'meta_message'
@@ -1312,8 +1312,8 @@ export class ApiClient {
   async executeWorkflowAction(
     taskId: number | string,
     request: PromptActionRequest,
-  ): Promise<{ conversation_id?: number; status?: string; prompt?: string }> {
-    return this.request<{ conversation_id?: number; status?: string; prompt?: string }>(
+  ): Promise<{ conversation_id?: number; status?: string }> {
+    return this.request<{ conversation_id?: number; status?: string }>(
       `/api/tasks/${taskId}/workflow-action`,
       {
         method: 'POST',

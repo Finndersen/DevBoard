@@ -149,6 +149,41 @@ class TestLogEntryRepository:
         contents = {r.content for r in results}
         assert contents == {"c1", "c2"}
 
+    # ---- query — types (IN filter) ----
+
+    def test_query_by_types_returns_matching(self, repo: LogEntryRepository, db_session: Session):
+        """query with types filter returns only entries with matching types."""
+        repo.create(source=LogEntrySource.SYSTEM, type="task.created", content="created")
+        repo.create(source=LogEntrySource.SYSTEM, type="task.merged", content="merged")
+        repo.create(source=LogEntrySource.SYSTEM, type="task.completed", content="completed")
+        repo.create(source=LogEntrySource.SYSTEM, type="document.updated", content="doc updated")
+        db_session.flush()
+
+        results = repo.query(types=["task.created", "task.merged"])
+        contents = {r.content for r in results}
+        assert contents == {"created", "merged"}
+
+    def test_query_by_types_empty_list_returns_nothing(self, repo: LogEntryRepository, db_session: Session):
+        """query with an empty types list returns no results."""
+        repo.create(source=LogEntrySource.SYSTEM, type="task.created", content="created")
+        db_session.flush()
+
+        results = repo.query(types=[])
+        assert results == []
+
+    def test_query_by_types_combined_with_project_id(
+        self, repo: LogEntryRepository, project: Project, project2: Project, db_session: Session
+    ):
+        """types filter can be combined with project_id scoping."""
+        repo.create(source=LogEntrySource.SYSTEM, type="task.merged", content="p1 merged", project_id=project.id)
+        repo.create(source=LogEntrySource.SYSTEM, type="task.created", content="p1 created", project_id=project.id)
+        repo.create(source=LogEntrySource.SYSTEM, type="task.merged", content="p2 merged", project_id=project2.id)
+        db_session.flush()
+
+        results = repo.query(project_id=project.id, types=["task.merged"])
+        assert len(results) == 1
+        assert results[0].content == "p1 merged"
+
     # ---- query — date range ----
 
     def test_query_by_since(self, repo: LogEntryRepository, db_session: Session):

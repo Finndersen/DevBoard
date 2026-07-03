@@ -29,6 +29,10 @@ class MetaMessageType(StrEnum):
     COMPACT_SUMMARY = "compact_summary"
     SKILL_CONTENT = "skill_content"
     INITIAL_CONTEXT = "initial_context"
+    EVENT_CONTEXT = "event_context"
+    GIT_STATUS = "git_status"
+    EXECUTION_CONTEXT = "execution_context"
+    REBASE_RESULT = "rebase_result"
 
 
 class LocalCommandType(StrEnum):

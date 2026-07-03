@@ -82,6 +82,10 @@ class BackgroundAgentRole(AgentRole):
         self.background_agent_repo = background_agent_repo
         self.agent_run_repo = agent_run_repo
 
+    @property
+    def event_context_types(self) -> list[str]:
+        return ["task.created", "task.merged", "document.updated", "project.updated"]
+
     def get_system_prompt(self) -> str:
         return self.system_prompt
 

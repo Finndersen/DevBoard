@@ -78,6 +78,10 @@ class TaskPRReviewAgentRole(TaskAgentRoleBase):
         )
         self.github_integration = github_integration
 
+    @property
+    def event_context_types(self) -> list[str]:
+        return ["task.merged"]
+
     def get_system_prompt(self) -> str:
         """Get the system prompt for PR review role."""
         return PR_REVIEW_ROLE_PROMPT

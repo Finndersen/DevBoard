@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from devboard.agents.system_message_tags import extract_system_messages
 from devboard.agents.tools.rebase_tools import RebaseActionResult
 from devboard.db.models.codebase import MergeMethod
 from devboard.db.models.implementation_plan import ImplementationPlan, ImplementationStep, ImplementationStepType
@@ -154,6 +155,16 @@ class TestApproveAndMergePrompt:
         assert "appropriate commit(s)" in prompt
         assert "clear commit messages" in prompt
         assert "merge_branch_and_finalise" in prompt
+
+    def test_git_status_wrapped_in_system_message(self):
+        prompt = ApproveAndMergeAction._build_prompt(MergeMethod.SQUASH, self.CHANGES_CONTEXT)
+
+        blocks, remaining = extract_system_messages(prompt)
+        assert len(blocks) == 1
+        assert blocks[0].message_type == "git_status"
+        assert self.CHANGES_CONTEXT in blocks[0].content
+        assert "merge_branch_and_finalise" in remaining
+        assert "## Instructions" in remaining
 
 
 def _make_action(action_class, task, **kwargs):
@@ -433,18 +444,32 @@ class TestBeginImplementationActionRun:
 
     @pytest.mark.asyncio
     async def test_returns_prompt_with_execution_graph(self, mock_task_with_plan):
-        """run() returns a prompt that includes the execution graph appended below."""
+        """run() returns a prompt with execution graph in a system_message block before instructions."""
         action = _make_begin_implementation_action(mock_task_with_plan)
 
         result = await action.run()
 
         assert result is not None
-        assert "execution graph below" in result
+        assert "execution graph above" in result
         assert "EXECUTION GRAPH:" in result
         assert "Layer 1" in result
         assert "Layer 2" in result
         assert "Set up database schema" in result
         assert "Implement API endpoints" in result
+
+    @pytest.mark.asyncio
+    async def test_execution_graph_wrapped_in_system_message(self, mock_task_with_plan):
+        """Execution graph is wrapped in <system_message type="execution_context">."""
+        action = _make_begin_implementation_action(mock_task_with_plan)
+
+        result = await action.run()
+
+        assert result is not None
+        blocks, remaining = extract_system_messages(result)
+        assert len(blocks) == 1
+        assert blocks[0].message_type == "execution_context"
+        assert "EXECUTION GRAPH:" in blocks[0].content
+        assert "execute_implementation_step" in remaining
 
     @pytest.mark.asyncio
     async def test_returns_base_prompt_without_graph_when_no_plan(self):
@@ -537,7 +562,7 @@ class TestRebaseTaskBranchAction:
     @pytest.mark.parametrize("status", [TaskStatus.PLANNING, TaskStatus.IMPLEMENTING])
     @pytest.mark.asyncio
     async def test_returns_conflict_prompt_on_conflict(self, mock_task, mock_workspace_service, status):
-        """Conflict result returns the conflict message as the agent prompt (not raises)."""
+        """Conflict result returns the conflict message wrapped in a rebase_result system_message."""
         mock_task.status = status
         action = self._make_action(mock_task, mock_workspace_service)
 
@@ -549,11 +574,16 @@ class TestRebaseTaskBranchAction:
         ):
             result = await action.run()
 
-        assert result == "Conflicts in src/api.py and src/models.py"
+        assert result is not None
+        blocks, remaining = extract_system_messages(result)
+        assert len(blocks) == 1
+        assert blocks[0].message_type == "rebase_result"
+        assert "Conflicts in src/api.py and src/models.py" in blocks[0].content
+        assert remaining == ""
 
     @pytest.mark.asyncio
     async def test_returns_base_changes_prompt_on_success_with_changes(self, mock_task, mock_workspace_service):
-        """Success with base branch changes returns the review prompt."""
+        """Success with base branch changes returns the message wrapped in a rebase_result system_message."""
         action = self._make_action(mock_task, mock_workspace_service)
 
         rebase_result = RebaseActionResult(
@@ -566,7 +596,12 @@ class TestRebaseTaskBranchAction:
         ):
             result = await action.run()
 
-        assert result == rebase_result.message
+        assert result is not None
+        blocks, remaining = extract_system_messages(result)
+        assert len(blocks) == 1
+        assert blocks[0].message_type == "rebase_result"
+        assert "Rebase done." in blocks[0].content
+        assert "3 commits changed 5 files" in blocks[0].content
 
     @pytest.mark.asyncio
     async def test_returns_none_on_success_without_base_changes(self, mock_task, mock_workspace_service):
@@ -735,6 +770,62 @@ class TestApproveAndCreatePRActionRun:
         assert "stash" in result.lower()
         assert "create_pull_request" in result
         assert "rebase is complete" not in result  # must not say rebase is still in progress
+
+
+class TestApproveAndCreatePRPromptStructure:
+    CHANGES_CONTEXT = "```\nCommits on task branch (1):\n  - abc1234: Add feature\n\nNo uncommitted changes.\n```"
+
+    def test_git_status_wrapped_in_system_message(self):
+        prompt = ApproveAndCreatePRAction._build_prompt(MergeMethod.SQUASH, self.CHANGES_CONTEXT)
+
+        blocks, remaining = extract_system_messages(prompt)
+        assert len(blocks) == 1
+        assert blocks[0].message_type == "git_status"
+        assert self.CHANGES_CONTEXT in blocks[0].content
+        assert "create_pull_request" in remaining
+
+
+class TestApproveAndMergeConflictPromptStructure:
+    @pytest.mark.asyncio
+    async def test_conflict_path_wraps_rebase_result(self, mock_workspace_service_for_merge):
+        """When rebase has conflicts, the rebase message is wrapped in rebase_result system_message."""
+        task = Mock()
+        task.id = 1
+        task.branch_name = "feature/test"
+        task.base_branch = "main"
+        task.codebase.merge_method = MergeMethod.SQUASH
+        task.codebase.local_path = "/repo"
+        task.last_used_worktree_slot = None
+
+        action = _make_approve_and_merge_action(task, workspace_service=mock_workspace_service_for_merge)
+
+        with (
+            patch(
+                "devboard.workflow_actions.task_workflows.TaskGitService.get_base_conflicting_uncommitted_files",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "devboard.workflow_actions.task_workflows.GitRepoIntegration.get_branch_comparison",
+                new_callable=AsyncMock,
+                return_value=_CONFLICTS_COMPARISON,
+            ),
+            patch(
+                "devboard.workflow_actions.task_workflows.execute_rebase_with_result",
+                new_callable=AsyncMock,
+                return_value=RebaseActionResult(
+                    success=False, message="Conflicts detected in src/api.py", rebase_complete=False
+                ),
+            ),
+        ):
+            result = await action.run()
+
+        assert result is not None
+        blocks, remaining = extract_system_messages(result)
+        assert len(blocks) == 1
+        assert blocks[0].message_type == "rebase_result"
+        assert "Conflicts detected in src/api.py" in blocks[0].content
+        assert "merge_branch_and_finalise" in remaining
 
 
 class TestArchiveTaskAction:

@@ -56,6 +56,14 @@ class AgentRole(ABC):
         pass
 
     @property
+    def event_context_types(self) -> list[str]:
+        """Event types to auto-inject as context on each user message.
+
+        Returns an empty list by default; roles override to opt in to event injection.
+        """
+        return []
+
+    @property
     def allowed_builtin_tools(self) -> list[str]:
         """List of allowed engine internal tools for this role.
         TODO: Maybe have a "write_allowed" flag or something instead of specifying tool names here"""

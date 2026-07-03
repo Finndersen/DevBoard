@@ -15,6 +15,7 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.events import (
     AgentRunCompletedEvent,
     ConversationEvent,
+    MessageRole,
     SystemEvent,
     SystemEventType,
     TextMessage,
@@ -119,6 +120,7 @@ class ConversationExecutionManager:
         self,
         conversation_id: int,
         message_or_approvals: str | ToolApprovals,
+        emit_user_event: bool = False,
     ) -> ConversationExecution:
         """Start a background agent execution for a conversation.
 
@@ -136,6 +138,7 @@ class ConversationExecutionManager:
             interrupt_event,
             conversation_id=conversation_id,
             message_or_approvals=message_or_approvals,
+            emit_user_event=emit_user_event,
         )
         task = asyncio.create_task(self._run_wrapper(conversation_id, coro))
 
@@ -204,6 +207,7 @@ class ConversationExecutionManager:
                         working_dir=working_dir,
                         interrupt_event=interrupt_event,
                         effort=effort,
+                        log_entry_repo=LogEntryRepository(conversation_repo.db),
                     )
                     last_text_message: TextMessage | None = None
                     async for event in execution_service.stream_events_for_message_or_approval(prompt):
@@ -332,6 +336,7 @@ async def _create_agent_stream(
         working_dir=working_dir,
         interrupt_event=interrupt_event,
         additional_write_dirs=additional_write_dirs,
+        log_entry_repo=services.log_entry_repo,
     )
     return exec_service.stream_events_for_message_or_approval(message_or_approvals)
 
@@ -485,6 +490,7 @@ async def _run_agent_for_conversation(
     *,
     conversation_id: int,
     message_or_approvals: str | ToolApprovals,
+    emit_user_event: bool = False,
 ) -> None:
     """Run agent execution for a conversation and push events to the broadcast queue.
 
@@ -511,6 +517,18 @@ async def _run_agent_for_conversation(
         # AgentRunStartedEvent (the first event from the stream) reaches the frontend.
         services.conversation_repo.update_last_activity(conversation)
         await asyncio.to_thread(commit_with_lock, db)
+
+        if emit_user_event and isinstance(message_or_approvals, str):
+            await broadcast_queue.put(
+                (
+                    conversation_id,
+                    TextMessage(
+                        role=MessageRole.USER,
+                        text_content=message_or_approvals,
+                        timestamp=datetime.datetime.now(datetime.UTC),
+                    ),
+                )
+            )
 
         # ── Agent execution ─────────────────────────────────────────────────
         try:

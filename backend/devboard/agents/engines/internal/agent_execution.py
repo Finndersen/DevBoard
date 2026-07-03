@@ -48,8 +48,7 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
             existing_messages = existing_messages[:-delete_count]
             logfire.warning(f"Deleted {delete_count} messages due to missing tool approvals")
 
-        if not existing_messages:
-            message = await self._build_context_message(message)
+        message = await self._enrich_message(message, is_first_message=not existing_messages)
         message_history = convert_messages_to_pydantic(existing_messages)
         agent = self._get_agent(conversation_history=message_history, extra_tools=extra_tools)
         result = await agent.run(message)
@@ -72,11 +71,13 @@ class PydanticAIAgentExecutionService(AgentExecutionService):
         """
         existing_messages = self._get_message_history()
 
-        # Inject context on first run: string messages only, not ToolApprovals.
+        # Enrich string messages with initial context (first message) and event context (all messages).
         # Done here (not in the system prompt) so the static system prompt is eligible
         # for Claude API prompt caching.
-        if isinstance(message_or_approvals, str) and not existing_messages:
-            message_or_approvals = await self._build_context_message(message_or_approvals)
+        if isinstance(message_or_approvals, str):
+            message_or_approvals = await self._enrich_message(
+                message_or_approvals, is_first_message=not existing_messages
+            )
 
         # Verify integrity of message history
         if isinstance(message_or_approvals, ToolApprovals):

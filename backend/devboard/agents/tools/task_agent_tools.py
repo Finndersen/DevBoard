@@ -60,7 +60,7 @@ def create_send_task_agent_prompt_tool(
         if get_execution_manager().has_active_execution(conversation.id):
             return f"Error: Task {task_id} agent is already running (conversation {conversation.id}). Wait for it to finish before sending another prompt."
 
-        get_execution_manager().start_agent_execution(conversation.id, message)
+        get_execution_manager().start_agent_execution(conversation.id, message, emit_user_event=True)
 
         return (
             f"Task agent prompt sent successfully.\n"

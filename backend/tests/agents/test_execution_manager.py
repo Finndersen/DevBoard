@@ -59,24 +59,24 @@ async def _push_complete(
     )
 
 
-async def _simple_coro(q, ie, *, conversation_id, message_or_approvals) -> None:
+async def _simple_coro(q, ie, *, conversation_id, message_or_approvals, **kwargs) -> None:
     await _push_started(q, conversation_id)
     await _push_complete(q, conversation_id)
 
 
-async def _interrupt_raising_coro(q, ie, *, conversation_id, message_or_approvals) -> None:
+async def _interrupt_raising_coro(q, ie, *, conversation_id, message_or_approvals, **kwargs) -> None:
     await _push_started(q, conversation_id)
     await _push_complete(q, conversation_id, status="interrupted")
     raise AgentInterruptedError("interrupted")
 
 
-async def _error_raising_coro(q, ie, *, conversation_id, message_or_approvals) -> None:
+async def _error_raising_coro(q, ie, *, conversation_id, message_or_approvals, **kwargs) -> None:
     await _push_started(q, conversation_id)
     await _push_complete(q, conversation_id, status="failed", error="something went wrong")
     raise ValueError("something went wrong")
 
 
-async def _event_pushing_coro(q, ie, *, conversation_id, message_or_approvals) -> None:
+async def _event_pushing_coro(q, ie, *, conversation_id, message_or_approvals, **kwargs) -> None:
     await _push_started(q, conversation_id)
     event = TextMessage(
         event_type="message",
@@ -111,7 +111,7 @@ class TestStartAgentExecution:
         """Should raise ConversationBusyError if an execution is already active."""
         blocker = asyncio.Event()
 
-        async def _blocking(q, ie, *, conversation_id, message_or_approvals):
+        async def _blocking(q, ie, *, conversation_id, message_or_approvals, **kwargs):
             await blocker.wait()
 
         with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_blocking):
@@ -257,7 +257,7 @@ class TestExecutionLifecycle:
             cache_write_tokens=200,
         )
 
-        async def _coro_with_usage(q, ie, *, conversation_id, message_or_approvals) -> None:
+        async def _coro_with_usage(q, ie, *, conversation_id, message_or_approvals, **kwargs) -> None:
             await _push_started(q, conversation_id)
             await _push_complete(q, conversation_id, usage=expected_usage)
 
@@ -386,6 +386,128 @@ class TestRunAgentForConversationStartOfRun:
         assert isinstance(event, AgentRunStartedEvent)
         assert event.conversation_id == 42
 
+    @pytest.mark.asyncio
+    async def test_emit_user_event_true_puts_text_message_before_agent_run_started(self):
+        """With emit_user_event=True, a user TextMessage must be pushed before AgentRunStartedEvent."""
+        from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+        from devboard.agents.execution.manager import _run_agent_for_conversation
+        from devboard.db.models import Project
+
+        mock_services = MagicMock()
+        mock_conv = MagicMock()
+        mock_conv.get_parent_entity.return_value = MagicMock(spec=Project)
+        mock_services.conversation_repo.get_by_id.return_value = mock_conv
+
+        async def simple_stream():
+            yield AgentRunStartedEvent(
+                conversation_id=42,
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+            yield AgentRunCompletedEvent(
+                status="completed",
+                error=None,
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+
+        mock_exec_service = Mock()
+        mock_exec_service.stream_events_for_message_or_approval.return_value = simple_stream()
+
+        broadcast_q: asyncio.Queue = asyncio.Queue()
+        interrupt = asyncio.Event()
+
+        with (
+            patch("devboard.agents.execution.manager.DependencyResolver") as mock_dr,
+            patch("devboard.agents.execution.manager.asyncio.to_thread", new=AsyncMock(return_value=None)),
+            patch("devboard.agents.execution.manager.create_agent_role_for_conversation", new_callable=AsyncMock),
+            patch("devboard.agents.execution.manager.create_agent_execution_service", return_value=mock_exec_service),
+            patch("devboard.agents.execution.manager.ensure_project_directory", return_value="/projects/test"),
+            patch("devboard.agents.execution.manager.SystemEventEmitter"),
+        ):
+            mock_resolver = MagicMock()
+            mock_resolver.run = AsyncMock(return_value=mock_services)
+            mock_dr.return_value.__aenter__ = AsyncMock(return_value=mock_resolver)
+            mock_dr.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            await _run_agent_for_conversation(
+                broadcast_q,
+                interrupt,
+                conversation_id=42,
+                message_or_approvals="hello world",
+                emit_user_event=True,
+            )
+
+        events = []
+        while not broadcast_q.empty():
+            _, event = broadcast_q.get_nowait()
+            events.append(event)
+
+        assert len(events) >= 2
+        assert isinstance(events[0], TextMessage)
+        assert events[0].role == MessageRole.USER
+        assert events[0].text_content == "hello world"
+        assert isinstance(events[1], AgentRunStartedEvent)
+
+    @pytest.mark.asyncio
+    async def test_emit_user_event_false_does_not_emit_text_message(self):
+        """With emit_user_event=False (default), no user TextMessage is emitted."""
+        from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+        from devboard.agents.execution.manager import _run_agent_for_conversation
+        from devboard.db.models import Project
+
+        mock_services = MagicMock()
+        mock_conv = MagicMock()
+        mock_conv.get_parent_entity.return_value = MagicMock(spec=Project)
+        mock_services.conversation_repo.get_by_id.return_value = mock_conv
+
+        async def simple_stream():
+            yield AgentRunStartedEvent(
+                conversation_id=42,
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+            yield AgentRunCompletedEvent(
+                status="completed",
+                error=None,
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+
+        mock_exec_service = Mock()
+        mock_exec_service.stream_events_for_message_or_approval.return_value = simple_stream()
+
+        broadcast_q: asyncio.Queue = asyncio.Queue()
+        interrupt = asyncio.Event()
+
+        with (
+            patch("devboard.agents.execution.manager.DependencyResolver") as mock_dr,
+            patch("devboard.agents.execution.manager.asyncio.to_thread", new=AsyncMock(return_value=None)),
+            patch("devboard.agents.execution.manager.create_agent_role_for_conversation", new_callable=AsyncMock),
+            patch("devboard.agents.execution.manager.create_agent_execution_service", return_value=mock_exec_service),
+            patch("devboard.agents.execution.manager.ensure_project_directory", return_value="/projects/test"),
+            patch("devboard.agents.execution.manager.SystemEventEmitter"),
+        ):
+            mock_resolver = MagicMock()
+            mock_resolver.run = AsyncMock(return_value=mock_services)
+            mock_dr.return_value.__aenter__ = AsyncMock(return_value=mock_resolver)
+            mock_dr.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            await _run_agent_for_conversation(
+                broadcast_q,
+                interrupt,
+                conversation_id=42,
+                message_or_approvals="hello world",
+                emit_user_event=False,
+            )
+
+        events = []
+        while not broadcast_q.empty():
+            _, event = broadcast_q.get_nowait()
+            events.append(event)
+
+        user_text_messages = [e for e in events if isinstance(e, TextMessage) and e.role == MessageRole.USER]
+        assert len(user_text_messages) == 0
+        assert isinstance(events[0], AgentRunStartedEvent)
+
 
 class TestInterrupt:
     """Tests for interrupt functionality."""
@@ -394,7 +516,7 @@ class TestInterrupt:
     async def test_request_interrupt_sets_event(self, manager):
         blocker = asyncio.Event()
 
-        async def _blocking(q, ie, *, conversation_id, message_or_approvals):
+        async def _blocking(q, ie, *, conversation_id, message_or_approvals, **kwargs):
             await blocker.wait()
 
         with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_blocking):
@@ -430,7 +552,7 @@ class TestGetExecution:
     async def test_has_active_execution_true_when_running(self, manager):
         blocker = asyncio.Event()
 
-        async def _blocking(q, ie, *, conversation_id, message_or_approvals):
+        async def _blocking(q, ie, *, conversation_id, message_or_approvals, **kwargs):
             await blocker.wait()
 
         with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_blocking):
@@ -447,7 +569,7 @@ class TestGetExecution:
     async def test_get_execution_returns_execution_during_run(self, manager):
         blocker = asyncio.Event()
 
-        async def _blocking(q, ie, *, conversation_id, message_or_approvals):
+        async def _blocking(q, ie, *, conversation_id, message_or_approvals, **kwargs):
             await blocker.wait()
 
         with patch("devboard.agents.execution.manager._run_agent_for_conversation", new=_blocking):

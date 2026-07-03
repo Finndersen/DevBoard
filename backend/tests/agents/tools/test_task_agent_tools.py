@@ -156,7 +156,7 @@ class TestSendTaskAgentPrompt:
         assert "task_id: 42" in result
         assert "conversation_id: 99" in result
         assert "status: running" in result
-        mock_exec_manager.start_agent_execution.assert_called_once_with(99, "Write the spec")
+        mock_exec_manager.start_agent_execution.assert_called_once_with(99, "Write the spec", emit_user_event=True)
 
 
 class TestGetTaskAgentStatus:

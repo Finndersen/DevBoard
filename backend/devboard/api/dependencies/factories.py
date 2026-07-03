@@ -177,6 +177,7 @@ def create_agent_execution_service(
     interrupt_event: asyncio.Event | None = None,
     additional_write_dirs: list[str] | None = None,
     effort: Literal["low", "medium", "high"] | None = None,
+    log_entry_repo: LogEntryRepository | None = None,
 ) -> AgentExecutionService:
     """Create the appropriate execution service based on engine type.
 
@@ -192,6 +193,7 @@ def create_agent_execution_service(
         oauth_service: Optional OAuthService for OAuth-authenticated MCP servers
         interrupt_event: Optional asyncio.Event for graceful interrupt signaling
         effort: Optional effort level for Claude Code engine ("low", "medium", "high")
+        log_entry_repo: Optional repository for querying log entries for event context injection
 
     Returns:
         AgentExecutionService instance (PydanticAI or ClaudeCode)
@@ -212,6 +214,7 @@ def create_agent_execution_service(
             additional_tools=additional_tools,
             oauth_service=oauth_service,
             interrupt_event=interrupt_event,
+            log_entry_repo=log_entry_repo,
         )
     elif conversation.engine == AgentEngine.CLAUDE_CODE:
         return ClaudeCodeAgentExecutionService(
@@ -226,6 +229,7 @@ def create_agent_execution_service(
             interrupt_event=interrupt_event,
             additional_write_dirs=additional_write_dirs,
             effort=effort,
+            log_entry_repo=log_entry_repo,
         )
     elif conversation.engine == AgentEngine.CODEX:
         return CodexAgentExecutionService(

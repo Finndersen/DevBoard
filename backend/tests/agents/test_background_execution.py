@@ -24,6 +24,7 @@ def mock_services() -> Mock:
     services.integration_service = Mock()
     services.task_service = Mock()
     services.workspace_service = Mock()
+    services.log_entry_repo = Mock()
     return services
 
 
@@ -110,6 +111,7 @@ class TestRunAgentForConversation:
             working_dir="/projects/test",
             interrupt_event=interrupt_event,
             additional_write_dirs=None,
+            log_entry_repo=mock_services.log_entry_repo,
         )
 
     @pytest.mark.asyncio
@@ -387,6 +389,7 @@ class TestTaskConversationWriteDirs:
             working_dir=worktree_path,
             interrupt_event=mock_create_exec.call_args.kwargs["interrupt_event"],
             additional_write_dirs=[codebase_path],
+            log_entry_repo=mock_services.log_entry_repo,
         )
 
     @pytest.mark.asyncio
@@ -421,6 +424,7 @@ class TestTaskConversationWriteDirs:
             working_dir=codebase_path,
             interrupt_event=mock_create_exec.call_args.kwargs["interrupt_event"],
             additional_write_dirs=None,
+            log_entry_repo=mock_services.log_entry_repo,
         )
 
 

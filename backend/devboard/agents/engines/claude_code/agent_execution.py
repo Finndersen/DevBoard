@@ -46,8 +46,7 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
 
         Updates session_id in the database after the run completes.
         """
-        if self.session_id is None:
-            message = await self._build_context_message(message)
+        message = await self._enrich_message(message, is_first_message=self.session_id is None)
         agent = self._get_agent(extra_tools=extra_tools)
 
         try:
@@ -84,9 +83,11 @@ class ClaudeCodeAgentExecutionService(AgentExecutionService):
         if isinstance(message_or_approvals, ToolApprovals) and not self.session_id:
             raise ValueError("No session ID available - cannot process tool approvals")
 
-        # Inject context on first run (string messages only, not ToolApprovals)
-        if isinstance(message_or_approvals, str) and self.session_id is None:
-            message_or_approvals = await self._build_context_message(message_or_approvals)
+        # Enrich string messages with initial context (first message) and event context (all messages).
+        if isinstance(message_or_approvals, str):
+            message_or_approvals = await self._enrich_message(
+                message_or_approvals, is_first_message=self.session_id is None
+            )
 
         agent = self._get_agent(extra_tools=extra_tools)
 
