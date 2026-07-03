@@ -179,6 +179,21 @@ describe('DocumentEditApproval', () => {
     expect(denyButton).toBeDisabled()
   })
 
+  it('labels an initiative context edit distinctly from a project specification edit', () => {
+    const initiativeApproval: PendingApproval = {
+      tool_call_id: 'test-init',
+      tool_name: 'edit_initiative_context',
+      tool_args: {
+        edits: [{ old_string: 'a', new_string: 'b' }],
+        reasoning: 'Update initiative context',
+      },
+    }
+
+    render(<DocumentEditApproval approval={initiativeApproval} onApproval={vi.fn()} />)
+
+    expect(screen.getByText('Edit Initiative Context')).toBeInTheDocument()
+  })
+
   it('renders set_content tool with content summary', () => {
     const setContentApproval: PendingApproval = {
       tool_call_id: 'test-456',

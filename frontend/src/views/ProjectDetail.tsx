@@ -192,19 +192,23 @@ function ProjectDetail({ id }: ProjectDetailProps) {
     }
   }, [project, id, refetchProject, addNotification])
 
-  // Handle project specification updates from MCP tools during stream processing
+  // Handle specification/context updates from MCP tools during stream processing. An initiative's
+  // own document is edited via the initiative_context tools; a top-level project's via the
+  // project_specification tools. (An initiative agent editing its parent uses the project_specification
+  // tools, but that targets the parent's view, not this one.)
+  const isInitiative = project?.parent_project_id != null
   const projectSpecificationHandler = useCallback(async (toolName: string) => {
-    if (
-      toolName.includes('edit_project_specification') ||
-      toolName.includes('set_project_specification_content')
-    ) {
+    const editsThisDocument = isInitiative
+      ? toolName.includes('edit_initiative_context') || toolName.includes('set_initiative_context_content')
+      : toolName.includes('edit_project_specification') || toolName.includes('set_project_specification_content')
+    if (editsThisDocument) {
       try {
         await refetchSpecification()
       } catch (error) {
         console.error('Failed to refetch project specification document:', error)
       }
     }
-  }, [refetchSpecification])
+  }, [refetchSpecification, isInitiative])
 
   useToolResultHandler(projectSpecificationHandler)
 

@@ -58,6 +58,8 @@ export default function NotificationsPanel() {
         return 'Implementation Plan'
       case 'project_specification':
         return 'Project Specification'
+      case 'initiative_context':
+        return 'Initiative Context'
       default:
         return documentType || 'Document'
     }

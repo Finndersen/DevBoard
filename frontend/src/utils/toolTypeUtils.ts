@@ -46,6 +46,8 @@ export function getDocumentTypeDisplay(documentType: string | null): string {
       return 'Implementation Plan'
     case 'project_specification':
       return 'Project Specification'
+    case 'initiative_context':
+      return 'Initiative Context'
     default:
       return documentType || 'Document'
   }
