@@ -191,10 +191,10 @@ function TaskDetail({ id }: TaskDetailProps) {
     refetch()
   }, [id, refetch])
 
-  // Switch to changes tab when task is in MERGED state (initial load or on transition)
+  // Switch to summary tab when task reaches a finalised state (initial load or on transition)
   useEffect(() => {
-    if (task?.status === TaskStatus.MERGED) {
-      setActiveTab('changes')
+    if (task?.status === TaskStatus.MERGED || task?.status === TaskStatus.COMPLETE) {
+      setActiveTab('summary')
     }
   }, [task?.id, task?.status])
 
@@ -750,10 +750,6 @@ function TaskDetail({ id }: TaskDetailProps) {
                     onAutoReview: handleAutoReview,
                   })}
                 />
-              )}
-
-              {activeTab === 'changes' && [TaskStatus.MERGED, TaskStatus.COMPLETE].includes(task.status) && (
-                <SummaryTab changeSummaryDoc={changeSummaryDoc} />
               )}
 
               {activeTab === 'pullrequest' && (

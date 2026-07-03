@@ -256,7 +256,7 @@ describe('TaskArtifactStepper', () => {
   })
 
   describe('MERGED state', () => {
-    it('shows spec, plan, changes, and PR steps (all complete) when task is MERGED', () => {
+    it('shows spec, plan, change summary, and PR steps (all complete) when task is MERGED', () => {
       render(
         <TaskArtifactStepper
           {...defaultProps}
@@ -270,9 +270,9 @@ describe('TaskArtifactStepper', () => {
 
       expect(screen.getByRole('button', { name: /spec/i })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /plan/i })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /changes/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /change summary/i })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /^changes$/i })).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: /pr/i })).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: /finalise/i })).not.toBeInTheDocument()
     })
   })
 

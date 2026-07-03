@@ -1,5 +1,6 @@
 import {
   DocumentTextIcon,
+  DocumentCheckIcon,
   NumberedListIcon,
   CodeBracketIcon,
   ArrowPathIcon,
@@ -80,7 +81,7 @@ export function TaskArtifactStepper({
         return 'pending'
 
       case 'summary':
-        if (status === TaskStatus.COMPLETE) return 'complete'
+        if ([TaskStatus.MERGED, TaskStatus.COMPLETE].includes(status)) return 'complete'
         return 'pending'
 
       case 'pullrequest':
@@ -128,12 +129,11 @@ export function TaskArtifactStepper({
     )
   }
 
-  // For complete tasks, show summary step instead of changes (with empty state if no summary available)
-  const isComplete = status === TaskStatus.COMPLETE
-  const changesStepId = isComplete ? 'summary' : 'changes'
-  const changesStepName = isComplete ? 'Summary' : 'Changes'
-  const changesStepIcon = isComplete ? DocumentTextIcon : CodeBracketIcon
-  const changesStepClickable = isComplete ? true : hasChanges
+  const isFinalised = [TaskStatus.MERGED, TaskStatus.COMPLETE].includes(status)
+  const changesStepId = isFinalised ? 'summary' : 'changes'
+  const changesStepName = isFinalised ? 'Change Summary' : 'Changes'
+  const changesStepIcon = isFinalised ? DocumentCheckIcon : CodeBracketIcon
+  const changesStepClickable = isFinalised ? true : hasChanges
 
   const allSteps: Step[] = [
     {
@@ -160,7 +160,7 @@ export function TaskArtifactStepper({
       icon: changesStepIcon,
       state: getStepState(changesStepId),
       isClickable: changesStepClickable,
-      badge: !isComplete ? getChangesBadge() : undefined,
+      badge: !isFinalised ? getChangesBadge() : undefined,
       statusIcon: undefined,
     },
     {
