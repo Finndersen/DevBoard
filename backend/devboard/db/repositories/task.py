@@ -95,6 +95,8 @@ class TaskRepository(BaseRepository[Task]):
         statuses: list[TaskStatus] | None = None,
         with_project: bool = False,
         include_initiative_tasks: bool = False,
+        order_by_updated_desc: bool = False,
+        limit: int | None = None,
     ) -> list[Task]:
         """Get tasks with optional filtering.
 
@@ -104,6 +106,8 @@ class TaskRepository(BaseRepository[Task]):
             with_project: If True, eager load project (and its parent) relationship
             include_initiative_tasks: If True and project_id is set, also include tasks
                 from initiatives (sub-projects) under the given project_id
+            order_by_updated_desc: If True, order results by updated_at descending
+            limit: Optional maximum number of results to return
         """
         stmt = select(Task)
         if project_id is not None:
@@ -120,6 +124,10 @@ class TaskRepository(BaseRepository[Task]):
             stmt = stmt.where(Task.status.in_(statuses))
         if with_project:
             stmt = stmt.options(joinedload(Task.project).joinedload(Project.parent))
+        if order_by_updated_desc:
+            stmt = stmt.order_by(Task.updated_at.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
         return list(self.db.execute(stmt).unique().scalars().all())
 
     def update(self, task: Task) -> Task:

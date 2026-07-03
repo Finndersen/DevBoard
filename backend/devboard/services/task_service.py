@@ -501,16 +501,16 @@ class TaskService:
         Returns:
             Tuple of (active_tasks, recent_completed_tasks), both sorted by updated_at descending.
         """
-        all_tasks = self.task_repo.get_list(project_id=project_id)
-        active_statuses = {TaskStatus.PLANNING, TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN}
-        active = sorted(
-            [t for t in all_tasks if t.status in active_statuses],
-            key=lambda t: t.updated_at,
-            reverse=True,
+        active_statuses = [TaskStatus.PLANNING, TaskStatus.IMPLEMENTING, TaskStatus.PR_OPEN]
+        active = self.task_repo.get_list(
+            project_id=project_id,
+            statuses=active_statuses,
+            order_by_updated_desc=True,
         )
-        completed = sorted(
-            [t for t in all_tasks if t.status == TaskStatus.COMPLETE],
-            key=lambda t: t.updated_at,
-            reverse=True,
-        )[:recent_completed_limit]
+        completed = self.task_repo.get_list(
+            project_id=project_id,
+            statuses=[TaskStatus.COMPLETE],
+            order_by_updated_desc=True,
+            limit=recent_completed_limit,
+        )
         return active, completed
