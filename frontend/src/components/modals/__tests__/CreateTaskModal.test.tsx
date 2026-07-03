@@ -373,8 +373,11 @@ describe('CreateTaskModal — non-blocking submission', () => {
 
   it('marks task creation as in-progress in store and removes on success', async () => {
     const { apiClient } = await import('../../../lib/api')
+    // Use a deferred promise so the "creating" window stays open until we explicitly resolve —
+    // a real timer here races with userEvent's internal awaits and flakes under load.
+    let resolveCreate!: (value: typeof mockCreatedTask) => void
     vi.mocked(apiClient.createTask).mockImplementation(
-      () => new Promise(resolve => setTimeout(() => resolve(mockCreatedTask), 100))
+      () => new Promise(resolve => { resolveCreate = resolve })
     )
 
     const user = userEvent.setup()
@@ -395,11 +398,12 @@ describe('CreateTaskModal — non-blocking submission', () => {
 
     await user.click(submitButton)
 
-    // Right after submit, draft should be marked as creating
+    // Right after submit (API call still pending), draft should be marked as creating
     state = useUIStore.getState()
     expect(state.modalDrafts[TEST_DRAFT_ID]?.isCreating).toBe(true)
 
-    // Wait for async API call to complete - draft should be removed
+    // Resolve the API call — draft should then be removed
+    resolveCreate(mockCreatedTask)
     await waitFor(() => {
       state = useUIStore.getState()
       expect(state.modalDrafts[TEST_DRAFT_ID]).toBeUndefined()
