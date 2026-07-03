@@ -30,7 +30,11 @@
 
 **read_implementation_step_details**: Read the full details/instructions of a specific implementation plan step. No approval (read-only). Params: `step_number` (int). Used by: TaskPlanningRole, TaskImplementationRole
 
-**edit_project_specification**: Find-and-replace in project spec. Approval required. Params: `old_string`, `new_string`. Used by: ProjectQARole
+**edit_project_specification** / **set_project_specification_content**: Find-and-replace / full-replace on a top-level project's specification document. Approval required. Each tool is bound to a specific document (no project id argument), so the agent cannot target the wrong project. Used by: ProjectQARole, TaskFinalisationRole.
+
+**edit_initiative_context** / **set_initiative_context_content**: The equivalent tools for an *initiative's* own document (document type `initiative_context`). An agent scoped to an initiative also receives `edit_project_specification` for the initiative's parent project, so it can feed outcomes up to the parent. Used by: ProjectQARole (when the conversation is on an initiative), TaskFinalisationRole (when the task belongs to an initiative).
+
+Note: the background-agent variants of `edit_project_specification` / `set_project_specification_content` take a `project_id` argument because that agent operates across all projects; their errors include the project name so a mis-identified project is obvious.
 
 ### Visualization
 
@@ -137,7 +141,7 @@ Enables agents to generate rich visualizations like dashboards, charts, styled t
 
 ## Tool Registration by Role
 
-**ProjectQARole**: edit_project_specification, render_html, list_tasks, view_task_details, create_task, view_codebase_details, update_codebase, investigate_codebase, search_codebase, read_codebase_files (codebase tools only present when project has codebases)
+**ProjectQARole**: project/initiative context editing tools (edit_project_specification/set_project_specification_content for a top-level project, or edit_initiative_context/set_initiative_context_content plus edit_project_specification for the parent when the conversation is on an initiative), render_html, list_tasks, view_task_details, create_task, view_codebase_details, update_codebase, investigate_codebase, search_codebase, read_codebase_files (codebase tools only present when project has codebases)
 
 **TaskSpecificationRole**: edit_task_specification, set_task_specification_content, search_codebase, read_codebase_files
 

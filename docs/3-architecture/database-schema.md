@@ -95,7 +95,9 @@ DevBoard uses SQLAlchemy 2.0 with `Mapped[T]` type annotations and full async su
 
 **Key Fields**: `id`, `content`, `content_hash`, `document_type`, timestamps
 
-**Document Types**: project_specification, task_specification, implementation_plan, architecture_document
+**Document Types**: project_specification (top-level project), initiative_context (a project that is an initiative), task_specification, implementation_plan, architecture_document
+
+A project's document type is fixed when the project is created (`project_specification` unless a `parent_project_id` makes it an initiative, in which case `initiative_context`). A project's `parent_project_id` cannot be changed afterwards, so the document type never has to migrate.
 
 **Conflict Detection**: `content_hash` (SHA-256) enables optimistic locking to prevent concurrent edit conflicts
 

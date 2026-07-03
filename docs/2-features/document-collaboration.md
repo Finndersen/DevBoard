@@ -30,12 +30,13 @@
 ## Document Tools
 
 **edit_* Tools**: Find-and-replace
-- Available: edit_task_specification, edit_implementation_plan, edit_project_specification
+- Available: edit_task_specification, edit_implementation_plan, edit_project_specification (top-level project), edit_initiative_context (an initiative's own document)
 - Args: `edits` (list of old_string/new_string), `reasoning`
 - Fails if old_string not found or not unique
+- Each tool is bound to a specific document, so the agent never supplies a document/project id. An agent scoped to an initiative gets `edit_initiative_context` for its own document and `edit_project_specification` for the parent project.
 
 **set_*_content Tools**: Full replacement
-- Available: set_task_specification_content, set_implementation_plan_content
+- Available: set_task_specification_content, set_implementation_plan_content, set_project_specification_content (top-level project), set_initiative_context_content (an initiative's own document)
 - Args: `content`, `reasoning`
 - Use cases: Initial creation, major restructuring, template application
 
@@ -68,7 +69,7 @@
 
 ## Role Integration
 
-**ProjectQARole**: Can edit project specifications
+**ProjectQARole**: Can edit a project's specification, or an initiative's context document plus its parent project's specification
 
 **TaskSpecificationRole**: Can edit task specifications
 

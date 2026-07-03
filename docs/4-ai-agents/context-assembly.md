@@ -83,8 +83,8 @@
 **`build_task_context()`** assembles standardized context for all task-related agent roles:
 
 1. Task metadata (ID, name, status, PR number)
-2. Project metadata (name, description)
-3. Project specification (optional, controlled by `include_project_specification` flag)
+2. Project/initiative metadata (name, description). When the task's project is an initiative, a **Parent Project** block (name, description, and specification) is rendered first, followed by an **Initiative** block; a top-level project renders a single **Project** block.
+3. Project specification / initiative context (optional, controlled by `include_project_specification` flag). The document heading reflects the entity kind — "Project Specification" for a top-level project, "Initiative Context" for an initiative — keeping the two concepts distinct to the agent.
 4. PR status (optional, for PR review role)
 5. Task specification
 6. Implementation plan (structured or legacy Document format)

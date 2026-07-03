@@ -89,9 +89,9 @@ Roles define agent behavior independently of the execution engine, encapsulating
 ### Implemented Roles
 
 **ProjectQARole**:
-- Purpose: Answer project questions and edit project specifications
-- Context: Project details, specifications, linked resources
-- Tools: `edit_project_specification`, `list_tasks`, `view_task_details`, `create_task`, `search_codebase`, `read_codebase_files`
+- Purpose: Answer project/initiative questions and edit the project's or initiative's living document
+- Context: Project/initiative details, specification, and (for an initiative) the parent project's name and specification
+- Tools: hierarchy-scoped context editing tools — `edit_project_specification`/`set_project_specification_content` for a top-level project, or `edit_initiative_context`/`set_initiative_context_content` (own document) plus `edit_project_specification` (parent) for an initiative — `list_tasks`, `view_task_details`, `create_task`, `search_codebase`, `read_codebase_files`
 - Engine Support: INTERNAL or CLAUDE_CODE
 - Location: `backend/devboard/agents/roles/project_qa.py`
 
@@ -128,7 +128,7 @@ Roles define agent behavior independently of the execution engine, encapsulating
 - Purpose: Manage tasks in MERGED state — post-merge housekeeping after code has been merged
 - Context: Task specification, change summary, and step outcomes
 - Behavior: Reviews what was built, proposes a structured plan of follow-up actions (spec updates, follow-up task creation, external resource updates), waits for user approval, then executes
-- Tools: `edit_project_specification`, `create_task`, plus read-only built-in tools (`Read`, `Grep`, `Glob`, `WebFetch`, `WebSearch`)
+- Tools: hierarchy-scoped context editing tools bound to the task's project — `edit_project_specification` for a top-level project, or `edit_initiative_context` (the initiative's own document) plus `edit_project_specification` (the parent project) when the task belongs to an initiative — `create_task`, plus read-only built-in tools (`Read`, `Grep`, `Glob`, `WebFetch`, `WebSearch`)
 - Engine Support: CLAUDE_CODE
 - Location: `backend/devboard/agents/roles/task_finalisation.py`
 
