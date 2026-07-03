@@ -25,7 +25,12 @@ from devboard.agents.tools.task_tools import (
     create_view_task_details_tool,
 )
 from devboard.db.models import Project, Task
-from devboard.db.repositories import CodebaseRepository, ConversationRepository, DocumentRepository, LogEntryRepository
+from devboard.db.repositories import (
+    CodebaseRepository,
+    ConversationRepository,
+    DocumentRepository,
+    LogEntryRepository,
+)
 from devboard.services.global_context_service import GlobalContextService
 from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_service import TaskService
@@ -91,6 +96,22 @@ rather than waiting for a formal spec update, dashboards to summarise project st
 """
 
 
+_INITIATIVE_PROMPT_SUFFIX = """
+## INITIATIVE CONTEXT
+
+You are acting as assistant for an **initiative** (sub-project) that sits within a larger parent project.
+
+- Your initiative context document captures initiative-specific goals, progress, and decisions.
+- The parent project specification (provided in context) describes the broader project.
+- You have separate, purpose-named tools for each document — you never pass a project id:
+  - `edit_initiative_context` / `set_initiative_context_content` edit your own initiative's document.
+  - `edit_project_specification` edits the parent project's specification.
+- **Edit your own initiative context** for initiative-level detail and progress.
+- **Update the parent project spec** only when feeding outcomes, key decisions, or follow-up work
+  upward — for example when completing a significant milestone or wrapping up the initiative.
+- Keep the parent project spec high-level; detailed initiative progress belongs in the initiative context.
+"""
+
 _INITIAL_SETUP_GUIDANCE = """\
 NO SPECIFICATION EXISTS YET.
 
@@ -124,6 +145,19 @@ def _format_task_table(tasks: list[Task]) -> str:
     return f"{_TASK_TABLE_HEADER}\n{rows}"
 
 
+def _format_initiatives_section(project: Project) -> str:
+    """Format the initiatives summary table for a root project."""
+    if not project.initiatives:
+        return ""
+    header = "ID|Name|Status|Tasks"
+    rows = []
+    for initiative in project.initiatives:
+        status = "complete" if initiative.complete else "active"
+        task_count = len(initiative.tasks)
+        rows.append(f"{initiative.id}|{initiative.name}|{status}|{task_count}")
+    return f"INITIATIVES:\n{header}\n" + "\n".join(rows) + "\n"
+
+
 def build_project_qa_context(
     project: Project,
     active_tasks: list[Task],
@@ -137,12 +171,14 @@ def build_project_qa_context(
     parent_section = ""
     if project.parent is not None:
         parent_spec = project.parent.specification.content or "<empty>"
-        parent_section = f"""PARENT PROJECT NAME: {project.parent.name}
+        parent_section = f"""PARENT PROJECT: {project.parent.name} (ID: {project.parent.id})
 
 PARENT PROJECT SPECIFICATION DOCUMENT:
 <document>
 {parent_spec}
 </document>
+
+This is an initiative under the project above.
 
 """
 
@@ -152,18 +188,25 @@ PARENT PROJECT SPECIFICATION DOCUMENT:
         entity_label, document_label = "PROJECT", "PROJECT SPECIFICATION DOCUMENT"
 
     context = f"""
-{global_context_section}{parent_section}{entity_label} NAME: {project.name}
+{global_context_section}{parent_section}{entity_label}: {project.name} (ID: {project.id})
 
 {document_label}:
 <document>
 {spec_content}
 </document>
 """
+
     if active_tasks:
         context += f"\nACTIVE TASKS:\n{_format_task_table(active_tasks)}\n"
 
     if recent_completed_tasks:
         context += f"\nRECENTLY COMPLETED TASKS:\n{_format_task_table(recent_completed_tasks)}\n"
+
+    # A top-level project agent also sees a summary of its child initiatives.
+    if not project.is_initiative:
+        initiatives_section = _format_initiatives_section(project)
+        if initiatives_section:
+            context += f"\n{initiatives_section}"
 
     return context
 
@@ -189,6 +232,8 @@ class ProjectQAAgentRole(AgentRole):
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for project Q&A role."""
+        if self.project.parent:
+            return PROJECT_QA_ROLE_PROMPT + _INITIATIVE_PROMPT_SUFFIX
         return PROJECT_QA_ROLE_PROMPT
 
     def get_tools(self) -> list[Tool]:

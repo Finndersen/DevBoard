@@ -10,17 +10,38 @@ from devboard.db.models import Project, Task
 
 
 def _format_project_context(project: Project, *, header: str, include_specification: bool) -> str:
-    """Format a project (or initiative) block: name, description, and optionally its document.
+    """Format a project (or initiative) block: id, name, description, and optionally its document.
 
     The document heading reflects the entity kind — "Initiative Context" for an initiative,
     "Project Specification" for a top-level project — so the two concepts stay distinct to the agent.
+    The ID is included so agents can reference the correct entity.
     """
-    lines = [f"# {header}", f"Name: {project.name}", f"Description: {project.description}"]
+    lines = [f"# {header}", f"ID: {project.id}", f"Name: {project.name}", f"Description: {project.description}"]
     section = "\n".join(lines)
     if include_specification:
         doc_title = "Initiative Context" if project.is_initiative else "Project Specification"
         section += "\n\n" + _format_document_section(f"## {doc_title}", project.specification.content)
     return section
+
+
+def _extract_first_paragraph(content: str | None) -> str:
+    """Extract first substantive (non-heading) paragraph from document content."""
+    if not content:
+        return ""
+    for para in content.split("\n\n"):
+        stripped = para.strip()
+        if stripped and not stripped.startswith("#"):
+            return stripped
+    return ""
+
+
+def _format_initiative_summary(initiative: Project) -> str:
+    """Format a brief initiative spec overview (first paragraph only) for implementation agents."""
+    spec_content = initiative.specification.content if initiative.specification else None
+    overview = _extract_first_paragraph(spec_content)
+    if not overview:
+        return ""
+    return f"## Initiative Overview\n{overview}"
 
 
 def _format_task_metadata(task: Task) -> str:
@@ -213,6 +234,11 @@ def build_task_context(
 
     if task.custom_fields:
         sections.append(_format_custom_fields(task))
+
+    if not include_project_specification and project.parent is not None:
+        summary = _format_initiative_summary(project)
+        if summary:
+            sections.append(summary)
 
     sections.append(_format_codebase_info(task, working_dir))
     sections.append(_format_task_metadata(task))

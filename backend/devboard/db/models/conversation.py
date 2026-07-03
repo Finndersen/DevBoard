@@ -142,6 +142,7 @@ class Conversation(Base):
                     select(Task)
                     .options(
                         joinedload(Task.codebase),
+                        joinedload(Task.project),
                         joinedload(Task.specification),
                         joinedload(Task.implementation_plan),
                         joinedload(Task.change_summary),

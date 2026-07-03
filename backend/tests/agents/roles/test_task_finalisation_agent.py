@@ -23,12 +23,47 @@ def mock_get_execution_manager():
 
 @pytest.fixture
 def mock_task():
-    return create_mock_task(
+    task = create_mock_task(
         task_id=1,
         title="Finalisation Task",
         status=TaskStatus.MERGED,
         specification_content="# Task Specification\n\nContent",
     )
+    # Ensure project is treated as a root project (no parent)
+    task.project.id = 100
+    task.project.name = "Root Project"
+    task.project.description = "Root project description"
+    task.project.parent = None
+    task.project.specification.content = "# Project Spec\n\nProject content."
+    return task
+
+
+@pytest.fixture
+def mock_task_in_initiative():
+    task = create_mock_task(
+        task_id=2,
+        title="Initiative Task",
+        status=TaskStatus.MERGED,
+        specification_content="# Task Specification\n\nInitiative task content",
+    )
+    # Set up the initiative (task.project) with a parent (root project)
+    root_project = Mock()
+    root_project.id = 10
+    root_project.name = "Root Project"
+    root_project.description = "The root project"
+    root_project.parent = None
+    root_project.is_initiative = False
+    root_project.specification = Mock()
+    root_project.specification.content = "# Root Spec\n\nRoot project overview."
+
+    task.project.id = 200
+    task.project.name = "My Initiative"
+    task.project.description = "An initiative under root project"
+    task.project.parent = root_project
+    task.project.is_initiative = True
+    task.project.specification = Mock()
+    task.project.specification.content = "## Overview\n\nInitiative overview.\n\nMore details here."
+    return task
 
 
 @pytest.fixture
@@ -134,10 +169,70 @@ class TestTaskFinalisationAgentRole:
         prompt = role.get_system_prompt()
         assert "propose" in prompt.lower()
         assert "plan" in prompt.lower()
-        assert "project specification" in prompt.lower()
+        assert "specification" in prompt.lower()
+
+    def test_system_prompt_mentions_parent_entity_update(self, role):
+        prompt = role.get_system_prompt()
+        assert "parent project" in prompt.lower()
+        assert "edit_project_specification" in prompt
+        assert "initiative" in prompt.lower()
+        assert "feed" in prompt.lower()
 
     @pytest.mark.asyncio
     async def test_get_context_content(self, role, mock_task):
         content = await role.get_context_content()
         assert isinstance(content, str)
         assert len(content) > 0
+
+    @pytest.mark.asyncio
+    async def test_get_context_content_direct_project_includes_project_spec(
+        self,
+        role,
+        mock_task,
+        mock_conversation_repo,
+        mock_task_service,
+        mock_document_repo,
+        mock_agent_config_service,
+    ):
+        """Task directly in a project gets project specification in context."""
+        content = await role.get_context_content()
+
+        assert "# Project" in content
+        assert "Root Project" in content
+        assert "## Project Specification" in content
+        assert "Project content." in content
+        assert "# Initiative" not in content
+        assert "## Initiative Context" not in content
+
+    @pytest.mark.asyncio
+    async def test_get_context_content_in_initiative_includes_hierarchy(
+        self,
+        mock_task_in_initiative,
+        mock_task_service,
+        mock_conversation_repo,
+        mock_document_repo,
+        mock_agent_config_service,
+    ):
+        """Task in an initiative gets both root project and initiative context."""
+        role = TaskFinalisationAgentRole(
+            task=mock_task_in_initiative,
+            task_service=mock_task_service,
+            working_dir="/test/working_dir",
+            conversation_repo=mock_conversation_repo,
+            agent_config_service=mock_agent_config_service,
+            conversation_id=123,
+            document_repo=mock_document_repo,
+        )
+
+        content = await role.get_context_content()
+
+        assert "# Parent Project" in content
+        assert "ID: 10" in content
+        assert "Root Project" in content
+        assert "## Project Specification" in content
+        assert "Root project overview." in content
+        assert "# Initiative" in content
+        assert "ID: 200" in content
+        assert "My Initiative" in content
+        assert "## Initiative Context" in content
+        assert "Initiative overview." in content
