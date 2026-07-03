@@ -21,7 +21,7 @@ def _create_project(db_session, name="Test Project", description="desc", parent_
     """Helper to create a project with a specification document."""
     doc_repo = DocumentRepository(db_session)
     project_repo = ProjectRepository(db_session)
-    spec_doc = doc_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+    spec_doc = doc_repo.create(DocumentType.for_project(is_initiative=parent_project_id is not None), "")
     project = project_repo.create(
         name=name,
         description=description,
@@ -186,34 +186,35 @@ class TestProjectHierarchyRouter:
         assert response.status_code == 200
         assert response.json()["complete"] is False
 
-    def test_update_project_parent_project_id(self, client, db_session):
-        """PATCH can set parent_project_id to make a project an initiative."""
+    def test_update_project_parent_change_rejected(self, client, db_session):
+        """A project cannot be turned into an initiative after creation — its parent is fixed.
+
+        This keeps the project's specification/context document type stable for its whole life.
+        """
         parent = _create_project(db_session, name="New Parent")
         child = _create_project(db_session, name="To Nest")
 
         response = client.patch(f"/api/projects/{child.id}", json={"parent_project_id": parent.id})
+        assert response.status_code == 400
+        assert "cannot be changed" in response.json()["detail"].lower()
+
+    def test_update_project_same_parent_is_noop(self, client, db_session):
+        """Re-sending the unchanged parent_project_id is accepted (no change)."""
+        parent = _create_project(db_session, name="Top")
+        initiative = _create_project(db_session, name="Initiative", parent_project_id=parent.id)
+
+        response = client.patch(f"/api/projects/{initiative.id}", json={"parent_project_id": parent.id})
         assert response.status_code == 200
-        data = response.json()
-        assert data["parent_project_id"] == parent.id
-        assert data["parent_project_name"] == "New Parent"
+        assert response.json()["parent_project_id"] == parent.id
 
-    def test_update_project_self_referential_parent_rejected(self, client, db_session):
-        """PATCH rejects setting parent_project_id to the project's own ID."""
-        project = _create_project(db_session, name="Self Parent")
+    def test_promote_initiative_to_project_rejected(self, client, db_session):
+        """An initiative cannot be promoted to a top-level project (parent cleared) after creation."""
+        parent = _create_project(db_session, name="Top")
+        initiative = _create_project(db_session, name="Initiative", parent_project_id=parent.id)
 
-        response = client.patch(f"/api/projects/{project.id}", json={"parent_project_id": project.id})
+        response = client.patch(f"/api/projects/{initiative.id}", json={"parent_project_id": None})
         assert response.status_code == 400
-        assert "own parent" in response.json()["detail"].lower()
-
-    def test_update_project_nested_parent_rejected(self, client, db_session):
-        """PATCH rejects setting parent_project_id to an initiative (would create >1 level nesting)."""
-        top = _create_project(db_session, name="Top")
-        middle = _create_project(db_session, name="Middle", parent_project_id=top.id)
-        bottom = _create_project(db_session, name="Bottom")
-
-        response = client.patch(f"/api/projects/{bottom.id}", json={"parent_project_id": middle.id})
-        assert response.status_code == 400
-        assert "one level" in response.json()["detail"].lower()
+        assert "cannot be changed" in response.json()["detail"].lower()
 
 
 class TestTaskListWithInitiatives:

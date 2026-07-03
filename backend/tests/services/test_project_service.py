@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from devboard.db.models.document import DocumentType
 from devboard.services.project_service import ProjectService
 from devboard.services.system_event_emitter import SystemEventEmitter
 
@@ -72,3 +73,19 @@ class TestProjectServiceCreateProject:
         project_service.create_project(name="Ordered Project")
 
         assert call_order.index("create") < call_order.index("emit")
+
+    def test_top_level_project_gets_project_specification_document(self, project_service, mock_document_repo):
+        """A top-level project's document is created with type PROJECT_SPECIFICATION."""
+        project_service.create_project(name="Top Level")
+
+        mock_document_repo.create.assert_called_once_with(DocumentType.PROJECT_SPECIFICATION, "")
+
+    def test_initiative_gets_initiative_context_document(self, project_service, mock_document_repo, mock_project_repo):
+        """An initiative's document is created with type INITIATIVE_CONTEXT."""
+        parent = MagicMock()
+        parent.parent_project_id = None
+        mock_project_repo.get_by_id.return_value = parent
+
+        project_service.create_project(name="Initiative", parent_project_id=5)
+
+        mock_document_repo.create.assert_called_once_with(DocumentType.INITIATIVE_CONTEXT, "")

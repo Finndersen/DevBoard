@@ -32,19 +32,15 @@ class ProjectService:
         self.project_repo = project_repo
         self.system_event_emitter = system_event_emitter
 
-    def validate_parent(self, parent_project_id: int, project_id: int | None = None) -> None:
-        """Validate parent project constraints.
+    def validate_parent(self, parent_project_id: int) -> None:
+        """Validate parent project constraints for a new initiative.
 
         Args:
             parent_project_id: ID of the proposed parent project
-            project_id: ID of the project being updated (None for creation)
 
         Raises:
-            ValueError: If the parent is invalid (not found, self-reference, or too deep)
+            ValueError: If the parent is invalid (not found, or itself an initiative)
         """
-        if project_id is not None and parent_project_id == project_id:
-            raise ValueError("A project cannot be its own parent")
-
         parent = self.project_repo.get_by_id(parent_project_id)
         if not parent:
             raise ValueError(f"Parent project {parent_project_id} not found")
@@ -75,8 +71,9 @@ class ProjectService:
         if parent_project_id is not None:
             self.validate_parent(parent_project_id)
 
-        # Create specification document
-        specification_doc = self.document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
+        # Create specification/context document — type reflects whether this is an initiative
+        document_type = DocumentType.for_project(is_initiative=parent_project_id is not None)
+        specification_doc = self.document_repo.create(document_type, "")
 
         # Create project using repository
         project = self.project_repo.create(

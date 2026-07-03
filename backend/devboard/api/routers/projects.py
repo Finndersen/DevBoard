@@ -176,10 +176,8 @@ async def update_project(
     project_id: int,
     project_update: ProjectUpdate,
     project: Project = Depends(get_verified_project),
-    project_repo: ProjectRepository = Depends(get_project_repository),
     document_repo: DocumentRepository = Depends(get_document_repository),
     system_event_emitter: SystemEventEmitter = Depends(get_system_event_emitter),
-    project_service: ProjectService = Depends(get_project_service),
 ):
     """Update a project and its specification content."""
     update_data = project_update.model_dump(exclude_unset=True)
@@ -190,22 +188,16 @@ async def update_project(
     if specification is not None:
         document_repo.update_content(project.specification, specification)
 
-    # Validate and apply parent_project_id update
+    # A project's position in the hierarchy is fixed at creation: a top-level project can never
+    # become an initiative (nor vice versa), which keeps its specification/context document type
+    # stable. Reject any attempt to change the parent.
     if "parent_project_id" in update_data:
         new_parent_id = update_data.pop("parent_project_id")
-        if new_parent_id is not None:
-            if project.initiatives:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Cannot make a project with initiatives into an initiative itself",
-                )
-            try:
-                project_service.validate_parent(new_parent_id, project_id=project_id)
-            except ValueError as e:
-                raise HTTPException(status_code=400, detail=str(e)) from e
-        project.parent_project_id = new_parent_id
-        # Expire the cached parent relationship so parent_project_name is fresh
-        project_repo.db.expire(project, ["parent"])
+        if new_parent_id != project.parent_project_id:
+            raise HTTPException(
+                status_code=400,
+                detail="A project's parent cannot be changed after creation.",
+            )
 
     # Handle custom fields with merge semantics: merge provided fields, remove keys set to None
     custom_fields = update_data.pop("custom_fields", None)

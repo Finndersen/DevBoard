@@ -13,9 +13,19 @@ class DocumentType(StrEnum):
     """Types of documents in the system."""
 
     PROJECT_SPECIFICATION = "project_specification"
+    INITIATIVE_CONTEXT = "initiative_context"
     TASK_SPECIFICATION = "task_specification"
     TASK_IMPLEMENTATION_PLAN = "task_implementation_plan"
     CHANGE_SUMMARY = "change_summary"
+
+    @staticmethod
+    def for_project(is_initiative: bool) -> "DocumentType":
+        """The spec/context document type a project should use given its hierarchy position.
+
+        Top-level projects hold a PROJECT_SPECIFICATION; initiatives hold an INITIATIVE_CONTEXT.
+        This is the single source of truth for that mapping — creation and re-parenting both use it.
+        """
+        return DocumentType.INITIATIVE_CONTEXT if is_initiative else DocumentType.PROJECT_SPECIFICATION
 
 
 class Document(Base):

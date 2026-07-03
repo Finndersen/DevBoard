@@ -77,3 +77,8 @@ class Project(Base):
     @property
     def parent_project_name(self) -> str | None:
         return self.parent.name if self.parent else None
+
+    @property
+    def is_initiative(self) -> bool:
+        """True when this project is an initiative (nested under a parent project)."""
+        return self.parent_project_id is not None
