@@ -5,11 +5,11 @@ from pydantic_ai import Tool
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.context_helpers import build_task_context
 from devboard.agents.roles.task_base import TaskAgentRoleBase
-from devboard.agents.tools import create_edit_project_specification_tool
+from devboard.agents.tools import build_project_context_document_tools
 from devboard.db.models import Task
-from devboard.db.repositories import ConversationRepository, DocumentRepository
-from devboard.db.repositories.project import ProjectRepository
+from devboard.db.repositories import ConversationRepository, DocumentRepository, LogEntryRepository
 from devboard.services.global_context_service import GlobalContextService
+from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_service import TaskService
 
 TASK_FINALISATION_ROLE_PROMPT = """
@@ -23,14 +23,18 @@ Your role is to:
    - Any follow-up tasks to create
 3. GET CONFIRMATION: Present your proposed plan to the user and wait for their explicit approval before taking any action
 4. EXECUTE: Once the user approves, use the available tools to implement the plan:
-   - Use `edit_project_specification` to update the project specification
+   - Use the project/initiative context editing tool(s) to update the relevant specification.
+     For a task under a top-level project you will have `edit_project_specification`. For a task
+     under an initiative you will have `edit_initiative_context` (the initiative's own document)
+     and `edit_project_specification` (its parent project's document) — update whichever the
+     merged work affects, feeding initiative outcomes up to the parent when they change its scope.
    - Use `create_task` to create any follow-up tasks
    - Use other tools to update external resources as needed
 
 IMPORTANT:
 - The code has already been merged — do not attempt to modify the codebase
 - Do not take any action without first proposing a plan and receiving user approval
-- Focus on keeping project context accurate and up-to-date so future tasks have correct information
+- Focus on keeping project and initiative context accurate and up-to-date so future tasks have correct information
 - Be concise and targeted in spec updates — only change what the merged work actually affects
 - The user will manually archive the task using the Archive Task button when satisfied with the results
 """
@@ -63,9 +67,15 @@ class TaskFinalisationAgentRole(TaskAgentRoleBase):
         return TASK_FINALISATION_ROLE_PROMPT
 
     def get_tools(self) -> list[Tool]:
-        project_repo = ProjectRepository(self.conversation_repo.db)
         tools = super().get_tools()
-        tools.append(create_edit_project_specification_tool(project_repo, self.document_repo))
+        event_emitter = SystemEventEmitter(LogEntryRepository(self.document_repo.db))
+        tools.extend(
+            build_project_context_document_tools(
+                self.task.project,
+                self.document_repo,
+                system_event_emitter=event_emitter,
+            )
+        )
         return tools
 
     async def get_context_content(self) -> str:

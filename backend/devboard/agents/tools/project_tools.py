@@ -15,10 +15,11 @@ def create_list_projects_tool(project_repo: ProjectRepository) -> Tool:
     """Create a tool for listing all projects."""
 
     def list_projects() -> str:
-        """List all projects.
+        """List all projects and initiatives.
 
         Returns:
-            JSON list of projects with id, name, description, and codebase names.
+            JSON list of entries with id, name, description, type ('project' or 'initiative'),
+            parent_project_id (set for initiatives), and codebase names.
         """
         projects = project_repo.get_all()
         return json.dumps(
@@ -27,6 +28,8 @@ def create_list_projects_tool(project_repo: ProjectRepository) -> Tool:
                     "id": project.id,
                     "name": project.name,
                     "description": project.description,
+                    "type": "initiative" if project.is_initiative else "project",
+                    "parent_project_id": project.parent_project_id,
                     "codebases": [cb.name for cb in (project.codebases or [])],
                 }
                 for project in projects
@@ -43,13 +46,15 @@ def create_view_project_details_tool(
     """Create a tool for viewing full details of a specific project."""
 
     def view_project_details(project_id: int) -> str:
-        """View full details of a project including specification and task summary.
+        """View full details of a project or initiative, including its document and task summary.
 
         Args:
-            project_id: The ID of the project to view.
+            project_id: The ID of the project or initiative to view.
 
         Returns:
-            JSON with project metadata, specification content, linked codebase names, and task summary.
+            JSON with metadata, `type` ('project' or 'initiative'), parent project (for
+            initiatives), child initiatives (for top-level projects), document content, linked
+            codebase names, and task summary.
         """
         project = project_repo.get_by_id(project_id)
         if not project:
@@ -57,11 +62,17 @@ def create_view_project_details_tool(
 
         active_tasks, recent_completed = task_service.get_project_task_summaries(project_id)
 
+        parent_project = {"id": project.parent.id, "name": project.parent.name} if project.parent is not None else None
+        initiatives = [{"id": i.id, "name": i.name} for i in project.initiatives]
+
         return json.dumps(
             {
                 "id": project.id,
                 "name": project.name,
                 "description": project.description,
+                "type": "initiative" if project.is_initiative else "project",
+                "parent_project": parent_project,
+                "initiatives": initiatives,
                 "codebases": [cb.name for cb in (project.codebases or [])],
                 "specification_content": project.specification.content if project.specification else None,
                 "active_tasks": [{"id": t.id, "title": t.title, "status": t.status.value} for t in active_tasks],
@@ -108,14 +119,18 @@ def create_edit_project_specification_tool(
         spec = project.specification
         if not spec or not spec.content:
             raise ModelRetry(
-                "Project specification has no content yet. "
+                f"Project '{project.name}' (ID {project_id}) has no specification content yet. "
                 "Set the initial content first using `set_project_specification_content`."
             )
 
         editor_service = DocumentEditorService()
         edit_result = editor_service.apply_edits(spec.content, edits)
         if not edit_result.success:
-            raise ModelRetry(f"Failed to apply edits to specification: {'; '.join(edit_result.errors)}")
+            raise ModelRetry(
+                f"Failed to apply edits to the specification of project '{project.name}' (ID {project_id}). "
+                f"Confirm you are editing the intended project and that the text exists in its current "
+                f"specification. Errors: {'; '.join(edit_result.errors)}"
+            )
 
         document_repo.update_content(spec, edit_result.content)
         document_repo.commit()

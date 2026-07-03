@@ -29,12 +29,18 @@ MAX_TASKS_LIMIT = 20
 
 
 def _task_to_toon_record(task: Task, agent_running: bool = False) -> dict[str, Any]:
-    """Convert a Task to a dict for TOON encoding."""
+    """Convert a Task to a dict for TOON encoding.
+
+    `parent_project_id` is null for tasks under a top-level project and set to the parent
+    project's id when the task's project is an initiative.
+    """
     return {
         "id": task.id,
         "title": task.title,
         "status": task.status.value,
         "created_at": task.created_at.isoformat(),
+        "project_id": task.project_id,
+        "parent_project_id": task.project.parent_project_id,
         "codebase": task.codebase.name,
         "branch": task.branch_name,
         "agent_running": agent_running,
@@ -100,8 +106,9 @@ def create_list_tasks_tool(
             max_results: Maximum number of tasks to return (default: 20).
 
         Returns:
-            TOON-encoded list of tasks with fields: id, title, status, created_at, codebase, branch, custom_fields.
-            Returns a message if no tasks match the filters.
+            TOON-encoded list of tasks with fields: id, title, status, created_at, project_id,
+            parent_project_id (set when the task's project is an initiative), codebase, branch,
+            agent_running, custom_fields. Returns a message if no tasks match the filters.
         """
         parsed_statuses: list[TaskStatus] | None = None
         if status_filter:
@@ -194,8 +201,17 @@ def create_view_task_details_tool(
             f"**Status:** {task.status.value}",
             f"**Agent running:** {'yes' if agent_running else 'no'}",
             f"**Created:** {task.created_at.isoformat()}",
-            f"**Codebase:** {task.codebase.name}",
         ]
+
+        # Project / initiative hierarchy — kept as distinct concepts even though both are Projects.
+        task_project = task.project
+        if task_project.is_initiative:
+            lines.append(f"**Initiative:** {task_project.name} (#{task_project.id})")
+            lines.append(f"**Project:** {task_project.parent_project_name} (#{task_project.parent_project_id})")
+        else:
+            lines.append(f"**Project:** {task_project.name} (#{task_project.id})")
+
+        lines.append(f"**Codebase:** {task.codebase.name}")
 
         lines.append(f"**Branch:** {task.branch_name}")
         lines.append(f"**Base Branch:** {task.base_branch}")

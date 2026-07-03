@@ -34,8 +34,8 @@ def create_document_edit_tool(
         This document DOES NOT exist on the file system, but is managed by the application.
 
         Use this tool only to make incremental changes to content that already exists.
-        To set or replace the full document content (e.g. writing the initial specification),
-        use the `edit_task` tool with the `specification_content` parameter instead.
+        To write the initial content or fully replace it, use the corresponding set-content
+        tool instead of this one.
 
         DOCUMENT EDITING RULES:
         1. Make precise find-replace edits using DocumentEdit objects
@@ -140,3 +140,58 @@ def create_set_document_content_tool(
         requires_approval=requires_approval,
         takes_ctx=False,
     )  # ty:ignore[invalid-return-type]
+
+
+def build_project_context_document_tools(
+    project: Project,
+    document_repo: DocumentRepository,
+    *,
+    system_event_emitter: SystemEventEmitter | None = None,
+    include_set_content: bool = False,
+) -> list[Tool]:
+    """Build the context-document editing tools scoped to a project's place in the hierarchy.
+
+    Each tool is bound to a specific document, so the agent never supplies a project id it
+    would have to guess. Tool names come from each document's type:
+
+    - Top-level project → `edit_project_specification` (+ `set_project_specification_content`
+      when include_set_content).
+    - Initiative → `edit_initiative_context` (+ `set_initiative_context_content` when
+      include_set_content) for its own document, plus `edit_project_specification` targeting the
+      parent project's document so an initiative agent can also feed outcomes up to the parent.
+
+    Args:
+        project: The project (or initiative) the agent is scoped to.
+        document_repo: Repository for document operations.
+        system_event_emitter: Optional emitter for document.updated events.
+        include_set_content: Whether to also expose a full-replace tool for the project's own
+            document. The parent document is always edit-only.
+    """
+    tools: list[Tool] = []
+    if include_set_content:
+        tools.append(
+            create_set_document_content_tool(
+                project.specification,
+                document_repo,
+                document_parent=project,
+                system_event_emitter=system_event_emitter,
+            )
+        )
+    tools.append(
+        create_document_edit_tool(
+            project.specification,
+            document_repo,
+            document_parent=project,
+            system_event_emitter=system_event_emitter,
+        )
+    )
+    if project.parent is not None:
+        tools.append(
+            create_document_edit_tool(
+                project.parent.specification,
+                document_repo,
+                document_parent=project.parent,
+                system_event_emitter=system_event_emitter,
+            )
+        )
+    return tools

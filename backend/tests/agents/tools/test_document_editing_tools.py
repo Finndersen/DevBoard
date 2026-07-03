@@ -6,6 +6,7 @@ import pytest
 from pydantic_ai import ModelRetry
 
 from devboard.agents.tools.document_editing import (
+    build_project_context_document_tools,
     create_document_edit_tool,
     create_set_document_content_tool,
 )
@@ -325,3 +326,54 @@ class TestCreateSetDocumentContentTool:
         )
 
         assert tool.name == "set_task_specification_content"
+
+
+def _make_project_with_spec(*, is_initiative: bool, parent: Mock | None) -> Mock:
+    """Build a mock Project whose specification document type reflects its hierarchy position."""
+    project = Mock(spec=Project)
+    spec = Mock(spec=Document)
+    spec.document_type = "initiative_context" if is_initiative else "project_specification"
+    spec.content = "existing content"
+    project.specification = spec
+    project.is_initiative = is_initiative
+    project.parent = parent
+    return project
+
+
+class TestBuildProjectContextDocumentTools:
+    """Tests for the hierarchy-aware project/initiative context tool builder."""
+
+    def test_top_level_project_edit_only(self, mock_document_repo):
+        project = _make_project_with_spec(is_initiative=False, parent=None)
+
+        tools = build_project_context_document_tools(project, mock_document_repo)
+
+        assert [t.name for t in tools] == ["edit_project_specification"]
+
+    def test_top_level_project_with_set_content(self, mock_document_repo):
+        project = _make_project_with_spec(is_initiative=False, parent=None)
+
+        tools = build_project_context_document_tools(project, mock_document_repo, include_set_content=True)
+
+        assert [t.name for t in tools] == ["set_project_specification_content", "edit_project_specification"]
+
+    def test_initiative_yields_own_context_and_parent_specification(self, mock_document_repo):
+        parent = _make_project_with_spec(is_initiative=False, parent=None)
+        initiative = _make_project_with_spec(is_initiative=True, parent=parent)
+
+        tools = build_project_context_document_tools(initiative, mock_document_repo, include_set_content=True)
+
+        # Own context (set + edit) plus edit-only access to the parent project's specification.
+        assert [t.name for t in tools] == [
+            "set_initiative_context_content",
+            "edit_initiative_context",
+            "edit_project_specification",
+        ]
+
+    def test_initiative_parent_document_is_edit_only(self, mock_document_repo):
+        parent = _make_project_with_spec(is_initiative=False, parent=None)
+        initiative = _make_project_with_spec(is_initiative=True, parent=parent)
+
+        tools = build_project_context_document_tools(initiative, mock_document_repo)
+
+        assert [t.name for t in tools] == ["edit_initiative_context", "edit_project_specification"]

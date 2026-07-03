@@ -6,6 +6,7 @@ import pytest
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.roles.task_finalisation import TaskFinalisationAgentRole
+from devboard.db.models.document import Document, DocumentType
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import ConversationRepository, DocumentRepository
 from devboard.services.task_service import TaskService
@@ -47,7 +48,9 @@ def mock_conversation_repo():
 
 @pytest.fixture
 def mock_document_repo():
-    return Mock(spec=DocumentRepository)
+    repo = Mock(spec=DocumentRepository)
+    repo.db = Mock()
+    return repo
 
 
 @pytest.fixture
@@ -91,6 +94,22 @@ class TestTaskFinalisationAgentRole:
         tools = role.get_tools()
         tool_names = [tool.name for tool in tools]
 
+        assert "edit_project_specification" in tool_names
+
+    def test_get_tools_for_initiative_task_includes_both_context_tools(self, role, mock_task):
+        """A task under an initiative can edit both the initiative's context and the parent project."""
+        parent = Mock()
+        parent_spec = Mock(spec=Document)
+        parent_spec.document_type = DocumentType.PROJECT_SPECIFICATION
+        parent_spec.content = "# Parent"
+        parent.specification = parent_spec
+        mock_task.project.is_initiative = True
+        mock_task.project.parent = parent
+        mock_task.project.specification.document_type = DocumentType.INITIATIVE_CONTEXT
+
+        tool_names = [tool.name for tool in role.get_tools()]
+
+        assert "edit_initiative_context" in tool_names
         assert "edit_project_specification" in tool_names
 
     def test_get_tools_does_not_include_editing_tools(self, role):

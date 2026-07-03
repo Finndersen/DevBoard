@@ -6,9 +6,8 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.execution.registry import get_execution_manager
 from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import (
-    create_document_edit_tool,
+    build_project_context_document_tools,
     create_inspect_conversation_tool,
-    create_set_document_content_tool,
 )
 from devboard.agents.tools.codebase_management_tools import (
     create_update_codebase_tool,
@@ -134,10 +133,28 @@ def build_project_qa_context(
 ) -> str:
     spec_content = project.specification.content or _INITIAL_SETUP_GUIDANCE
     global_context_section = f"# Global Context\n<document>\n{global_context}\n</document>\n" if global_context else ""
-    context = f"""
-{global_context_section}PROJECT NAME: {project.name}
 
-PROJECT SPECIFICATION DOCUMENT:
+    parent_section = ""
+    if project.parent is not None:
+        parent_spec = project.parent.specification.content or "<empty>"
+        parent_section = f"""PARENT PROJECT NAME: {project.parent.name}
+
+PARENT PROJECT SPECIFICATION DOCUMENT:
+<document>
+{parent_spec}
+</document>
+
+"""
+
+    if project.is_initiative:
+        entity_label, document_label = "INITIATIVE", "INITIATIVE CONTEXT DOCUMENT"
+    else:
+        entity_label, document_label = "PROJECT", "PROJECT SPECIFICATION DOCUMENT"
+
+    context = f"""
+{global_context_section}{parent_section}{entity_label} NAME: {project.name}
+
+{document_label}:
 <document>
 {spec_content}
 </document>
@@ -184,17 +201,11 @@ class ProjectQAAgentRole(AgentRole):
         event_emitter = SystemEventEmitter(log_entry_repo)
 
         tools: list[Tool] = [
-            create_set_document_content_tool(
-                self.project.specification,
+            *build_project_context_document_tools(
+                self.project,
                 self.document_repository,
-                document_parent=self.project,
                 system_event_emitter=event_emitter,
-            ),
-            create_document_edit_tool(
-                self.project.specification,
-                self.document_repository,
-                document_parent=self.project,
-                system_event_emitter=event_emitter,
+                include_set_content=True,
             ),
             # Task query tools
             create_list_tasks_tool(self.project, self.task_service),

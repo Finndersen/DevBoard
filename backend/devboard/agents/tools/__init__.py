@@ -12,7 +12,11 @@ from .conversation_tools import (
     create_view_conversation_content_tool,
     create_view_conversation_details_tool,
 )
-from .document_editing import create_document_edit_tool, create_set_document_content_tool
+from .document_editing import (
+    build_project_context_document_tools,
+    create_document_edit_tool,
+    create_set_document_content_tool,
+)
 from .github_tools import create_get_pr_feedback_tool, create_get_pr_status_tool, create_github_pr_tool
 from .project_tools import (
     create_edit_project_specification_tool,
@@ -37,6 +41,7 @@ from .task_tools import (
 )
 
 __all__ = [
+    "build_project_context_document_tools",
     "create_code_structure_search_tool",
     "create_merge_branch_and_finalise_tool",
     "create_create_task_tool",

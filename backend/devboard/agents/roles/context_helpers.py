@@ -6,17 +6,21 @@ agent roles use to build their context content consistently.
 
 import logfire
 
-from devboard.db.models import Task
+from devboard.db.models import Project, Task
 
 
-def _format_project_metadata(task: Task) -> str:
-    """Format project name and description."""
-    return f"# Project\nName: {task.project.name}\nDescription: {task.project.description}"
+def _format_project_context(project: Project, *, header: str, include_specification: bool) -> str:
+    """Format a project (or initiative) block: name, description, and optionally its document.
 
-
-def _format_project_specification(task: Task) -> str:
-    """Format project specification document section."""
-    return _format_document_section("## Project Specification", task.project.specification.content)
+    The document heading reflects the entity kind — "Initiative Context" for an initiative,
+    "Project Specification" for a top-level project — so the two concepts stay distinct to the agent.
+    """
+    lines = [f"# {header}", f"Name: {project.name}", f"Description: {project.description}"]
+    section = "\n".join(lines)
+    if include_specification:
+        doc_title = "Initiative Context" if project.is_initiative else "Project Specification"
+        section += "\n\n" + _format_document_section(f"## {doc_title}", project.specification.content)
+    return section
 
 
 def _format_task_metadata(task: Task) -> str:
@@ -190,18 +194,25 @@ def build_task_context(
     if global_context:
         sections.append(f"# Global Context\n<document>\n{global_context}\n</document>")
 
-    sections.extend(
-        [
-            "You are working on a task associated with a project and a codebase repository.",
-            _format_project_metadata(task),
-        ]
-    )
+    sections.append("You are working on a task associated with a project and a codebase repository.")
+
+    project = task.project
+    if project.parent is not None:
+        sections.append(
+            _format_project_context(
+                project.parent, header="Parent Project", include_specification=include_project_specification
+            )
+        )
+        sections.append(
+            _format_project_context(project, header="Initiative", include_specification=include_project_specification)
+        )
+    else:
+        sections.append(
+            _format_project_context(project, header="Project", include_specification=include_project_specification)
+        )
 
     if task.custom_fields:
         sections.append(_format_custom_fields(task))
-
-    if include_project_specification:
-        sections.append(_format_project_specification(task))
 
     sections.append(_format_codebase_info(task, working_dir))
     sections.append(_format_task_metadata(task))

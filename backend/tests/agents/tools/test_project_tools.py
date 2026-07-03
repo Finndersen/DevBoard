@@ -42,6 +42,10 @@ def mock_project(mock_codebase, mock_specification):
     project.description = "A test project description"
     project.codebases = [mock_codebase]
     project.specification = mock_specification
+    project.parent_project_id = None
+    project.parent = None
+    project.initiatives = []
+    project.is_initiative = False
     return project
 
 
@@ -95,6 +99,8 @@ class TestListProjectsTool:
                 "id": 1,
                 "name": "Test Project",
                 "description": "A test project description",
+                "type": "project",
+                "parent_project_id": None,
                 "codebases": ["backend"],
             }
         ]
@@ -129,6 +135,9 @@ class TestViewProjectDetailsTool:
             "id": 1,
             "name": "Test Project",
             "description": "A test project description",
+            "type": "project",
+            "parent_project": None,
+            "initiatives": [],
             "codebases": ["backend"],
             "specification_content": "# Project Spec\n\nThis is the project specification.",
             "active_tasks": [],
@@ -190,7 +199,7 @@ class TestEditProjectSpecificationTool:
         mock_specification.content = None
         tool = create_edit_project_specification_tool(mock_project_repo, mock_document_repo)
 
-        with pytest.raises(ModelRetry, match="no content"):
+        with pytest.raises(ModelRetry, match="no specification content"):
             tool.function(project_id=1, edits=[DocumentEdit(old_string="x", new_string="y")])
 
     def test_raises_model_retry_when_edit_fails(self, mock_project_repo, mock_document_repo, mock_specification):

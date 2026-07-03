@@ -425,11 +425,24 @@ def create_mock_task(
     task.codebase = codebase
     task.codebase_id = codebase.id
 
-    # Mock project with codebases (needed for investigate_codebase tool)
+    # Mock project with codebases (needed for investigate_codebase tool). Defaults to a
+    # top-level project (not an initiative) with its own specification document.
     project = Mock(spec=Project)
     project.id = task_id * 1000
+    project.name = "Test Project"
+    project.description = "A test project"
     project.codebases = [codebase]
+    project.parent = None
+    project.parent_project_id = None
+    project.parent_project_name = None
+    project.is_initiative = False
+    project_spec_doc = Mock(spec=Document)
+    project_spec_doc.id = task_id * 10 + 2
+    project_spec_doc.document_type = DocumentType.PROJECT_SPECIFICATION
+    project_spec_doc.content = "# Project Spec\n\nProject content."
+    project.specification = project_spec_doc
     task.project = project
+    task.project_id = project.id
 
     # Mock additional attributes accessed by context builders
     task.github_pr_number = None
