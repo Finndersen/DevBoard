@@ -291,14 +291,12 @@ class ClaudeClient:
 
                 try:
                     result = await pydantic_tool.function_schema.call(validated_args, ctx=None)  # type: ignore[arg-type]  # ty:ignore[invalid-argument-type]
-                except Exception as e:
-                    error_text = f"An error occurred during tool execution: {e}"
+                except Exception:
                     logfire.exception(
                         f"Tool execution failed: {pydantic_tool.name}",
                         tool_name=pydantic_tool.name,
-                        tool_result=error_text,
                     )
-                    return {"content": [{"type": "text", "text": error_text}]}
+                    raise
 
                 # Convert result to Claude Code format
                 if isinstance(result, dict) and "content" in result:

@@ -146,6 +146,7 @@ class ClaudeCodeAgent(BaseAgent):
         self.session_id = session_id
         self.working_dir = working_dir
         self.last_result_message: ResultMessage | None = None
+        self.last_assistant_message: AssistantMessage | None = None
         self._additional_write_dirs = additional_write_dirs
         self._effort = effort
         self._client_mode = client_mode
@@ -220,16 +221,22 @@ class ClaudeCodeAgent(BaseAgent):
         return "\n\n".join(prompt_parts)
 
     def get_context_usage(self) -> ContextUsage | None:
-        """Extract ContextUsage from the last ResultMessage, if available."""
-        if self.last_result_message is None or self.last_result_message.usage is None:
+        """Extract ContextUsage from the last AssistantMessage and ResultMessage.
+
+        Token counts come from the last AssistantMessage (per-turn, reflects actual
+        current context size) to stay consistent with the history path which reads
+        per-turn usage from the session JSONL file. Cost comes from ResultMessage
+        which tracks cumulative cost for the run.
+        """
+        if self.last_assistant_message is None or self.last_assistant_message.usage is None:
             return None
-        usage = self.last_result_message.usage
+        usage = self.last_assistant_message.usage
         return ContextUsage(
             input_tokens=usage.get("input_tokens", 0),
             output_tokens=usage.get("output_tokens", 0),
             cache_read_tokens=usage.get("cache_read_input_tokens", 0),
             cache_write_tokens=usage.get("cache_creation_input_tokens", 0),
-            cost_usd=self.last_result_message.total_cost_usd,
+            cost_usd=self.last_result_message.total_cost_usd if self.last_result_message else None,
         )
 
     def get_virtual_tool(self, tool_name: str) -> VirtualTool | None:
@@ -336,6 +343,8 @@ class ClaudeCodeAgent(BaseAgent):
                         text_parts = [block.text for block in message.content if isinstance(block, TextBlock)]
                         if text_parts:
                             last_assistant_text = "\n".join(text_parts)
+                        if message.usage:
+                            self.last_assistant_message = message
                         yield message
                     elif isinstance(message, UserMessage):
                         yield message

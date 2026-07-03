@@ -4,7 +4,7 @@ import datetime
 from unittest.mock import Mock
 
 import pytest
-from claude_agent_sdk import ResultMessage
+from claude_agent_sdk import AssistantMessage, ResultMessage
 from pydantic_ai import Tool
 from sqlalchemy.orm import Session
 
@@ -41,6 +41,10 @@ def _make_result_message(usage: dict | None = None, total_cost_usd: float | None
     )
 
 
+def _make_assistant_message(usage: dict | None = None) -> AssistantMessage:
+    return AssistantMessage(content=[], model="claude-sonnet-4-5", usage=usage)
+
+
 class TestClaudeCodeAgentGetContextUsage:
     """Tests for ClaudeCodeAgent.get_context_usage()."""
 
@@ -49,24 +53,24 @@ class TestClaudeCodeAgentGetContextUsage:
         role = MockAgentRole()
         return ClaudeCodeAgent(role=role, model=None, session_id="test-session")
 
-    def test_returns_none_when_no_result_message(self, agent):
-        assert agent.last_result_message is None
+    def test_returns_none_when_no_assistant_message(self, agent):
+        assert agent.last_assistant_message is None
         assert agent.get_context_usage() is None
 
-    def test_returns_none_when_result_message_has_no_usage(self, agent):
-        agent.last_result_message = _make_result_message(usage=None)
+    def test_returns_none_when_assistant_message_has_no_usage(self, agent):
+        agent.last_assistant_message = _make_assistant_message(usage=None)
         assert agent.get_context_usage() is None
 
     def test_extracts_usage_fields(self, agent):
-        agent.last_result_message = _make_result_message(
+        agent.last_assistant_message = _make_assistant_message(
             usage={
                 "input_tokens": 100,
                 "output_tokens": 50,
                 "cache_read_input_tokens": 800,
                 "cache_creation_input_tokens": 200,
-            },
-            total_cost_usd=0.012,
+            }
         )
+        agent.last_result_message = _make_result_message(total_cost_usd=0.012)
 
         usage = agent.get_context_usage()
 
@@ -78,7 +82,7 @@ class TestClaudeCodeAgentGetContextUsage:
         assert usage.cost_usd == 0.012
 
     def test_extracts_usage_without_cost(self, agent):
-        agent.last_result_message = _make_result_message(
+        agent.last_assistant_message = _make_assistant_message(
             usage={
                 "input_tokens": 300,
                 "output_tokens": 80,
@@ -97,7 +101,7 @@ class TestClaudeCodeAgentGetContextUsage:
         assert usage.cost_usd is None
 
     def test_missing_usage_keys_default_to_zero(self, agent):
-        agent.last_result_message = _make_result_message(usage={"output_tokens": 42})
+        agent.last_assistant_message = _make_assistant_message(usage={"output_tokens": 42})
 
         usage = agent.get_context_usage()
 

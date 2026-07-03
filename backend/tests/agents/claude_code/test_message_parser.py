@@ -569,19 +569,50 @@ class TestDetectVirtualToolCall:
         assert result.valid is False
         assert result.validation_error is not None
 
-    def test_returns_none_for_malformed_json(self):
-        """Test that malformed JSON is not detected as a tool call."""
+    def test_malformed_json_with_real_tool_name_is_invalid_call_not_none(self):
+        """Malformed JSON referencing a concrete tool_name is a broken attempt, not silently dropped.
+
+        Silently returning None here means the model's edit is lost with no feedback loop -
+        it should instead surface as an invalid VirtualToolCall so the retry path kicks in.
+        """
         text = '{"tool_name": "test_tool", "arguments": {missing quote}}'
+
+        result = ClaudeResponseParser._detect_virtual_tool_call(text)
+
+        assert isinstance(result, VirtualToolCall)
+        assert result.valid is False
+        assert result.tool_name == "test_tool"
+        assert result.validation_error is not None
+        assert "Malformed JSON" in result.validation_error
+
+    def test_malformed_json_with_preamble_and_real_tool_name_is_invalid_call(self):
+        """Malformed JSON with preamble referencing a concrete tool_name is a broken attempt."""
+        text = """Let me update the specification.
+
+{"tool_name": "edit_task", "arguments": {missing: "quote"}}"""
+
+        result = ClaudeResponseParser._detect_virtual_tool_call(text)
+
+        assert isinstance(result, VirtualToolCall)
+        assert result.valid is False
+        assert result.tool_name == "edit_task"
+
+    def test_malformed_json_with_placeholder_tool_name_returns_none(self):
+        """Malformed JSON using the literal '<tool_name>' placeholder is not a genuine attempt.
+
+        This placeholder comes from the system prompt's own format example
+        (TOOL_RESPONSE_FORMAT), so the model may echo it back while discussing the
+        format rather than actually trying to call a tool.
+        """
+        text = '{"tool_name": "<tool_name>", "arguments": {missing quote}}'
 
         result = ClaudeResponseParser._detect_virtual_tool_call(text)
 
         assert result is None
 
-    def test_returns_none_for_malformed_json_with_preamble(self):
-        """Test that malformed JSON with preamble is not detected as a tool call."""
-        text = """Let me update the specification.
-
-{"tool_name": "edit_task", "arguments": {missing: "quote"}}"""
+    def test_malformed_json_without_tool_name_returns_none(self):
+        """Malformed JSON with no tool_name key at all is not a tool call attempt."""
+        text = '{"some_field": {missing quote}}'
 
         result = ClaudeResponseParser._detect_virtual_tool_call(text)
 

@@ -179,8 +179,44 @@ class ClaudeResponseParser:
     # Pre-compiled fence pattern for code block detection
     _fence_pattern = re.compile(r"^(.*?)```(?:json)?\s*\n([\s\S]*?)\n```([\s\S]*)$", re.DOTALL)
 
+    # Heuristic used only when JSON parsing fails, to tell a genuine (but malformed)
+    # tool call attempt apart from incidental "tool_name" JSON in explanatory prose
+    _tool_name_hint_pattern = re.compile(r'"tool_name"\s*:\s*"([^"]+)"')
+
+    # Placeholder value from the system prompt's own tool-call format example (see
+    # virtual_tools.py TOOL_RESPONSE_FORMAT) - not a genuine tool call attempt
+    _tool_name_placeholder = "<tool_name>"
+
     # Cached JSONDecoder instance
     _json_decoder = json.JSONDecoder()
+
+    @classmethod
+    def _malformed_tool_call_attempt(cls, json_region: str, error: json.JSONDecodeError) -> VirtualToolCall | None:
+        """Check whether malformed JSON looks like a genuine (broken) tool call attempt.
+
+        JSON syntax errors are ambiguous: they could be a botched tool call, or
+        incidental JSON-shaped text in an explanation (e.g. the model echoing the
+        tool-call format from its own system prompt). We treat any region containing
+        a concrete "tool_name" key as an attempt worth surfacing as an error/retry,
+        rather than silently dropping it as plain text.
+
+        Args:
+            json_region: The text region that failed to parse as JSON
+            error: The JSONDecodeError raised while parsing json_region
+
+        Returns:
+            An invalid VirtualToolCall if a tool_name hint is found, None otherwise
+        """
+        hint_match = cls._tool_name_hint_pattern.search(json_region)
+        if not hint_match or hint_match.group(1) == cls._tool_name_placeholder:
+            return None
+
+        return VirtualToolCall(
+            tool_name=hint_match.group(1),
+            arguments={},
+            valid=False,
+            validation_error=f"Malformed JSON in tool call: {error}",
+        )
 
     @classmethod
     def _detect_virtual_tool_call(cls, text: str) -> VirtualToolCall | None:
@@ -224,8 +260,8 @@ class ClaudeResponseParser:
         # correctly handling any nesting depth without over-consuming
         try:
             json_data, end_pos = cls._json_decoder.raw_decode(json_region, brace_pos)
-        except json.JSONDecodeError:
-            return None
+        except json.JSONDecodeError as e:
+            return cls._malformed_tool_call_attempt(json_region, e)
 
         if not isinstance(json_data, dict) or "tool_name" not in json_data:
             return None
