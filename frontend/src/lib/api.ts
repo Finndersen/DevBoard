@@ -944,7 +944,7 @@ export interface LogEntryUpdate {
 }
 
 // Background Agents
-export type AgentEngine = 'internal' | 'claude_code' | 'gemini_cli'
+export type AgentEngine = 'internal' | 'claude_code' | 'gemini_cli' | 'codex'
 
 export type BackgroundAgentRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 

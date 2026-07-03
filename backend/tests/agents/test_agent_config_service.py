@@ -168,14 +168,24 @@ class TestAgentConfigService:
 
         # All engines are available for all roles
         engine_names = {e.engine for e in project_config.available_engines}
-        assert engine_names == {AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE, AgentEngine.GEMINI_CLI}
+        assert engine_names == {
+            AgentEngine.INTERNAL,
+            AgentEngine.CLAUDE_CODE,
+            AgentEngine.GEMINI_CLI,
+            AgentEngine.CODEX,
+        }
 
         task_impl_config = agent_config_service.get_agent_configuration(AgentRoleType.TASK_IMPLEMENTATION)
         assert task_impl_config.agent_role == "task_implementation"
 
         # All roles get all engines
         engine_names = {e.engine for e in task_impl_config.available_engines}
-        assert engine_names == {AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE, AgentEngine.GEMINI_CLI}
+        assert engine_names == {
+            AgentEngine.INTERNAL,
+            AgentEngine.CLAUDE_CODE,
+            AgentEngine.GEMINI_CLI,
+            AgentEngine.CODEX,
+        }
 
     def test_language_model_full_name(self, language_model_repository):
         """LanguageModelDB should have correct full_name and display_full_name."""
@@ -336,7 +346,12 @@ class TestAgentConfigService:
         """get_available_engines_for_agent_role was removed; get_available_engines returns all engines."""
         available = agent_engine_registry.get_available_engines()
         engine_values = {defn.engine for defn in available}
-        assert engine_values == {AgentEngine.INTERNAL, AgentEngine.CLAUDE_CODE, AgentEngine.GEMINI_CLI}
+        assert engine_values == {
+            AgentEngine.INTERNAL,
+            AgentEngine.CLAUDE_CODE,
+            AgentEngine.GEMINI_CLI,
+            AgentEngine.CODEX,
+        }
 
     def test_get_effective_config_uses_global_default_when_role_engine_is_null(self, agent_config_service):
         """When role has no engine set, get_effective_config resolves to global default engine."""

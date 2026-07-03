@@ -277,7 +277,7 @@ export const handlers = [
     if (configKey === 'agents.global') {
       return HttpResponse.json({
         key: configKey,
-        fields: [{ name: 'default_engine', type: 'enum', required: false, description: 'Default agent engine', effective_value: 'claude_code', env_value: null, db_value: null, default_value: 'claude_code', is_secret: false, env_var_name: null, is_overridden: false, enum_values: ['claude_code', 'internal', 'gemini_cli'] }],
+        fields: [{ name: 'default_engine', type: 'enum', required: false, description: 'Default agent engine', effective_value: 'claude_code', env_value: null, db_value: null, default_value: 'claude_code', is_secret: false, env_var_name: null, is_overridden: false, enum_values: ['claude_code', 'internal', 'gemini_cli', 'codex'] }],
         is_valid: true,
       })
     }
@@ -478,6 +478,10 @@ export const handlers = [
         'gemini_cli': [
           { id: 'google:gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google', model_type: 'standard' },
           { id: 'google:gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google', model_type: 'fast' },
+        ],
+        'codex': [
+          { id: 'openai:gpt-5', name: 'GPT-5', provider: 'openai', model_type: 'standard' },
+          { id: 'openai:gpt-4.1', name: 'GPT-4.1', provider: 'openai', model_type: 'standard' },
         ]
       }
     })

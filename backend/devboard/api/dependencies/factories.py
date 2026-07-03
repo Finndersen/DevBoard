@@ -10,6 +10,7 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.conversation_history import create_conversation_history_service
 from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.claude_code import ClaudeCodeAgentExecutionService
+from devboard.agents.engines.codex import CodexAgentExecutionService
 from devboard.agents.engines.internal import PydanticAIAgentExecutionService
 from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.agents.roles import AgentRole, AgentRoleType
@@ -225,6 +226,18 @@ def create_agent_execution_service(
             interrupt_event=interrupt_event,
             additional_write_dirs=additional_write_dirs,
             effort=effort,
+        )
+    elif conversation.engine == AgentEngine.CODEX:
+        return CodexAgentExecutionService(
+            conversation=conversation,
+            role=role,
+            conversation_repository=conversation_repo,
+            history_service=history_service,
+            agent_config_service=agent_config_service,
+            working_dir=working_dir,
+            additional_tools=additional_tools,
+            oauth_service=oauth_service,
+            interrupt_event=interrupt_event,
         )
     else:
         raise HTTPException(

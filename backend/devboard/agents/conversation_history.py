@@ -80,6 +80,7 @@ def create_conversation_history_service(
     # Lazy imports to avoid circular dependency: tools → conversation_history → engines → tools
     from devboard.agents.engines import AgentEngine
     from devboard.agents.engines.claude_code import ClaudeCodeConversationHistoryService
+    from devboard.agents.engines.codex import CodexConversationHistoryService
     from devboard.agents.engines.internal import PydanticAIConversationHistoryService
 
     if conversation.engine == AgentEngine.INTERNAL:
@@ -89,6 +90,11 @@ def create_conversation_history_service(
         )
     elif conversation.engine == AgentEngine.CLAUDE_CODE:
         return ClaudeCodeConversationHistoryService(
+            conversation=conversation,
+            conversation_repository=conversation_repo,
+        )
+    elif conversation.engine == AgentEngine.CODEX:
+        return CodexConversationHistoryService(
             conversation=conversation,
             conversation_repository=conversation_repo,
         )

@@ -21,9 +21,9 @@ class TestAgentsRouter:
         assert data["enabled_mcp_tools"] == []  # Empty by default
 
         # All engines should be available for all roles
-        assert len(data["available_engines"]) == 3
+        assert len(data["available_engines"]) == 4
         engine_names = {e["engine"] for e in data["available_engines"]}
-        assert engine_names == {"internal", "claude_code", "gemini_cli"}
+        assert engine_names == {"internal", "claude_code", "gemini_cli", "codex"}
 
     def test_get_agent_configuration_task_implementation(self, client):
         """TASK_IMPLEMENTATION should allow multiple engines."""
@@ -34,9 +34,9 @@ class TestAgentsRouter:
         assert data["agent_role"] == "task_implementation"
 
         # All engines should be available for all roles
-        assert len(data["available_engines"]) == 3
+        assert len(data["available_engines"]) == 4
         engine_names = {e["engine"] for e in data["available_engines"]}
-        assert engine_names == {"internal", "claude_code", "gemini_cli"}
+        assert engine_names == {"internal", "claude_code", "gemini_cli", "codex"}
 
     def test_get_agent_configuration_invalid_role(self, client):
         """Invalid agent role should return 400."""

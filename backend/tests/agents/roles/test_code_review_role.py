@@ -85,6 +85,6 @@ class TestCodeReviewAgentRole:
             content = await role.get_context_content()
 
         mock_build.assert_called_once_with(
-            mock_task, working_dir=str(mock_task.codebase.local_path), include_step_outcomes=True
+            mock_task, working_dir=str(mock_task.codebase.local_path), include_step_outcomes=True, global_context=None
         )
         assert content == "mocked context"

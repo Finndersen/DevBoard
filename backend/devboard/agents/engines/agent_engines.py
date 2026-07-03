@@ -21,6 +21,7 @@ class AgentEngine(StrEnum):
     INTERNAL = "internal"
     CLAUDE_CODE = "claude_code"
     GEMINI_CLI = "gemini_cli"
+    CODEX = "codex"
 
 
 @dataclass
@@ -64,6 +65,13 @@ ALL_ENGINES: list[AgentEngineDefinition] = [
         description="Google's Gemini command-line interface",
         available_provider=LLMProvider.GOOGLE,  # Only supports Google models
         requires_model_selection=False,  # Can use Gemini CLI's default model
+    ),
+    AgentEngineDefinition(
+        engine=AgentEngine.CODEX,
+        display_name="Codex",
+        description="OpenAI's Codex CLI agent",
+        available_provider=LLMProvider.OPENAI,
+        requires_model_selection=False,
     ),
 ]
 
