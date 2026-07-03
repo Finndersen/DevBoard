@@ -100,45 +100,48 @@ class HarnessMCPHost:
         self._port = sock.getsockname()[1]
         self._bound_socket = sock
 
-        # Build one session manager per registered server
-        for name, server in self._servers.items():
-            self._session_managers[name] = StreamableHTTPSessionManager(
-                app=server,
-                stateless=True,
-                json_response=True,
+        try:
+            # Build one session manager per registered server
+            for name, server in self._servers.items():
+                self._session_managers[name] = StreamableHTTPSessionManager(
+                    app=server,
+                    stateless=True,
+                    json_response=True,
+                )
+
+            # Capture for closure
+            session_managers = self._session_managers
+
+            @contextlib.asynccontextmanager
+            async def lifespan(app: Starlette):  # type: ignore[type-arg]
+                async with contextlib.AsyncExitStack() as stack:
+                    for sm in session_managers.values():
+                        await stack.enter_async_context(sm.run())
+                    yield
+
+            routes = [Mount(f"/mcp/{name}", app=sm.handle_request) for name, sm in self._session_managers.items()]
+            self._starlette_app = Starlette(routes=routes, lifespan=lifespan)
+
+            config = uvicorn.Config(
+                app=self._starlette_app,
+                fd=sock.fileno(),
+                log_level="warning",
+                lifespan="on",
             )
+            self._uvicorn_server = uvicorn.Server(config)
+            self._uvicorn_task = asyncio.create_task(self._uvicorn_server.serve())
 
-        # Capture for closure
-        session_managers = self._session_managers
+            for _ in range(100):
+                if self._uvicorn_server.started:
+                    logfire.debug("HarnessMCPHost started on port {port}", port=self._port)
+                    return self._port
+                await asyncio.sleep(0.05)
 
-        @contextlib.asynccontextmanager
-        async def lifespan(app: Starlette):  # type: ignore[type-arg]
-            async with contextlib.AsyncExitStack() as stack:
-                for sm in session_managers.values():
-                    await stack.enter_async_context(sm.run())
-                yield
-
-        routes = [Mount(f"/mcp/{name}", app=sm.handle_request) for name, sm in self._session_managers.items()]
-        self._starlette_app = Starlette(routes=routes, lifespan=lifespan)
-
-        config = uvicorn.Config(
-            app=self._starlette_app,
-            fd=sock.fileno(),
-            log_level="warning",
-            lifespan="on",
-        )
-        self._uvicorn_server = uvicorn.Server(config)
-        self._uvicorn_task = asyncio.create_task(self._uvicorn_server.serve())
-
-        for _ in range(100):
-            if self._uvicorn_server.started:
-                logfire.debug("HarnessMCPHost started on port {port}", port=self._port)
-                return self._port
-            await asyncio.sleep(0.05)
-
-        sock.close()
-        self._bound_socket = None
-        raise RuntimeError("uvicorn server failed to start within 5s")
+            raise RuntimeError("uvicorn server failed to start within 5s")
+        except Exception:
+            self._bound_socket.close()
+            self._bound_socket = None
+            raise
 
     async def stop(self) -> None:
         """Shut down uvicorn. Idempotent."""
