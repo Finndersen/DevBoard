@@ -82,16 +82,16 @@ describe('HtmlPreview', () => {
     expect(iframe.style.height).toBe('250px')
   })
 
-  it('caps height at 500px', () => {
+  it('caps height at 1000px', () => {
     renderWithProvider(<HtmlPreview code="<p>Hello</p>" language="html" />)
     const iframe = screen.getByTitle('HTML Preview') as HTMLIFrameElement
 
     fireEvent(window, new MessageEvent('message', {
-      data: { type: '__html_preview_resize', height: 800 },
+      data: { type: '__html_preview_resize', height: 1500 },
       source: iframe.contentWindow,
     }))
 
-    expect(iframe.style.height).toBe('500px')
+    expect(iframe.style.height).toBe('1000px')
   })
 
   describe('Expand Button', () => {
@@ -99,7 +99,28 @@ describe('HtmlPreview', () => {
       renderWithProvider(<HtmlPreview code="<p>Hello</p>" language="html" />)
       const expandButton = screen.getByTitle('Expand to fullscreen')
       expect(expandButton).toBeInTheDocument()
-      expect(expandButton).toHaveTextContent('⛶')
+      expect(expandButton).toHaveTextContent('Expand ⛶')
+    })
+
+    it('opens modal when header bar is clicked while on preview tab', async () => {
+      const user = userEvent.setup()
+      renderWithProvider(<HtmlPreview code="<p>Hello</p>" language="html" />)
+
+      const tabBar = screen.getByRole('tablist')
+      await user.click(tabBar)
+
+      expect(screen.getByText('HTML Preview')).toBeInTheDocument()
+    })
+
+    it('does not open modal when header bar is clicked while on source tab', async () => {
+      const user = userEvent.setup()
+      renderWithProvider(<HtmlPreview code="<p>Hello</p>" language="html" />)
+
+      await user.click(screen.getByText('Source'))
+      const tabBar = screen.getByRole('tablist')
+      await user.click(tabBar)
+
+      expect(screen.queryByText('HTML Preview')).not.toBeInTheDocument()
     })
 
     it('opens modal when Expand button is clicked', async () => {

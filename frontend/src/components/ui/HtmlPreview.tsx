@@ -8,8 +8,8 @@ interface HtmlPreviewProps {
   language: 'html' | 'svg'
 }
 
-const MAX_HEIGHT = 500
-const DEFAULT_HEIGHT = 150
+const MAX_HEIGHT = 1000
+const DEFAULT_HEIGHT = 300
 
 const HEIGHT_MEASUREMENT_SCRIPT = `
 <script>
@@ -55,14 +55,20 @@ export default function HtmlPreview({ code, language }: HtmlPreviewProps) {
 
   const srcdoc = buildSrcdoc(code)
 
+  const openModal = () => setIsModalOpen(true)
+
   return (
     <div className={`border ${borderColors.default} rounded-lg overflow-hidden`}>
-      <div role="tablist" className={`flex items-center gap-1 px-3 py-1.5 ${surfaces.sunken} border-b ${borderColors.default}`}>
+      <div
+        role="tablist"
+        className={`flex items-center gap-1 px-3 py-1.5 ${surfaces.sunken} border-b ${borderColors.default} ${activeTab === 'preview' ? 'cursor-pointer hover:brightness-95' : ''}`}
+        onClick={activeTab === 'preview' ? openModal : undefined}
+      >
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === 'preview'}
-          onClick={() => setActiveTab('preview')}
+          onClick={(e) => { e.stopPropagation(); setActiveTab('preview') }}
           className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${
             activeTab === 'preview'
               ? 'bg-white dark:bg-white/[0.06] text-gray-900 dark:text-gray-100 shadow-sm'
@@ -75,7 +81,7 @@ export default function HtmlPreview({ code, language }: HtmlPreviewProps) {
           type="button"
           role="tab"
           aria-selected={activeTab === 'source'}
-          onClick={() => setActiveTab('source')}
+          onClick={(e) => { e.stopPropagation(); setActiveTab('source') }}
           className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${
             activeTab === 'source'
               ? 'bg-white dark:bg-white/[0.06] text-gray-900 dark:text-gray-100 shadow-sm'
@@ -90,12 +96,12 @@ export default function HtmlPreview({ code, language }: HtmlPreviewProps) {
           </span>
           <button
             type="button"
-            onClick={() => setIsModalOpen(true)}
+            onClick={(e) => { e.stopPropagation(); openModal() }}
             className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${textColors.muted} hover:text-gray-700 dark:hover:text-gray-300`}
             title="Expand to fullscreen"
             aria-label="Expand to fullscreen"
           >
-            ⛶
+            Expand ⛶
           </button>
         </div>
       </div>
@@ -107,7 +113,7 @@ export default function HtmlPreview({ code, language }: HtmlPreviewProps) {
           sandbox="allow-scripts"
           title={`${language.toUpperCase()} Preview`}
           style={{ height: `${height}px` }}
-          className="w-full border-none bg-white rounded-b-lg"
+          className="w-full border-none bg-white rounded-b-lg overflow-auto"
         />
       ) : (
         <CodeBlock code={code} language={language} />
