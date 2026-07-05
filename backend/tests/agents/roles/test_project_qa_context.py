@@ -11,6 +11,7 @@ from devboard.db.models.codebase import Codebase
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import CodebaseRepository, DocumentRepository, ProjectRepository, TaskRepository
 from devboard.db.repositories.custom_field import CustomFieldRepository
+from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
 from devboard.services.conversation_service import ConversationService
 from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_service import RECENT_COMPLETED_TASKS_LIMIT, TaskService
@@ -62,6 +63,7 @@ def task_service(db_session) -> TaskService:
         task_repo=TaskRepository(db_session),
         custom_field_repo=Mock(spec=CustomFieldRepository),
         system_event_emitter=Mock(spec=SystemEventEmitter),
+        plan_repo=Mock(spec=TaskImplementationPlanRepository),
     )
 
 

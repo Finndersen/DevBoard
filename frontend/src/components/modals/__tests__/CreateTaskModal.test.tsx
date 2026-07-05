@@ -1,19 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { render } from '../../../test/utils'
+import { render, mockNavigate } from '../../../test/utils'
 import CreateTaskModal from '../CreateTaskModal'
 import { useUIStore } from '../../../stores/uiStore'
-import type { Task, AgentConfigurationResponse, Codebase } from '../../../lib/api'
-
-// Mock react-router-dom
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom')
-  return {
-    ...actual,
-    useNavigate: vi.fn(),
-  }
-})
+import type { Task, AgentConfigurationResponse, Codebase, Project } from '../../../lib/api'
 
 const TEST_DRAFT_ID = 'test-draft-id'
 const TEST_PROJECT_ID = '1'
@@ -74,6 +65,7 @@ vi.mock('../../../lib/api', () => ({
     getCustomFieldDefinitions: vi.fn(),
     getAgentConfiguration: vi.fn(),
     createTask: vi.fn(),
+    createTaskFromPR: vi.fn(),
     getProjectTasks: vi.fn().mockResolvedValue([]),
   },
 }))
@@ -312,6 +304,155 @@ describe('CreateTaskModal — model type selector', () => {
     expect(seedInitialMessageSpy).not.toHaveBeenCalled()
 
     seedInitialMessageSpy.mockRestore()
+  })
+})
+
+describe('CreateTaskModal — From PR tab', () => {
+  const mockProjects: Project[] = [
+    {
+      id: 1,
+      name: 'Test Project',
+      description: 'A test project',
+      specification_document_id: 1,
+      default_conversation_id: null,
+      created_at: '2024-01-01T00:00:00Z',
+      custom_fields: null,
+      parent_project_id: null,
+      parent_project_name: null,
+      complete: false,
+    },
+  ]
+
+  const mockPRTask: Task = {
+    id: 42,
+    title: 'Fix auth bug',
+    status: 'pr_open' as Task['status'],
+    project_id: 1,
+    codebase_id: 1,
+    conversation_id: 5,
+    created_at: '2024-01-01T00:00:00Z',
+    specification_document_id: 10,
+    implementation_plan_document_id: null,
+    implementation_plan_id: null,
+    change_summary_document_id: null,
+    custom_fields: null,
+    github_pr_number: 42,
+    available_workflow_actions: [],
+  }
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    mockNavigate.mockClear()
+    const { apiClient } = await import('../../../lib/api')
+    vi.mocked(apiClient.getProjects).mockResolvedValue(mockProjects)
+    vi.mocked(apiClient.getProjectCodebases).mockResolvedValue(mockCodabases)
+    vi.mocked(apiClient.getCustomFieldDefinitions).mockResolvedValue([])
+    vi.mocked(apiClient.getAgentConfiguration).mockResolvedValue(mockAgentConfig)
+    vi.mocked(apiClient.getProjectTasks).mockResolvedValue([])
+
+    useUIStore.setState({ openModalDraft: TEST_DRAFT_ID, modalDrafts: {} })
+  })
+
+  it('"From PR" tab renders PR URL input when clicked', async () => {
+    const user = userEvent.setup()
+    render(<CreateTaskModal draftId={TEST_DRAFT_ID} onClose={vi.fn()} projectId={TEST_PROJECT_ID} />)
+
+    await user.click(screen.getByRole('button', { name: 'From PR' }))
+
+    expect(screen.getByPlaceholderText('https://github.com/owner/repo/pull/123')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Import PR as Task' })).toBeInTheDocument()
+  })
+
+  it('shows project selector when no projectId prop', async () => {
+    const user = userEvent.setup()
+    render(<CreateTaskModal draftId={TEST_DRAFT_ID} onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'From PR' }))
+
+    await screen.findByRole('option', { name: 'Test Project' })
+    expect(screen.getByRole('combobox')).toBeInTheDocument()
+  })
+
+  it('does not show project selector when projectId prop is provided', async () => {
+    const user = userEvent.setup()
+    render(<CreateTaskModal draftId={TEST_DRAFT_ID} onClose={vi.fn()} projectId={TEST_PROJECT_ID} />)
+
+    await user.click(screen.getByRole('button', { name: 'From PR' }))
+
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+
+  it('calls createTaskFromPR with pr_url on submit', async () => {
+    const { apiClient } = await import('../../../lib/api')
+    vi.mocked(apiClient.createTaskFromPR).mockResolvedValue(mockPRTask)
+
+    const user = userEvent.setup()
+    render(<CreateTaskModal draftId={TEST_DRAFT_ID} onClose={vi.fn()} projectId={TEST_PROJECT_ID} />)
+
+    await user.click(screen.getByRole('button', { name: 'From PR' }))
+    await user.type(
+      screen.getByPlaceholderText('https://github.com/owner/repo/pull/123'),
+      'https://github.com/owner/repo/pull/42'
+    )
+    await user.click(screen.getByRole('button', { name: 'Import PR as Task' }))
+
+    await waitFor(() => {
+      expect(apiClient.createTaskFromPR).toHaveBeenCalledWith(TEST_PROJECT_ID, {
+        pr_url: 'https://github.com/owner/repo/pull/42',
+      })
+    })
+  })
+
+  it('navigates to the new task on success', async () => {
+    const { apiClient } = await import('../../../lib/api')
+    vi.mocked(apiClient.createTaskFromPR).mockResolvedValue(mockPRTask)
+
+    const user = userEvent.setup()
+    render(<CreateTaskModal draftId={TEST_DRAFT_ID} onClose={vi.fn()} projectId={TEST_PROJECT_ID} />)
+
+    await user.click(screen.getByRole('button', { name: 'From PR' }))
+    await user.type(
+      screen.getByPlaceholderText('https://github.com/owner/repo/pull/123'),
+      'https://github.com/owner/repo/pull/42'
+    )
+    await user.click(screen.getByRole('button', { name: 'Import PR as Task' }))
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith(`/tasks/${mockPRTask.id}`)
+    })
+  })
+
+  it('displays API error message inline on failure', async () => {
+    const { apiClient } = await import('../../../lib/api')
+    vi.mocked(apiClient.createTaskFromPR).mockRejectedValue(new Error('PR is not open'))
+
+    const user = userEvent.setup()
+    render(<CreateTaskModal draftId={TEST_DRAFT_ID} onClose={vi.fn()} projectId={TEST_PROJECT_ID} />)
+
+    await user.click(screen.getByRole('button', { name: 'From PR' }))
+    await user.type(
+      screen.getByPlaceholderText('https://github.com/owner/repo/pull/123'),
+      'https://github.com/owner/repo/pull/42'
+    )
+    await user.click(screen.getByRole('button', { name: 'Import PR as Task' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('PR is not open')).toBeInTheDocument()
+    })
+  })
+
+  it('"New Task" tab still renders correctly after switching tabs', async () => {
+    const user = userEvent.setup()
+    render(<CreateTaskModal draftId={TEST_DRAFT_ID} onClose={vi.fn()} projectId={TEST_PROJECT_ID} />)
+
+    // Switch to From PR tab
+    await user.click(screen.getByRole('button', { name: 'From PR' }))
+    expect(screen.getByPlaceholderText('https://github.com/owner/repo/pull/123')).toBeInTheDocument()
+
+    // Switch back to New Task tab
+    await user.click(screen.getByRole('button', { name: 'New Task' }))
+    expect(screen.getByPlaceholderText(/Describe what you want/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Create Task/i })).toBeInTheDocument()
   })
 })
 

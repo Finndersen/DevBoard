@@ -159,6 +159,7 @@ def get_task_service(
     task_repo: TaskRepository = Depends(get_task_repository),
     custom_field_repo: CustomFieldRepository = Depends(get_custom_field_repository),
     system_event_emitter: SystemEventEmitter = Depends(get_system_event_emitter),
+    plan_repo: TaskImplementationPlanRepository = Depends(get_task_implementation_plan_repository),
 ):
     """Get TaskService instance."""
     return TaskService(
@@ -167,6 +168,7 @@ def get_task_service(
         task_repo=task_repo,
         custom_field_repo=custom_field_repo,
         system_event_emitter=system_event_emitter,
+        plan_repo=plan_repo,
     )
 
 

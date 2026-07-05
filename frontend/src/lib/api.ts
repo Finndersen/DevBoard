@@ -167,6 +167,10 @@ export interface TaskCreate {
   model_type?: 'fast' | 'standard' | 'advanced' | 'auto'  // Optional - agent model tier for task planning
 }
 
+export interface TaskCreateFromPR {
+  pr_url: string
+}
+
 // Custom Field Definition types
 export type CustomFieldType = 'text' | 'boolean' | 'enum'
 export type CustomFieldEntityType = 'task' | 'project' | 'codebase'
@@ -1183,6 +1187,13 @@ export class ApiClient {
     return this.request<Task>(`/api/projects/${projectId}/tasks`, {
       method: 'POST',
       body: JSON.stringify(task),
+    })
+  }
+
+  async createTaskFromPR(projectId: number | string, data: TaskCreateFromPR): Promise<Task> {
+    return this.request<Task>(`/api/projects/${projectId}/tasks/from-pr`, {
+      method: 'POST',
+      body: JSON.stringify(data),
     })
   }
 

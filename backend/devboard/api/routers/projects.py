@@ -23,6 +23,7 @@ from devboard.api.dependencies.repositories import (
 from devboard.api.dependencies.services import (
     get_agent_config_service,
     get_conversation_service,
+    get_integration_service,
     get_project_service,
     get_system_event_emitter,
     get_task_service,
@@ -41,6 +42,7 @@ from devboard.api.schemas.conversation import (
     CreateConversationResponse,
     CreateProjectConversationRequest,
 )
+from devboard.api.schemas.task import TaskCreateFromPR
 from devboard.db.models import ParentEntityType
 from devboard.db.models.enums import EntityType
 from devboard.db.models.project import Project
@@ -52,7 +54,10 @@ from devboard.db.repositories import (
     ProjectRepository,
     TaskRepository,
 )
+from devboard.integrations.base import IntegrationConfigurationError
+from devboard.integrations.github import GitHubIntegration
 from devboard.services.conversation_service import ConversationService
+from devboard.services.integration_service import IntegrationService
 from devboard.services.project_service import ProjectService
 from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_service import TaskService
@@ -442,6 +447,94 @@ async def create_project_task(
         implementation_plan_document_id=(
             created_task.implementation_plan.id if created_task.implementation_plan else None
         ),
+        custom_fields=created_task.custom_fields,
+    )
+
+
+@router.post("/{project_id}/tasks/from-pr", response_model=TaskResponse)
+async def create_project_task_from_pr(
+    project_id: int,
+    body: TaskCreateFromPR,
+    task_service: TaskService = Depends(get_task_service),
+    codebase_repo: CodebaseRepository = Depends(get_codebase_repository),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repository),
+    project_repo: ProjectRepository = Depends(get_project_repository),
+    integration_service: IntegrationService = Depends(get_integration_service),
+):
+    """Create a task from an existing open GitHub PR, placing it directly in PR_OPEN state."""
+    project = project_repo.get_by_id(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Parse the PR URL
+    try:
+        owner, repo_name, pr_number = GitHubIntegration.parse_pr_url(body.pr_url)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    # Find a matching codebase by repository URL
+    codebases = codebase_repo.get_all()
+    matched_codebase = None
+    for codebase in codebases:
+        if not codebase.repository_url:
+            continue
+        try:
+            cb_owner, cb_repo = GitHubIntegration.parse_repo_url(codebase.repository_url)
+        except ValueError:
+            continue
+        if cb_owner.lower() == owner.lower() and cb_repo.lower() == repo_name.lower():
+            matched_codebase = codebase
+            break
+
+    if matched_codebase is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No registered codebase found for repository {owner}/{repo_name}",
+        )
+
+    # Fetch PR data from GitHub
+    try:
+        github = integration_service.get_integration_instance(GitHubIntegration)
+    except IntegrationConfigurationError as e:
+        raise HTTPException(status_code=400, detail=f"GitHub integration not configured: {e}") from e
+
+    gh_repo = await github.get_repository(owner, repo_name)
+    gh_pr = await gh_repo.get_pull_request(pr_number)
+
+    if gh_pr.pr.state != "open":
+        raise HTTPException(
+            status_code=400,
+            detail=f"PR #{pr_number} is not open (state: {gh_pr.pr.state})",
+        )
+
+    title = gh_pr.pr.title
+    branch_name = gh_pr.pr.head.ref
+    spec_content = gh_pr.pr.body or ""
+    base_branch = matched_codebase.default_branch
+
+    created_task = await task_service.create_task_from_pr(
+        project_id=project_id,
+        title=title,
+        branch_name=branch_name,
+        base_branch=base_branch,
+        codebase_id=matched_codebase.id,
+        spec_content=spec_content,
+        github_pr_number=pr_number,
+    )
+
+    conversation = conversation_repo.get_active_conversation_for_entity(ParentEntityType.TASK, created_task.id)
+
+    return TaskResponse(
+        id=created_task.id,
+        title=created_task.title,
+        project_id=created_task.project_id,
+        codebase_id=created_task.codebase_id,
+        status=created_task.status,
+        conversation_id=conversation.id,
+        created_at=created_task.created_at,
+        specification_document_id=created_task.specification.id,
+        implementation_plan_document_id=None,
+        github_pr_number=created_task.github_pr_number,
         custom_fields=created_task.custom_fields,
     )
 

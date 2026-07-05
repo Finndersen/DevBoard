@@ -9,6 +9,9 @@ import { useDataStore } from '../../stores/dataStore'
 import { useUIStore } from '../../stores/uiStore'
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
 import { CustomFieldInputs } from '../common/CustomFieldInputs'
+import InViewTabs from '../common/InViewTabs'
+import { standardInputClasses } from '../../styles/inputStyles'
+import { textColors } from '../../styles/designSystem'
 
 interface CreateTaskModalProps {
   draftId: string
@@ -55,6 +58,15 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
   // Agent configuration state
   const [agentConfig, setAgentConfig] = useState<{ model_type?: string; model_type_display_names?: Record<string, string> } | null>(null)
   const [agentConfigLoading, setAgentConfigLoading] = useState(false)
+
+  // Tab mode state
+  const [mode, setMode] = useState<'new' | 'from-pr'>('new')
+
+  // From PR form state (not persisted in draft)
+  const [prUrl, setPrUrl] = useState('')
+  const [fromPrProjectId, setFromPrProjectId] = useState(projectId || '')
+  const [fromPrLoading, setFromPrLoading] = useState(false)
+  const [fromPrError, setFromPrError] = useState<string | null>(null)
 
   // Auto-save draft
   const saveDraft = useCallback(() => {
@@ -221,6 +233,26 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
     onClose()
   }, [draftId, removeModalDraft, onClose])
 
+  const handleCreateFromPR = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault()
+    const pid = projectId ?? fromPrProjectId
+    if (!pid || !prUrl.trim()) return
+
+    setFromPrLoading(true)
+    setFromPrError(null)
+
+    try {
+      const task = await apiClient.createTaskFromPR(pid, { pr_url: prUrl.trim() })
+      onClose()
+      navigate(`/tasks/${task.id}`)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to import PR'
+      setFromPrError(message)
+    } finally {
+      setFromPrLoading(false)
+    }
+  }, [projectId, fromPrProjectId, prUrl, onClose, navigate])
+
   const handleCreateTask = useCallback((e: React.FormEvent) => {
     e.preventDefault()
     if (!effectiveProjectId) return
@@ -309,22 +341,34 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
       title={
         <div className="flex items-center justify-between">
           <span>Create New Task</span>
-          <button
-            type="button"
-            onClick={handleMinimize}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors ml-2"
-            title="Minimize to draft"
-            aria-label="Minimize to draft"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-            </svg>
-          </button>
+          {mode === 'new' && (
+            <button
+              type="button"
+              onClick={handleMinimize}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors ml-2"
+              title="Minimize to draft"
+              aria-label="Minimize to draft"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+              </svg>
+            </button>
+          )}
         </div>
       }
       maxWidth="3xl"
     >
-      <form onSubmit={handleCreateTask} className="space-y-4">
+      <InViewTabs
+        tabs={[
+          { id: 'new', label: 'New Task' },
+          { id: 'from-pr', label: 'From PR' },
+        ]}
+        activeTab={mode}
+        onTabChange={(id) => setMode(id as 'new' | 'from-pr')}
+      />
+
+      {mode === 'new' && (
+      <form onSubmit={handleCreateTask} className="space-y-4 mt-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Initial Prompt
@@ -533,6 +577,64 @@ export default function CreateTaskModal({ draftId, onClose, projectId }: CreateT
           </Button>
         </div>
       </form>
+      )}
+
+      {mode === 'from-pr' && (
+        <form onSubmit={handleCreateFromPR} className="space-y-4 mt-4">
+          <div>
+            <label className={`block text-sm font-medium ${textColors.secondary} mb-2`}>
+              GitHub PR URL
+            </label>
+            <Input
+              type="text"
+              value={prUrl}
+              onChange={(e) => setPrUrl(e.target.value)}
+              placeholder="https://github.com/owner/repo/pull/123"
+              required
+            />
+          </div>
+
+          {!projectId && (
+            <div>
+              <label className={`block text-sm font-medium ${textColors.secondary} mb-2`}>
+                Project
+              </label>
+              <select
+                value={fromPrProjectId}
+                onChange={(e) => setFromPrProjectId(e.target.value)}
+                className={standardInputClasses}
+                required
+              >
+                <option value="">Select a project...</option>
+                {projects?.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {fromPrError && (
+            <Alert variant="error">{fromPrError}</Alert>
+          )}
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleClose}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!prUrl.trim() || (!projectId && !fromPrProjectId) || fromPrLoading}
+            >
+              {fromPrLoading ? 'Importing...' : 'Import PR as Task'}
+            </Button>
+          </div>
+        </form>
+      )}
     </Modal>
   )
 }

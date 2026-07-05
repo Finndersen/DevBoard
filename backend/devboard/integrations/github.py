@@ -616,6 +616,26 @@ class GitHubIntegration(BaseIntegration):
         return f"{repo_full_name}:{pr_number}"
 
     @staticmethod
+    def parse_pr_url(url: str) -> tuple[str, str, int]:
+        """Parse owner, repo, and PR number from a GitHub pull request URL.
+
+        Supports format: https://github.com/{owner}/{repo}/pull/{number}
+
+        Args:
+            url: GitHub pull request URL
+
+        Returns:
+            Tuple of (owner, repo, pr_number)
+
+        Raises:
+            ValueError: If URL format is not recognized or PR number is invalid
+        """
+        match = re.match(r"https://github\.com/([^/]+)/([^/]+)/pull/(\d+)(?:[/?#].*)?$", url)
+        if not match:
+            raise ValueError(f"Invalid GitHub PR URL format: {url!r}. Expected https://github.com/owner/repo/pull/123")
+        return match.group(1), match.group(2), int(match.group(3))
+
+    @staticmethod
     def parse_repo_url(url: str) -> tuple[str, str]:
         """Parse owner and repo from a GitHub repository URL.
 

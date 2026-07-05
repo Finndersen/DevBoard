@@ -9,6 +9,7 @@ from devboard.agents.roles import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.codebase import MergeMethod
 from devboard.db.models.task import InvalidStatusTransitionError, Task, TaskStatus
+from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
 from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_git.types import MergeFailureError, TaskConfigurationError
 from devboard.services.task_git_service import MergeOutcome, MergeResult
@@ -75,6 +76,7 @@ def task_service(
         task_repo=mock_task_repo,
         custom_field_repo=mock_custom_field_repo,
         system_event_emitter=mock_system_event_emitter,
+        plan_repo=MagicMock(spec=TaskImplementationPlanRepository),
     )
 
 

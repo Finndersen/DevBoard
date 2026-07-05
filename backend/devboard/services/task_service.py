@@ -20,6 +20,7 @@ from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories.conversation import NoActiveConversationError
 from devboard.db.repositories.custom_field import CustomFieldRepository
 from devboard.db.repositories.document import DocumentRepository
+from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
 from devboard.db.repositories.task import TaskRepository
 from devboard.integrations.git import GitRepoIntegration
 from devboard.services.conversation_service import ConversationService
@@ -44,12 +45,14 @@ class TaskService:
         task_repo: TaskRepository,
         custom_field_repo: CustomFieldRepository,
         system_event_emitter: SystemEventEmitter,
+        plan_repo: TaskImplementationPlanRepository,
     ):
         self.conversation_service = conversation_service
         self.document_repo = document_repo
         self.task_repo = task_repo
         self.custom_field_repo = custom_field_repo
         self.system_event_emitter = system_event_emitter
+        self.plan_repo = plan_repo
 
     def _touch_updated_at(self, task: Task) -> None:
         task.updated_at = datetime.now(UTC)
@@ -134,6 +137,62 @@ class TaskService:
             agent_role=AgentRoleType.TASK_PLANNING,
             model_id_override=model_id_override,
         )
+
+        self.system_event_emitter.emit_task_created(task)
+
+        return task
+
+    async def create_task_from_pr(
+        self,
+        project_id: int,
+        title: str,
+        branch_name: str,
+        base_branch: str,
+        codebase_id: int,
+        spec_content: str = "",
+        github_pr_number: int | None = None,
+        model_id_override: str | None = None,
+    ) -> Task:
+        """Create a new task from an existing GitHub PR, placing it directly in PR_OPEN state.
+
+        Args:
+            project_id: ID of the project this task belongs to
+            title: Task title (from PR title)
+            branch_name: Git branch name (from PR head branch)
+            base_branch: Base branch for git operations
+            codebase_id: Codebase ID
+            spec_content: Specification content (from PR body)
+            github_pr_number: GitHub PR number
+            model_id_override: Optional model ID override for the conversation
+
+        Returns:
+            Created Task instance in PR_OPEN status with TASK_PR_REVIEW conversation
+        """
+        specification_doc = self.document_repo.create(DocumentType.TASK_SPECIFICATION, spec_content)
+
+        task = self.task_repo.create(
+            project_id=project_id,
+            title=title,
+            specification=specification_doc,
+            implementation_plan=None,
+            status=TaskStatus.PR_OPEN,
+            codebase_id=codebase_id,
+            branch_name=branch_name,
+            base_branch=base_branch,
+            custom_fields=None,
+        )
+        task.github_pr_number = github_pr_number
+
+        await TaskGitService.create_task_branch(task)
+
+        self.conversation_service.create_initial_conversation_for_parent_entity(
+            parent_entity_type=ParentEntityType.TASK,
+            parent_entity_id=task.id,
+            agent_role=AgentRoleType.TASK_PR_REVIEW,
+            model_id_override=model_id_override,
+        )
+
+        self.plan_repo.create(task_id=task.id)
 
         self.system_event_emitter.emit_task_created(task)
 

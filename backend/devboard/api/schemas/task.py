@@ -46,6 +46,12 @@ class TaskCreateNested(BaseModel):
         return self
 
 
+class TaskCreateFromPR(BaseModel):
+    """Schema for creating a task from an existing GitHub PR URL."""
+
+    pr_url: str
+
+
 class TaskUpdate(BaseModel):
     """Schema for updating a task."""
 
