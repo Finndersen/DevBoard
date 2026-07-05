@@ -74,6 +74,13 @@ class TaskRebaseCoordinator:
 
         fork_point = await git.get_fork_point(task.base_branch, task.branch_name)
 
+        task_files_changed: list[str] = []
+        if fork_point:
+            try:
+                task_files_changed = await git.get_changed_file_paths(fork_point, task.branch_name)
+            except Exception as e:
+                logfire.warning(f"Failed to compute task branch changed files: {e}")
+
         remotes = await git.list_remotes()
         parsed = parse_remote_branch(task.base_branch, remotes)
         if parsed:
@@ -109,7 +116,7 @@ class TaskRebaseCoordinator:
             new_head = await git.rebase_branch(task.branch_name, task.base_branch, abort_on_conflict=False)
             logfire.info(f"Rebased branch {task.branch_name} onto {task.base_branch} for task {task.id}")
             return await cls._apply_rebase_stash_if_exists(
-                task, git, repo_path, stash_message, new_head, base_branch_changes
+                task, git, repo_path, stash_message, new_head, base_branch_changes, task_files_changed
             )
         except RebaseConflictError:
             conflicted_files = await git.get_conflicted_files()
@@ -121,6 +128,7 @@ class TaskRebaseCoordinator:
                 conflicted_files=conflicted_files,
                 has_pending_stash=has_pending_stash,
                 base_branch_changes=base_branch_changes,
+                task_files_changed=task_files_changed,
             )
 
     @classmethod
@@ -132,9 +140,12 @@ class TaskRebaseCoordinator:
         stash_message: str,
         new_head: str,
         base_branch_changes: BaseBranchChanges | None = None,
+        task_files_changed: list[str] | None = None,
     ) -> RebaseResult:
         """Check for and apply any rebase stash after successful rebase."""
         stash_ref = await git.find_stash_by_message(stash_message)
+
+        task_files = task_files_changed or []
 
         if not stash_ref:
             return RebaseResult(
@@ -142,6 +153,7 @@ class TaskRebaseCoordinator:
                 slot_path=repo_path,
                 new_head=new_head,
                 base_branch_changes=base_branch_changes,
+                task_files_changed=task_files,
             )
 
         try:
@@ -153,6 +165,7 @@ class TaskRebaseCoordinator:
                 slot_path=repo_path,
                 new_head=new_head,
                 base_branch_changes=base_branch_changes,
+                task_files_changed=task_files,
             )
         except ShellCommandExecutionError:
             conflicted_files = await git.get_conflicted_files()
@@ -163,4 +176,5 @@ class TaskRebaseCoordinator:
                 new_head=new_head,
                 conflicted_files=conflicted_files,
                 base_branch_changes=base_branch_changes,
+                task_files_changed=task_files,
             )

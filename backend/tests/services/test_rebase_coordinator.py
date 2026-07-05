@@ -58,6 +58,7 @@ class TestRebaseTaskBranch:
             mock_git.is_rebase_in_progress.return_value = False
             mock_git.stash_push = AsyncMock(return_value=None)
             mock_git.get_fork_point = AsyncMock(return_value="abc123")
+            mock_git.get_changed_file_paths = AsyncMock(return_value=[])
             mock_git.list_remotes = AsyncMock(return_value=[])
             mock_git.get_branch_head = AsyncMock(return_value="abc123")
             mock_git.rebase_branch = AsyncMock(return_value="def456")

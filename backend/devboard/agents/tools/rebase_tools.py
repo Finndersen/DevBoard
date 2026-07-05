@@ -74,7 +74,7 @@ async def execute_rebase_with_result(task: Task) -> RebaseActionResult:
         message = f"Rebase completed successfully. New HEAD: {result.new_head}"
 
         if result.base_branch_changes:
-            message += f"\n\n{result.base_branch_changes.format_summary(task.base_branch)}"
+            message += f"\n\n{result.base_branch_changes.format_summary(task.base_branch, task_file_paths=set(result.task_files_changed))}"
             message += "\n\nPlease review these changes and note if any are relevant to the current task."
 
         return RebaseActionResult(

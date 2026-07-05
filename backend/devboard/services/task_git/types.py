@@ -1,6 +1,6 @@
 """Data classes and enums for task git operations."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 from pydantic import BaseModel
@@ -99,27 +99,50 @@ class BaseBranchChanges:
             line += " (deleted)"
         return line
 
-    def format_summary(self, base_branch: str, max_files: int = 20) -> str:
+    def format_summary(self, base_branch: str, max_files: int = 20, task_file_paths: set[str] | None = None) -> str:
         """Format a human-readable summary of the base branch changes.
 
         Args:
             base_branch: Name of the base branch for display
             max_files: Maximum number of files to list before truncating
+            task_file_paths: Files changed on the task branch; when provided and overlapping,
+                overlapping files are shown first in a dedicated section
 
         Returns:
             Formatted markdown summary of the changes
         """
         commit_list = "\n".join(f"  - {c.hash[:7]}: {c.subject}" for c in self.commits)
-        file_list = "\n".join(self._format_file_entry(f) for f in self.files_changed[:max_files])
-        if len(self.files_changed) > max_files:
-            file_list += f"\n  - ... and {len(self.files_changed) - max_files} more files"
+
+        base_file_paths = {f.file_path for f in self.files_changed}
+        overlap = base_file_paths & task_file_paths if task_file_paths else set()
+
+        if overlap:
+            conflict_files = [f for f in self.files_changed if f.file_path in overlap]
+            other_files = [f for f in self.files_changed if f.file_path not in overlap]
+
+            conflict_list = "\n".join(self._format_file_entry(f) for f in conflict_files[:max_files])
+            if len(conflict_files) > max_files:
+                conflict_list += f"\n  - ... and {len(conflict_files) - max_files} more files"
+
+            other_list = "\n".join(self._format_file_entry(f) for f in other_files[:max_files])
+            if len(other_files) > max_files:
+                other_list += f"\n  - ... and {len(other_files) - max_files} more files"
+
+            files_section = f"**Files also changed in your task branch (potential conflicts):**\n{conflict_list}"
+            if other_list:
+                files_section += f"\n\n**Other base branch files changed:**\n{other_list}"
+        else:
+            file_list = "\n".join(self._format_file_entry(f) for f in self.files_changed[:max_files])
+            if len(self.files_changed) > max_files:
+                file_list += f"\n  - ... and {len(self.files_changed) - max_files} more files"
+            files_section = f"**Files changed:**\n{file_list}"
 
         return (
             f"**Base branch ({base_branch}) changes since last sync** "
             f"({len(self.commits)} commits, {len(self.files_changed)} files, "
             f"+{self.additions}/-{self.deletions}):\n\n"
             f"**Commits:**\n{commit_list}\n\n"
-            f"**Files changed:**\n{file_list}"
+            f"{files_section}"
         )
 
 
@@ -133,6 +156,7 @@ class RebaseResult:
     conflicted_files: list[str] | None = None  # Set when there are conflicts
     has_pending_stash: bool = False  # True if uncommitted changes are stashed waiting to be restored
     base_branch_changes: BaseBranchChanges | None = None  # Changes in base branch since last sync
+    task_files_changed: list[str] = field(default_factory=list)  # Files changed on task branch since fork point
 
 
 class TaskGitStatus(BaseModel):
