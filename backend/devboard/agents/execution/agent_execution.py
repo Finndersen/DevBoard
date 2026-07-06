@@ -95,6 +95,10 @@ class AgentExecutionService(ABC):
             context_content = await self.role.get_context_content()
             parts.append(wrap_system_message(context_content, "initial_context"))
 
+            initial_instructions = self.role.get_initial_instructions()
+            if initial_instructions:
+                parts.append(wrap_system_message(initial_instructions, "initial_instructions"))
+
         if self.role.event_context_types and self._log_entry_repo is not None:
             event_context = self._build_event_context()
             if event_context:

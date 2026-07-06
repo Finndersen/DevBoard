@@ -443,47 +443,15 @@ class TestBeginImplementationActionRun:
         return task
 
     @pytest.mark.asyncio
-    async def test_returns_prompt_with_execution_graph(self, mock_task_with_plan):
-        """run() returns a prompt with execution graph in a system_message block before instructions."""
+    async def test_returns_prompt_template(self, mock_task_with_plan):
+        """run() returns the prompt template text (execution graph is now in context, not here)."""
         action = _make_begin_implementation_action(mock_task_with_plan)
 
         result = await action.run()
 
         assert result is not None
-        assert "execution graph above" in result
-        assert "EXECUTION GRAPH:" in result
-        assert "Layer 1" in result
-        assert "Layer 2" in result
-        assert "Set up database schema" in result
-        assert "Implement API endpoints" in result
-
-    @pytest.mark.asyncio
-    async def test_execution_graph_wrapped_in_system_message(self, mock_task_with_plan):
-        """Execution graph is wrapped in <system_message type="execution_context">."""
-        action = _make_begin_implementation_action(mock_task_with_plan)
-
-        result = await action.run()
-
-        assert result is not None
-        blocks, remaining = extract_system_messages(result)
-        assert len(blocks) == 1
-        assert blocks[0].message_type == "execution_context"
-        assert "EXECUTION GRAPH:" in blocks[0].content
-        assert "execute_implementation_step" in remaining
-
-    @pytest.mark.asyncio
-    async def test_returns_base_prompt_without_graph_when_no_plan(self):
-        """run() returns only the base prompt when task has no structured plan."""
-        task = Mock()
-        task.id = 1
-        task.implementation_plan_structured = None
-        action = _make_begin_implementation_action(task)
-
-        result = await action.run()
-
-        assert result is not None
-        assert "EXECUTION GRAPH:" not in result
         assert "The implementation plan has been approved" in result
+        assert "execute_implementation_step" in result
 
 
 class TestRebaseTaskBranchAction:

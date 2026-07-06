@@ -1,4 +1,3 @@
-from devboard.agents.roles.context_helpers import build_execution_graph_context
 from devboard.agents.system_message_tags import wrap_system_message
 from devboard.agents.tools.rebase_tools import RebaseActionResult, execute_rebase_with_result
 from devboard.db.models import ParentEntityType, Task
@@ -113,9 +112,7 @@ class BeginImplementationAction(TaskWorkflowAction):
             new_agent_role=AgentRoleType.TASK_IMPLEMENTATION,
         )
         self.conversation_repo.commit()
-        execution_graph = build_execution_graph_context(self.task, include_step_status=False)
-        execution_context = wrap_system_message(execution_graph, "execution_context")
-        return execution_context + "\n\n" + self.PROMPT_TEMPLATE
+        return self.PROMPT_TEMPLATE
 
 
 class RebaseTaskBranchAction(TaskWorkflowAction):

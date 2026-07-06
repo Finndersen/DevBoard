@@ -217,7 +217,7 @@ export type MessageRole = 'user' | 'agent'
 
 export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system' | 'meta_message' | 'local_command' | 'thinking' | 'agent_run_started' | 'agent_run_completed'
 
-export type MetaMessageType = 'compact_summary' | 'skill_content' | 'initial_context' | 'event_context' | 'git_status' | 'execution_context' | 'rebase_result'
+export type MetaMessageType = 'compact_summary' | 'skill_content' | 'initial_context' | 'event_context' | 'git_status' | 'initial_instructions' | 'rebase_result'
 
 export interface MetaMessage {
   event_type: 'meta_message'

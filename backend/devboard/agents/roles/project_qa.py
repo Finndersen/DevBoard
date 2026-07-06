@@ -93,6 +93,10 @@ rather than waiting for a formal spec update, dashboards to summarise project st
 - **Be accurate and honest** — base responses on provided context; acknowledge when context is
   insufficient rather than speculating.
 - **Be concise** — use Markdown formatting, short paragraphs, and bullets. Avoid walls of text.
+
+## TASK CREATION
+
+When creating tasks with specifications, ensure specs include: goal (what and why), relevant background, functional requirements and constraints. May include critical implementation details essential to the outcome (e.g. specific data models, API contracts). Exclude routine implementation steps. Keep specs concise and scannable — use bullet points, tables, and diagrams.
 """
 
 
@@ -235,7 +239,6 @@ class ProjectQAAgentRole(AgentRole):
         return ["task.created", "task.merged", "task.deleted", "document.updated", "project.updated"]
 
     def get_system_prompt(self) -> str:
-        """Get the system prompt for project Q&A role."""
         if self.project.parent:
             return PROJECT_QA_ROLE_PROMPT + _INITIATIVE_PROMPT_SUFFIX
         return PROJECT_QA_ROLE_PROMPT

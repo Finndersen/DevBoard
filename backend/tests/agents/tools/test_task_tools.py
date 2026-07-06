@@ -11,9 +11,14 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.config_types import AgentEngineModelConfig
 from devboard.agents.language_models import ModelType
 from devboard.agents.roles import AgentRoleType
-from devboard.agents.tools.task_tools import create_create_task_tool, create_view_task_details_tool
+from devboard.agents.tools.task_tools import (
+    create_create_task_tool,
+    create_edit_task_tool,
+    create_view_task_details_tool,
+)
 from devboard.db.models import Codebase, Conversation, ParentEntityType, Project, Task, TaskStatus
 from devboard.db.repositories.conversation import ConversationRepository
+from devboard.db.repositories.document import DocumentRepository
 from devboard.services.task_service import TaskService
 
 
@@ -548,3 +553,52 @@ class TestCreateTaskModelType:
         model_type_schema = props["model_type"]
         assert model_type_schema["enum"] == ["fast", "standard", "advanced"]
         assert model_type_schema["default"] == "advanced"
+
+
+class TestTaskToolSpecGuidance:
+    """Tests for specification guidance in task tool schemas."""
+
+    def test_create_task_specification_content_includes_guidance(
+        self, mock_project, mock_task_service, mock_agent_config_service
+    ):
+        """create_task specification_content description includes required guidance."""
+        tool = create_create_task_tool(
+            project=mock_project,
+            task_service=mock_task_service,
+            agent_config_service=mock_agent_config_service,
+        )
+        schema = tool.tool_def.parameters_json_schema
+        spec_description = schema["properties"]["specification_content"]["description"]
+
+        # Verify key guidance points are present
+        assert "goal (what and why)" in spec_description
+        assert "relevant background" in spec_description
+        assert "functional requirements and constraints" in spec_description
+        assert "critical implementation details" in spec_description
+        assert "Should NOT include routine implementation steps" in spec_description
+        assert "bullet points" in spec_description
+        assert "tables" in spec_description
+        assert "diagrams" in spec_description
+
+    def test_edit_task_specification_content_includes_guidance(self, mock_project, mock_task_service):
+        """edit_task specification_content description includes required guidance."""
+        document_repo = Mock(spec=DocumentRepository)
+        tool = create_edit_task_tool(
+            project=mock_project,
+            task_service=mock_task_service,
+            document_repository=document_repo,
+        )
+        schema = tool.tool_def.parameters_json_schema
+        spec_description = schema["properties"]["specification_content"]["description"]
+
+        # Verify key guidance points are present
+        assert "goal (what and why)" in spec_description
+        assert "relevant background" in spec_description
+        assert "functional requirements and constraints" in spec_description
+        assert "critical implementation details" in spec_description
+        assert "Should NOT include routine implementation steps" in spec_description
+        assert "bullet points" in spec_description
+        assert "tables" in spec_description
+        assert "diagrams" in spec_description
+        # Edit tool should also mention "leave null to keep unchanged"
+        assert "Leave null to keep unchanged" in spec_description

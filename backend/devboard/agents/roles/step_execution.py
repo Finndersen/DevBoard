@@ -38,8 +38,6 @@ STEP_TYPE_PREAMBLES = {
 
 STEP_EXECUTION_BASE_PROMPT = """You are a focused implementation sub-agent executing a specific step of the current task's implementation plan. You are run non-interactively by a coordination agent — there is no user to ask for clarification. Run until the step goal is complete, then stop and respond with a concise outcome summary. If you are genuinely blocked and cannot complete the step, stop and explain clearly what the blocker is and what you tried.
 
-{type_preamble}
-
 GUIDELINES:
 - Activate relevant skills: before starting execution, review available skills in your context and activate any relevant to this work (software-development practices, coding style and conventions, testing strategy, etc.) using the `Skill` tool.
 - Start by reading any context files referenced in the step details before making changes — these provide patterns, related data structures, and conventions to follow.
@@ -65,8 +63,10 @@ class StepExecutionAgentRole(AgentRole):
         self._working_dir = working_dir
 
     def get_system_prompt(self) -> str:
-        type_preamble = STEP_TYPE_PREAMBLES.get(self.step.type, STEP_TYPE_PREAMBLES[ImplementationStepType.CODE_CHANGE])
-        return STEP_EXECUTION_BASE_PROMPT.format(type_preamble=type_preamble)
+        return STEP_EXECUTION_BASE_PROMPT
+
+    def get_initial_instructions(self) -> str | None:
+        return STEP_TYPE_PREAMBLES.get(self.step.type, STEP_TYPE_PREAMBLES[ImplementationStepType.CODE_CHANGE])
 
     def get_tools(self) -> list[Tool]:
         return []

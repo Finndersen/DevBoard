@@ -2,7 +2,7 @@ from pydantic_ai import Tool
 
 from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.execution.registry import get_execution_manager
-from devboard.agents.roles.context_helpers import build_task_context
+from devboard.agents.roles.context_helpers import build_execution_graph_context, build_task_context
 from devboard.agents.roles.task_base import TaskAgentRoleBase
 from devboard.agents.tools import (
     create_code_structure_search_tool,
@@ -29,7 +29,7 @@ from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 
-_PROMPT_BASE = """
+_SYSTEM_PROMPT = """
 You are a Task Implementation Assistant for DevBoard, helping a developer implement the current task.
 
 Your role is to:
@@ -47,26 +47,8 @@ AVAILABLE CAPABILITIES:
    Each sub-agent should handle an entire implementation step, not a sub-step.
    Do NOT use sub-agents for small-scoped or single-file changes — make those edits directly.
 
-WORKFLOW:
-- Activate relevant skills: review available skills in your context and activate any relevant to this work (software-development, coding conventions, testing strategy, etc.) using the `Skill` tool before executing any steps.
-- Review the implementation plan and understand requirements
-- Ask for clarification when encountering ambiguity
-
-Then execute in order:
-
-{implement_section}
-
-2. CODE REVIEW (if a `code_review` step is in the plan)
-   - After executing the `code_review` step, read its findings from the step outcome
-   - Address all raised issues - Use your own judgement on each suggestion to either state why is invalid/not necessary, or make changes to resolve it
-   - Make any required changes either directly or via sub-agent if substantial
-
-3. TEST & VERIFY
-   - Run relevant tests to validate the changes
-   - Confirm everything works as expected before finalising
-
 IMPORTANT BEHAVIOUR GUIDELINES:
-{behaviour_guidelines}
+- ALWAYS use `execute_implementation_step` for every plan step — never bypass it by editing directly
 - When asked to commit, merge, or create a PR as part of a workflow action, the git status will already be provided in the prompt. Do NOT run git status, git log, or git diff to inspect the branch state — use the information already provided.
 - If the user asks a question about the implementation, investigate and respond with a helpful answer and proposed changes, but DO NOT apply any changes until confirmed by the user.
 - Use the Edit tool for existing files, Write tool for new files
@@ -76,7 +58,14 @@ IMPORTANT BEHAVIOUR GUIDELINES:
 - When committing changes, stage and commit in a single command: `git add -A && git commit -m "message"`. Using `git add -A` is safe in task worktrees since build artifacts are gitignored. Do NOT list individual files separately with `git add`.
 """
 
-_STRUCTURED_PLAN_IMPLEMENT_SECTION = """\
+_INITIAL_INSTRUCTIONS = """\
+WORKFLOW:
+- Activate relevant skills: review available skills in your context and activate any relevant to this work (software-development, coding conventions, testing strategy, etc.) using the `Skill` tool before executing any steps.
+- Review the implementation plan and understand requirements
+- Ask for clarification when encountering ambiguity
+
+Then execute in order:
+
 1. IMPLEMENT CODE CHANGES
    - Use the `execute_implementation_step` tool to execute each step — do NOT implement steps directly
      with Edit/Write tools. This ensures step statuses are tracked in the plan.
@@ -86,19 +75,17 @@ _STRUCTURED_PLAN_IMPLEMENT_SECTION = """\
    - Execute independent steps concurrently by calling `execute_implementation_step` for each in a
      single message (multiple tool calls); wait for dependencies to complete before proceeding
    - If a step fails or gets stuck, you can retry it by calling `execute_implementation_step` again
-   - If a `docs/` directory is present, investigate and update appropriate documentation sections\
+   - If a `docs/` directory is present, investigate and update appropriate documentation sections
+
+2. CODE REVIEW (if a `code_review` step is in the plan)
+   - After executing the `code_review` step, read its findings from the step outcome
+   - Address all raised issues - Use your own judgement on each suggestion to either state why is invalid/not necessary, or make changes to resolve it
+   - Make any required changes either directly or via sub-agent if substantial
+
+3. TEST & VERIFY
+   - Run relevant tests to validate the changes
+   - Confirm everything works as expected before finalising\
 """
-
-_STRUCTURED_PLAN_BEHAVIOUR_GUIDELINES = """\
-- ALWAYS use `execute_implementation_step` for every plan step — never bypass it by editing directly\
-"""
-
-
-def _build_system_prompt() -> str:
-    return _PROMPT_BASE.format(
-        implement_section=_STRUCTURED_PLAN_IMPLEMENT_SECTION,
-        behaviour_guidelines=_STRUCTURED_PLAN_BEHAVIOUR_GUIDELINES,
-    )
 
 
 class TaskImplementationAgentRole(TaskAgentRoleBase):
@@ -130,7 +117,10 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for task implementation role."""
-        return _build_system_prompt()
+        return _SYSTEM_PROMPT
+
+    def get_initial_instructions(self) -> str | None:
+        return _INITIAL_INSTRUCTIONS
 
     def get_tools(self) -> list[Tool]:
         """Get tools for task implementation role."""
@@ -218,13 +208,17 @@ class TaskImplementationAgentRole(TaskAgentRoleBase):
             to check current step statuses during execution.
         """
         gc = GlobalContextService().get().content or None
-        return build_task_context(
+        context = build_task_context(
             self.task,
             working_dir=self.working_dir,
             global_context=gc,
             include_project_specification=False,
             include_step_status=False,
         )
+        execution_graph = build_execution_graph_context(self.task, include_step_status=False)
+        if execution_graph:
+            context += "\n\n" + execution_graph
+        return context
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

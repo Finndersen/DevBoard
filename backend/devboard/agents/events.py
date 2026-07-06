@@ -31,7 +31,7 @@ class MetaMessageType(StrEnum):
     INITIAL_CONTEXT = "initial_context"
     EVENT_CONTEXT = "event_context"
     GIT_STATUS = "git_status"
-    EXECUTION_CONTEXT = "execution_context"
+    INITIAL_INSTRUCTIONS = "initial_instructions"
     REBASE_RESULT = "rebase_result"
 
 

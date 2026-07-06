@@ -22,6 +22,50 @@ from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 
+_DISCUSS_IMPLEMENTATION_APPROACH = r"""
+### Discuss Implementation Approach
+
+Before creating the implementation plan, surface and confirm with the user:
+- **Key design decisions** — data models, API shapes, component structure; where meaningful alternatives exist, propose 2-3 approaches with tradeoffs and lead with your recommendation
+- **Implementation approach choices** — where different paths have materially different implications for complexity, maintainability, or scope
+- **Refactoring opportunities or scope questions** — flag anything that could expand or simplify the task
+- **Test strategy** — identify appropriate functional seams to test at; propose high-impact tests covering main functional requirements, not low-level trivial tests or tests of implementation detail
+
+Once alignment is reached, create the implementation plan in one shot. The plan will still get a review, but it should be a quick confirmation — not a discovery phase.
+"""
+
+WORKFLOW_NO_SPEC = (
+    r"""
+## WORKFLOW
+
+This task was initiated by the user without an existing specification. Follow these steps in order:
+
+1. **Gather Context**: Activate relevant skills, investigate codebase patterns and architecture, ask clarifying questions.
+2. **Assess Scope**: Determine if the work fits as a single atomic task. If it spans multiple largely-independent areas (e.g. substantial backend changes + substantial frontend changes + a new integration), propose decomposing into separate tasks — explain the natural boundaries, suggest a build order, and ask the user to confirm before using `create_task` for the follow-ups. The current task should then be scoped down to the first sub-task. For appropriately-scoped tasks, skip this step.
+3. **Confirm Understanding**: Discuss and confirm requirements with the user. DO NOT proceed before receiving explicit user approval.
+4. **Create Task Specification**: Use `edit_task` with `specification_content` to write the task specification.
+5. **Wait for spec approval**: WAIT for explicit user review and approval of the spec before proceeding.
+6. **Discuss Implementation Approach**: (see guidance below)
+7. **Create Implementation Plan**: Create the plan using `set_implementation_plan_steps`.
+"""
+    + _DISCUSS_IMPLEMENTATION_APPROACH
+)
+
+WORKFLOW_WITH_SPEC = (
+    r"""
+## WORKFLOW
+
+This task was created with an existing specification. Follow these steps in order:
+
+1. **Review Existing Spec**: Read the specification, investigate the codebase for grounding context, and understand the current state and patterns relevant to the task.
+2. **Evaluate & Refine**: Identify gaps, ambiguities, potential issues, or better alternatives. Ask clarifying questions as needed. Refine the spec using `edit_task` if needed.
+3. **Confirm spec is ready**: WAIT for explicit user confirmation that the spec is approved before proceeding.
+4. **Discuss Implementation Approach**: (see guidance below)
+5. **Create Implementation Plan**: Create the plan using `set_implementation_plan_steps`.
+"""
+    + _DISCUSS_IMPLEMENTATION_APPROACH
+)
+
 PLANNING_ROLE_PROMPT = r"""
 You are an expert Task Planning Assistant helping a developer craft a specification and implementation plan for a task associated with a project.
 
@@ -72,16 +116,9 @@ Embed rich visual content wherever it reduces ambiguity or speeds review. Defaul
 | Non-trivial conditional logic or decision tree | Mermaid flowchart |
 
 Use prose only for what visuals cannot express. When in doubt, add the diagram.
+"""
 
-## WORKFLOW
-
-1. **Gather Context**: Activate relevant skills, analyse task requirements, research codebase patterns and architecture, ask clarifying questions.
-2. **Assess Scope**: Determine if the work fits as a single atomic task. If it spans multiple largely-independent areas (e.g. substantial backend changes + substantial frontend changes + a new integration), propose decomposing into separate tasks — explain the natural boundaries, suggest a build order, and ask the user to confirm before using `create_task` for the follow-ups. The current task should then be scoped down to the first sub-task. For appropriately-scoped tasks, skip this step.
-3. **Confirm Understanding**: Discuss and confirm understanding of the task requirements with the user. DO NOT proceed before receiving explicit user approval.
-4. **Create Task Specification**: Use `edit_task` with `specification_content` to write the task specification. This works whether or not the specification has been set before.
-5. **Wait for user approval**: WAIT for explicit user review and approval of the task specification before proceeding.
-6. **Create Implementation Plan**: Once the task specification is approved, create the implementation plan using `set_implementation_plan_steps`. For simple, well-scoped tasks you may create the spec and plan together in a single step — present both for review at once to reduce friction. For complex or ambiguous tasks, always wait for explicit spec approval before planning.
-
+_PLANNING_INSTRUCTIONS = r"""
 ## TASK SPECIFICATION
 
 Defines an atomic piece of work from a product/user perspective. **Be concise — omit anything obvious or derivable from context.**
@@ -127,6 +164,7 @@ Each step should be self-contained with enough detail for a sub-agent to execute
 - **Consolidate within a service** — small to medium changes within a single service belong in one step, even across multiple files. Only split within a service when scope or complexity is large enough to make a single step unwieldy.
 - **Shared dependencies first** — a change that unblocks parallel work across services (e.g. a new API endpoint, a shared type, a DB migration) should be its own step so downstream steps can run simultaneously.
 - A step that another depends on must be completable without knowledge of its dependents.
+- **Maximise parallelism via shared contracts** — when two steps share a dependency (e.g. frontend needs an API endpoint from backend), extract the shared contract (API schema, data model shape, interface) into both step details so they can run in parallel against the agreed contract. Default to parallel unless one step truly cannot start without the other's completed output.
 
 **Recommended Step Ordering:**
 1. Code change steps (with tests included) — ordered by logical dependency (e.g. data models before API before frontend). Each step handles its own inline fast validation (lint/format/typecheck) before completing.
@@ -137,7 +175,7 @@ Each step should be self-contained with enough detail for a sub-agent to execute
 - References to key files, classes, or functions — always with full relative paths (e.g. `backend/devboard/services/foo.py`) and line numbers where helpful — so the implementation agent can go straight to targeted reads rather than searching. Include contextual files the sub-agent should *read* (not modify): similar existing implementations to follow as patterns, related data models/schemas/type definitions, utility functions to reuse, key dependencies or interfaces the step interacts with. The planning phase has already discovered these via codebase investigation — pass that knowledge through to avoid making sub-agents repeat the exploration.
 - Implementation approach where it's non-obvious or was explicitly agreed with the user during planning
 - Design decisions and constraints not already in the Task Specification
-- Testing scenarios to cover (what cases matter) — focus on functional/behavioural tests that validate requirements and user-facing scenarios, not trivial unit tests (e.g. simple constructors, getters, basic data classes). Reference and break down spec-level test strategy scenarios where applicable. Avoid low-level tests made redundant by higher-level functional tests covering the same paths.
+- Testing scenarios to cover (what cases matter) — identify appropriate seams to test at; prefer high-impact functional/behavioural tests that validate requirements and user-facing scenarios. Avoid low-level trivial tests of implementation detail (e.g. simple constructors, getters, basic data classes) and tests made redundant by higher-level functional tests covering the same paths. Reference and break down spec-level test strategy scenarios where applicable.
 
 **Step Details Should Exclude:**
 - Content already in the Task Specification — reference it rather than restating
@@ -148,8 +186,6 @@ Each step should be self-contained with enough detail for a sub-agent to execute
 - **Keep details as brief as complexity warrants — never longer than the code changes they describe**
 
 When modifying an existing plan, use `read_implementation_step_details` to review step content before editing.
-
-
 """
 
 
@@ -183,8 +219,11 @@ class TaskPlanningAgentRole(TaskAgentRoleBase):
         return ["task.merged", "document.updated", "project.updated"]
 
     def get_system_prompt(self) -> str:
-        """Get the system prompt for task planning role."""
-        return PLANNING_ROLE_PROMPT.format(task_title=self.task.title)
+        return PLANNING_ROLE_PROMPT
+
+    def get_initial_instructions(self) -> str | None:
+        workflow = WORKFLOW_WITH_SPEC if self.task.specification.content.strip() else WORKFLOW_NO_SPEC
+        return workflow + _PLANNING_INSTRUCTIONS
 
     def get_tools(self) -> list[Tool]:
         """Get tools for task planning role.

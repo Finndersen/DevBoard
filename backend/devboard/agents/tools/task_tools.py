@@ -335,7 +335,7 @@ def _build_create_task_json_schema(
         "codebase_name": _build_codebase_name_schema(codebase_names),
         "specification_content": {
             "anyOf": [{"type": "string"}, {"type": "null"}],
-            "description": "Optional initial content for the task specification document",
+            "description": "Optional initial content for the task specification document. Should include: goal (what and why), relevant background/current state, functional requirements and constraints. May include critical implementation details essential to the task's outcome (e.g. specific data models, API contracts). Should NOT include routine implementation steps. Keep concise and scannable — use bullet points, tables, and diagrams where possible.",
             "default": None,
         },
         "base_branch": {
@@ -454,7 +454,7 @@ def _build_edit_task_json_schema(
 
     properties["specification_content"] = {
         "anyOf": [{"type": "string"}, {"type": "null"}],
-        "description": "Full content to set for the task specification document. Use this to write the initial specification or to replace it entirely. Leave null to keep unchanged.",
+        "description": "Full content to set for the task specification document. Should include: goal (what and why), relevant background/current state, functional requirements and constraints. May include critical implementation details essential to the task's outcome (e.g. specific data models, API contracts). Should NOT include routine implementation steps. Keep concise and scannable — use bullet points, tables, and diagrams where possible. Leave null to keep unchanged.",
         "default": None,
     }
 

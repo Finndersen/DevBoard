@@ -55,6 +55,18 @@ class AgentRole(ABC):
         """
         pass
 
+    def get_initial_instructions(self) -> str | None:
+        """Per-conversation operational instructions injected once on the first message.
+
+        Use for workflow steps, procedural guidance, and state-dependent instructions
+        that vary per conversation but remain stable within one. Keeping these out of
+        the system prompt allows the system prompt to stay static and benefit from
+        prompt caching across all conversations of the same agent type.
+
+        Returns None by default; roles override to provide instructions.
+        """
+        return None
+
     @property
     def event_context_types(self) -> list[str]:
         """Event types to auto-inject as context on each user message.

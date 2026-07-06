@@ -219,6 +219,144 @@ class TestTaskPlanningRoleWithPlan:
         assert "## Implementation Plan" not in content
 
 
+class TestSystemPromptAndInitialInstructions:
+    """Test that system prompt is static and initial instructions select the correct workflow."""
+
+    @pytest.fixture
+    def mock_document_repo(self):
+        repo = Mock(spec=DocumentRepository)
+        repo.update_content = Mock()
+        repo.db = Mock()
+        return repo
+
+    @pytest.fixture
+    def mock_agent_config_service(self):
+        return Mock(spec=AgentConfigService)
+
+    @pytest.fixture
+    def mock_task_service(self):
+        service = Mock(spec=TaskService)
+        service.get_custom_fields.return_value = []
+        return service
+
+    def _make_role(self, task, mock_document_repo, mock_agent_config_service, mock_task_service):
+        conversation_repo = Mock(spec=ConversationRepository)
+        conversation_repo.db = Mock()
+        return TaskPlanningAgentRole(
+            task=task,
+            document_repository=mock_document_repo,
+            agent_config_service=mock_agent_config_service,
+            task_service=mock_task_service,
+            conversation_repo=conversation_repo,
+            conversation_id=None,
+            working_dir="/test/working_dir",
+            plan_service=Mock(spec=TaskImplementationPlanService),
+        )
+
+    def test_system_prompt_is_static_regardless_of_spec_state(
+        self, mock_document_repo, mock_agent_config_service, mock_task_service
+    ):
+        """System prompt must be identical for empty-spec and populated-spec tasks (enables prompt caching)."""
+        task_no_spec = create_mock_task(task_id=1, title="No Spec", specification_content="")
+        task_with_spec = create_mock_task(task_id=2, title="With Spec", specification_content="## Goal\n\nDo it.")
+        role_no_spec = self._make_role(task_no_spec, mock_document_repo, mock_agent_config_service, mock_task_service)
+        role_with_spec = self._make_role(
+            task_with_spec, mock_document_repo, mock_agent_config_service, mock_task_service
+        )
+
+        assert role_no_spec.get_system_prompt() == role_with_spec.get_system_prompt()
+
+    def test_system_prompt_contains_identity_and_principles(
+        self, mock_document_repo, mock_agent_config_service, mock_task_service
+    ):
+        task = create_mock_task(task_id=1, title="Task", specification_content="")
+        role = self._make_role(task, mock_document_repo, mock_agent_config_service, mock_task_service)
+
+        prompt = role.get_system_prompt()
+
+        assert "Task Planning Assistant" in prompt
+        assert "PLANNING MODE ONLY" in prompt
+        assert "OPERATING PRINCIPLES" in prompt
+        assert "FORMATTING & VISUAL STANDARDS" in prompt
+
+    def test_system_prompt_does_not_contain_workflow_or_procedural_content(
+        self, mock_document_repo, mock_agent_config_service, mock_task_service
+    ):
+        task = create_mock_task(task_id=1, title="Task", specification_content="")
+        role = self._make_role(task, mock_document_repo, mock_agent_config_service, mock_task_service)
+
+        prompt = role.get_system_prompt()
+
+        assert "## WORKFLOW" not in prompt
+        assert "## TASK SPECIFICATION" not in prompt
+        assert "## IMPLEMENTATION PLAN" not in prompt
+
+    def test_empty_spec_returns_no_spec_workflow_in_initial_instructions(
+        self, mock_document_repo, mock_agent_config_service, mock_task_service
+    ):
+        task = create_mock_task(task_id=1, title="New Task", specification_content="")
+        role = self._make_role(task, mock_document_repo, mock_agent_config_service, mock_task_service)
+
+        instructions = role.get_initial_instructions()
+
+        assert instructions is not None
+        assert "This task was initiated by the user without an existing specification" in instructions
+        assert "This task was created with an existing specification" not in instructions
+
+    def test_populated_spec_returns_with_spec_workflow_in_initial_instructions(
+        self, mock_document_repo, mock_agent_config_service, mock_task_service
+    ):
+        task = create_mock_task(task_id=2, title="Agent Task", specification_content="## Goal\n\nDo the thing.")
+        role = self._make_role(task, mock_document_repo, mock_agent_config_service, mock_task_service)
+
+        instructions = role.get_initial_instructions()
+
+        assert instructions is not None
+        assert "This task was created with an existing specification" in instructions
+        assert "This task was initiated by the user without an existing specification" not in instructions
+
+    def test_whitespace_only_spec_treated_as_empty(
+        self, mock_document_repo, mock_agent_config_service, mock_task_service
+    ):
+        task = create_mock_task(task_id=3, title="Whitespace Task", specification_content="   \n\t  \n  ")
+        role = self._make_role(task, mock_document_repo, mock_agent_config_service, mock_task_service)
+
+        instructions = role.get_initial_instructions()
+
+        assert instructions is not None
+        assert "This task was initiated by the user without an existing specification" in instructions
+        assert "This task was created with an existing specification" not in instructions
+
+    def test_both_workflows_include_discuss_implementation_approach(
+        self, mock_document_repo, mock_agent_config_service, mock_task_service
+    ):
+        task_no_spec = create_mock_task(task_id=4, title="No Spec", specification_content="")
+        task_with_spec = create_mock_task(task_id=5, title="With Spec", specification_content="## Goal\n\nDo it.")
+        role_no_spec = self._make_role(task_no_spec, mock_document_repo, mock_agent_config_service, mock_task_service)
+        role_with_spec = self._make_role(
+            task_with_spec, mock_document_repo, mock_agent_config_service, mock_task_service
+        )
+
+        assert "Discuss Implementation Approach" in role_no_spec.get_initial_instructions()
+        assert "Discuss Implementation Approach" in role_with_spec.get_initial_instructions()
+
+    def test_initial_instructions_include_task_spec_and_plan_guidance(
+        self, mock_document_repo, mock_agent_config_service, mock_task_service
+    ):
+        """Initial instructions must contain the task spec and implementation plan guidance regardless of workflow."""
+        task_no_spec = create_mock_task(task_id=4, title="No Spec", specification_content="")
+        task_with_spec = create_mock_task(task_id=5, title="With Spec", specification_content="## Goal\n\nDo it.")
+        role_no_spec = self._make_role(task_no_spec, mock_document_repo, mock_agent_config_service, mock_task_service)
+        role_with_spec = self._make_role(
+            task_with_spec, mock_document_repo, mock_agent_config_service, mock_task_service
+        )
+
+        for role in [role_no_spec, role_with_spec]:
+            instructions = role.get_initial_instructions()
+            assert "## TASK SPECIFICATION" in instructions
+            assert "## IMPLEMENTATION PLAN" in instructions
+
+
 class TestDocumentEditTool:
     """Test the document editing tool creation and behavior."""
 
