@@ -1,6 +1,6 @@
 from devboard.agents.roles.context_helpers import build_execution_graph_context
 from devboard.agents.system_message_tags import wrap_system_message
-from devboard.agents.tools.rebase_tools import execute_rebase_with_result
+from devboard.agents.tools.rebase_tools import RebaseActionResult, execute_rebase_with_result
 from devboard.db.models import ParentEntityType, Task
 from devboard.db.models.codebase import BranchHandling, MergeMethod
 from devboard.db.models.conversation import AgentRoleType
@@ -51,6 +51,14 @@ async def _get_task_changes_prompt_context(task: Task) -> str:
         parts.append("No uncommitted changes.")
 
     return "```\n" + "\n\n".join(parts) + "\n```"
+
+
+def _build_rebase_conflict_prompt(rebase_result: RebaseActionResult, continuation: str, next_instructions: str) -> str:
+    """Combine a rebase_result system-message block with its actionable message and follow-up instructions."""
+    prompt = wrap_system_message(rebase_result.git_diff_details, "rebase_result")
+    if rebase_result.message:
+        prompt += "\n\n" + rebase_result.message
+    return prompt + f"\n\n{continuation}\n\n" + next_instructions
 
 
 class CreateImplementationPlanAction(TaskWorkflowAction):
@@ -129,12 +137,12 @@ class RebaseTaskBranchAction(TaskWorkflowAction):
                 pass
             result = await execute_rebase_with_result(self.task)
 
-        if not result.success:
-            # Return conflict prompt for agent to resolve and continue
-            return wrap_system_message(result.message, "rebase_result")
+        # Success with no base branch changes: nothing worth prompting the agent about
+        if result.success and not result.has_base_changes:
+            return None
 
-        # Success: only prompt agent if there were base branch changes to review
-        return wrap_system_message(result.message, "rebase_result") if result.has_base_changes else None
+        rebase_result = wrap_system_message(result.git_diff_details, "rebase_result")
+        return rebase_result + "\n\n" + result.message if result.message else rebase_result
 
 
 _FINALISATION_INSTRUCTIONS = (
@@ -204,20 +212,16 @@ class ApproveAndMergeAction(TaskWorkflowAction):
                         self.task.codebase.merge_method,
                         "(git status available once stash conflicts are resolved)",
                     )
-                    return (
-                        wrap_system_message(rebase_result.message, "rebase_result")
-                        + "\n\nOnce stash conflicts are resolved:\n\n"
-                        + merge_instructions
+                    return _build_rebase_conflict_prompt(
+                        rebase_result, "Once stash conflicts are resolved:", merge_instructions
                     )
                 else:
                     # CONFLICT: rebase still in progress
                     merge_instructions = self._build_prompt(
                         self.task.codebase.merge_method, "(git status will be available once rebase is complete)"
                     )
-                    return (
-                        wrap_system_message(rebase_result.message, "rebase_result")
-                        + "\n\nOnce the rebase is complete:\n\n"
-                        + merge_instructions
+                    return _build_rebase_conflict_prompt(
+                        rebase_result, "Once the rebase is complete:", merge_instructions
                     )
 
             rebase_note = f"The task branch was rebased onto `{self.task.base_branch}` before merging.\n\n"
@@ -297,21 +301,15 @@ The PR will be created against the base branch and the task will transition to P
                         self.task.codebase.merge_method,
                         "(git status available once stash conflicts are resolved)",
                     )
-                    return (
-                        wrap_system_message(rebase_result.message, "rebase_result")
-                        + "\n\nOnce stash conflicts are resolved:\n\n"
-                        + pr_instructions
+                    return _build_rebase_conflict_prompt(
+                        rebase_result, "Once stash conflicts are resolved:", pr_instructions
                     )
                 else:
                     # CONFLICT: rebase still in progress
                     pr_instructions = self._build_prompt(
                         self.task.codebase.merge_method, "(git status will be available once rebase is complete)"
                     )
-                    return (
-                        wrap_system_message(rebase_result.message, "rebase_result")
-                        + "\n\nOnce the rebase is complete:\n\n"
-                        + pr_instructions
-                    )
+                    return _build_rebase_conflict_prompt(rebase_result, "Once the rebase is complete:", pr_instructions)
 
             rebase_note = f"The task branch was rebased onto `{self.task.base_branch}` before creating the PR.\n\n"
 

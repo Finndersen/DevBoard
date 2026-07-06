@@ -16,6 +16,8 @@ from devboard.agents.events import (
     AgentRunCompletedEvent,
     ConversationEvent,
     MessageRole,
+    MetaMessage,
+    MetaMessageType,
     SystemEvent,
     SystemEventType,
     TextMessage,
@@ -23,6 +25,7 @@ from devboard.agents.events import (
 from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError, SubAgentRateLimitError
 from devboard.agents.execution.types import ConversationExecution, ExecutionStatus, SubAgentResult
 from devboard.agents.roles.base import AgentRole
+from devboard.agents.system_message_tags import extract_system_messages
 from devboard.api.dependencies.factories import create_agent_execution_service, create_agent_role_for_conversation
 from devboard.api.dependencies.resolver import DependencyResolver
 from devboard.api.dependencies.services import ExecutionServices, get_execution_services
@@ -519,16 +522,30 @@ async def _run_agent_for_conversation(
         await asyncio.to_thread(commit_with_lock, db)
 
         if emit_user_event and isinstance(message_or_approvals, str):
-            await broadcast_queue.put(
-                (
-                    conversation_id,
-                    TextMessage(
-                        role=MessageRole.USER,
-                        text_content=message_or_approvals,
-                        timestamp=datetime.datetime.now(datetime.UTC),
-                    ),
+            event_timestamp = datetime.datetime.now(datetime.UTC)
+            sys_blocks, remaining = extract_system_messages(message_or_approvals)
+            for block in sys_blocks:
+                await broadcast_queue.put(
+                    (
+                        conversation_id,
+                        MetaMessage(
+                            meta_type=MetaMessageType(block.message_type),
+                            text_content=block.content,
+                            timestamp=event_timestamp,
+                        ),
+                    )
                 )
-            )
+            if remaining:
+                await broadcast_queue.put(
+                    (
+                        conversation_id,
+                        TextMessage(
+                            role=MessageRole.USER,
+                            text_content=remaining,
+                            timestamp=event_timestamp,
+                        ),
+                    )
+                )
 
         # ── Agent execution ─────────────────────────────────────────────────
         try:

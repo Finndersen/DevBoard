@@ -17,7 +17,14 @@ class RebaseActionResult:
     """Result of executing a rebase action."""
 
     success: bool
-    message: str
+    # Technical rebase output: new HEAD, diff summary, or conflicted-file/commit details.
+    # Callers that display this in a collapsed block (e.g. `wrap_system_message(..., "rebase_result")`)
+    # should wrap only this field.
+    git_diff_details: str
+    # The actionable next-step text for the agent (e.g. "please review", "please resolve
+    # conflicts..."). Kept separate from `git_diff_details` so it can be surfaced as a normal
+    # follow-up prompt rather than bundled into the collapsed block.
+    message: str | None = None
     has_base_changes: bool = False
     # False only when a CONFLICT occurs mid-rebase (rebase is still in progress).
     # True for SUCCESS and STASH_CONFLICT (rebase committed, stash restore conflicted).
@@ -71,14 +78,18 @@ async def execute_rebase_with_result(task: Task) -> RebaseActionResult:
     result = await TaskGitService.rebase_task_branch(task)
 
     if result.outcome == RebaseOutcome.SUCCESS:
-        message = f"Rebase completed successfully. New HEAD: {result.new_head}"
+        git_diff_details = f"Rebase completed successfully. New HEAD: {result.new_head}"
+        message = None
 
         if result.base_branch_changes:
-            message += f"\n\n{result.base_branch_changes.format_summary(task.base_branch, task_file_paths=set(result.task_files_changed))}"
-            message += "\n\nPlease review these changes and note if any are relevant to the current task."
+            git_diff_details += f"\n\n{result.base_branch_changes.format_summary(task.base_branch, task_file_paths=set(result.task_files_changed))}"
+            message = "Please review these changes and note if any are relevant to the current task."
 
         return RebaseActionResult(
-            success=True, message=message, has_base_changes=result.base_branch_changes is not None
+            success=True,
+            git_diff_details=git_diff_details,
+            message=message,
+            has_base_changes=result.base_branch_changes is not None,
         )
 
     elif result.outcome == RebaseOutcome.CONFLICT:
@@ -104,27 +115,30 @@ async def execute_rebase_with_result(task: Task) -> RebaseActionResult:
                 formatted_commits = _format_commit_details(relevant_commits)
                 commit_details_section = f"\n\n**Base branch commits that touched these files:**\n{formatted_commits}"
 
-        message = (
+        git_diff_details = (
             f"Rebase has conflicts that need to be resolved.\n\n"
             f"**Conflicted files:**\n{conflict_list}"
-            f"{commit_details_section}\n\n"
-            f"Please resolve the conflicts in these files (remove conflict markers, keep correct code), "
-            f"then call this tool again to continue the rebase.{stash_note}"
+            f"{commit_details_section}{stash_note}"
         )
-        return RebaseActionResult(success=False, message=message, rebase_complete=False)
+        message = (
+            "Please resolve the conflicts in these files (remove conflict markers, keep correct code), "
+            "then call this tool again to continue the rebase."
+        )
+        return RebaseActionResult(
+            success=False, git_diff_details=git_diff_details, message=message, rebase_complete=False
+        )
 
     else:  # STASH_CONFLICT
         conflict_list = (
             "\n".join(f"  - {f}" for f in result.conflicted_files) if result.conflicted_files else "  (unknown)"
         )
-        message = (
+        git_diff_details = (
             f"Rebase completed successfully (new HEAD: {result.new_head}), but restoring your "
             f"uncommitted changes resulted in merge conflicts.\n\n"
-            f"**Conflicted files:**\n{conflict_list}\n\n"
-            f"Please resolve the conflicts in these files. Once resolved, "
-            f"the rebase operation is complete."
+            f"**Conflicted files:**\n{conflict_list}"
         )
-        return RebaseActionResult(success=False, message=message)
+        message = "Please resolve the conflicts in these files. Once resolved, the rebase operation is complete."
+        return RebaseActionResult(success=False, git_diff_details=git_diff_details, message=message)
 
 
 def create_rebase_task_branch_tool(
@@ -165,9 +179,11 @@ def create_rebase_task_branch_tool(
         except (TaskConfigurationError, NoWorktreeAllocatedException) as e:
             raise ModelRetry(str(e)) from e
 
-        if result.success:
-            return result.message
+        combined = f"{result.git_diff_details}\n\n{result.message}" if result.message else result.git_diff_details
 
-        raise ModelRetry(result.message)
+        if result.success:
+            return combined
+
+        raise ModelRetry(combined)
 
     return Tool(function=rebase_task_branch, name="rebase_task_branch")  # ty:ignore[invalid-argument-type, invalid-return-type]

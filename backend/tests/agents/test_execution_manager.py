@@ -12,11 +12,14 @@ from devboard.agents.events import (
     AgentRunStartedEvent,
     ContextUsage,
     MessageRole,
+    MetaMessage,
+    MetaMessageType,
     TextMessage,
 )
 from devboard.agents.exceptions import AgentInterruptedError, ConversationBusyError, SubAgentRateLimitError
 from devboard.agents.execution.manager import ConversationExecutionManager
 from devboard.agents.execution.types import ConversationExecution, ExecutionStatus
+from devboard.agents.system_message_tags import wrap_system_message
 
 
 @pytest.fixture
@@ -447,6 +450,79 @@ class TestRunAgentForConversationStartOfRun:
         assert events[0].role == MessageRole.USER
         assert events[0].text_content == "hello world"
         assert isinstance(events[1], AgentRunStartedEvent)
+
+    @pytest.mark.asyncio
+    async def test_emit_user_event_true_splits_leading_system_message_into_meta_message(self):
+        """A leading <system_message> block must be emitted as a MetaMessage, not raw text.
+
+        Workflow-action prompts (e.g. Approve & Merge) start with a wrapped git_status
+        block; the live broadcast path must extract it the same way the DB/history
+        replay path does, or the frontend renders the raw tag instead of a pill.
+        """
+        from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+        from devboard.agents.execution.manager import _run_agent_for_conversation
+        from devboard.db.models import Project
+
+        mock_services = MagicMock()
+        mock_conv = MagicMock()
+        mock_conv.get_parent_entity.return_value = MagicMock(spec=Project)
+        mock_services.conversation_repo.get_by_id.return_value = mock_conv
+
+        async def simple_stream():
+            yield AgentRunStartedEvent(
+                conversation_id=42,
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+            yield AgentRunCompletedEvent(
+                status="completed",
+                error=None,
+                timestamp=datetime.datetime.now(datetime.UTC),
+            )
+
+        mock_exec_service = Mock()
+        mock_exec_service.stream_events_for_message_or_approval.return_value = simple_stream()
+
+        broadcast_q: asyncio.Queue = asyncio.Queue()
+        interrupt = asyncio.Event()
+
+        message = wrap_system_message("## Git Status\nNo commits yet.", "git_status") + "\n\n## Instructions\nGo."
+
+        with (
+            patch("devboard.agents.execution.manager.DependencyResolver") as mock_dr,
+            patch("devboard.agents.execution.manager.asyncio.to_thread", new=AsyncMock(return_value=None)),
+            patch("devboard.agents.execution.manager.create_agent_role_for_conversation", new_callable=AsyncMock),
+            patch("devboard.agents.execution.manager.create_agent_execution_service", return_value=mock_exec_service),
+            patch("devboard.agents.execution.manager.ensure_project_directory", return_value="/projects/test"),
+            patch("devboard.agents.execution.manager.SystemEventEmitter"),
+        ):
+            mock_resolver = MagicMock()
+            mock_resolver.run = AsyncMock(return_value=mock_services)
+            mock_dr.return_value.__aenter__ = AsyncMock(return_value=mock_resolver)
+            mock_dr.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            await _run_agent_for_conversation(
+                broadcast_q,
+                interrupt,
+                conversation_id=42,
+                message_or_approvals=message,
+                emit_user_event=True,
+            )
+
+        events = []
+        while not broadcast_q.empty():
+            _, event = broadcast_q.get_nowait()
+            events.append(event)
+
+        assert len(events) >= 3
+        assert isinstance(events[0], MetaMessage)
+        assert events[0].meta_type == MetaMessageType.GIT_STATUS
+        assert "No commits yet." in events[0].text_content
+        assert isinstance(events[1], TextMessage)
+        assert events[1].role == MessageRole.USER
+        assert "<system_message" not in events[1].text_content
+        assert "## Instructions" in events[1].text_content
+        assert isinstance(events[2], AgentRunStartedEvent)
 
     @pytest.mark.asyncio
     async def test_emit_user_event_false_does_not_emit_text_message(self):

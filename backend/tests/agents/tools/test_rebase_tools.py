@@ -87,7 +87,7 @@ class TestExecuteRebaseWithResult:
 
         assert result == RebaseActionResult(
             success=True,
-            message="Rebase completed successfully. New HEAD: abc1234",
+            git_diff_details="Rebase completed successfully. New HEAD: abc1234",
         )
 
     @pytest.mark.asyncio
@@ -112,9 +112,10 @@ class TestExecuteRebaseWithResult:
             result = await execute_rebase_with_result(task)
 
         assert result.success is True
-        assert "abc1234" in result.message
-        assert "Base branch summary text" in result.message
-        assert "Please review these changes" in result.message
+        assert "abc1234" in result.git_diff_details
+        assert "Base branch summary text" in result.git_diff_details
+        assert "Please review these changes" not in result.git_diff_details
+        assert result.message == "Please review these changes and note if any are relevant to the current task."
         base_changes.format_summary.assert_called_once_with("main", task_file_paths=set())
 
     @pytest.mark.asyncio
@@ -137,9 +138,10 @@ class TestExecuteRebaseWithResult:
             result = await execute_rebase_with_result(task)
 
         assert result.success is False
-        assert "src/foo.py" in result.message
-        assert "src/bar.py" in result.message
-        assert "Rebase has conflicts" in result.message
+        assert "src/foo.py" in result.git_diff_details
+        assert "src/bar.py" in result.git_diff_details
+        assert "Rebase has conflicts" in result.git_diff_details
+        assert result.message is not None
         assert "call this tool again" in result.message
 
     @pytest.mark.asyncio
@@ -162,7 +164,7 @@ class TestExecuteRebaseWithResult:
             result = await execute_rebase_with_result(task)
 
         assert result.success is False
-        assert "Uncommitted changes were stashed" in result.message
+        assert "Uncommitted changes were stashed" in result.git_diff_details
 
     @pytest.mark.asyncio
     async def test_conflict_includes_relevant_commits(self):
@@ -201,8 +203,8 @@ class TestExecuteRebaseWithResult:
                 result = await execute_rebase_with_result(task)
 
         assert result.success is False
-        assert "Base branch commits that touched these files" in result.message
-        assert "Relevant change" in result.message
+        assert "Base branch commits that touched these files" in result.git_diff_details
+        assert "Relevant change" in result.git_diff_details
 
     @pytest.mark.asyncio
     async def test_stash_conflict_returns_failure(self):
@@ -224,13 +226,12 @@ class TestExecuteRebaseWithResult:
 
         assert result == RebaseActionResult(
             success=False,
-            message=(
+            git_diff_details=(
                 "Rebase completed successfully (new HEAD: newhead123), but restoring your "
                 "uncommitted changes resulted in merge conflicts.\n\n"
-                "**Conflicted files:**\n  - stash_file.py\n\n"
-                "Please resolve the conflicts in these files. Once resolved, "
-                "the rebase operation is complete."
+                "**Conflicted files:**\n  - stash_file.py"
             ),
+            message="Please resolve the conflicts in these files. Once resolved, the rebase operation is complete.",
         )
 
     @pytest.mark.asyncio
@@ -296,3 +297,52 @@ class TestRebaseTaskBranchToolExceptions:
                 await tool.function()
 
             assert "no workspace allocated" in str(exc_info.value)
+
+
+class TestRebaseTaskBranchToolSuccess:
+    """Tests for the success return value of create_rebase_task_branch_tool."""
+
+    @pytest.mark.asyncio
+    async def test_appends_review_instruction_to_message_when_present(self):
+        """Direct tool-call return still includes the review instruction inline with the message."""
+        task = Mock(spec=Task)
+        task.base_branch = "main"
+
+        base_changes = Mock(spec=BaseBranchChanges)
+        base_changes.format_summary.return_value = "Base branch summary text"
+
+        rebase_result = RebaseResult(
+            outcome=RebaseOutcome.SUCCESS,
+            slot_path="/repo/path",
+            new_head="abc1234",
+            base_branch_changes=base_changes,
+        )
+
+        with patch("devboard.agents.tools.rebase_tools.TaskGitService") as mock_service:
+            mock_service.rebase_task_branch = AsyncMock(return_value=rebase_result)
+
+            tool = create_rebase_task_branch_tool(task)
+            result = await tool.function()
+
+        assert "Base branch summary text" in result
+        assert "Please review these changes and note if any are relevant to the current task." in result
+
+    @pytest.mark.asyncio
+    async def test_no_review_instruction_when_no_base_branch_changes(self):
+        """Direct tool-call return has no trailing review instruction when there are no base branch changes."""
+        task = Mock(spec=Task)
+        task.base_branch = "main"
+
+        rebase_result = RebaseResult(
+            outcome=RebaseOutcome.SUCCESS,
+            slot_path="/repo/path",
+            new_head="abc1234",
+        )
+
+        with patch("devboard.agents.tools.rebase_tools.TaskGitService") as mock_service:
+            mock_service.rebase_task_branch = AsyncMock(return_value=rebase_result)
+
+            tool = create_rebase_task_branch_tool(task)
+            result = await tool.function()
+
+        assert "Please review these changes" not in result

@@ -326,7 +326,7 @@ class TestApproveAndMergeActionRun:
             patch(
                 "devboard.workflow_actions.task_workflows.execute_rebase_with_result",
                 new_callable=AsyncMock,
-                return_value=RebaseActionResult(success=True, message="Rebase done.", has_base_changes=False),
+                return_value=RebaseActionResult(success=True, git_diff_details="Rebase done.", has_base_changes=False),
             ),
             patch(
                 "devboard.workflow_actions.task_workflows.TaskGitService.get_task_commit_metadata",
@@ -365,7 +365,7 @@ class TestApproveAndMergeActionRun:
                 "devboard.workflow_actions.task_workflows.execute_rebase_with_result",
                 new_callable=AsyncMock,
                 return_value=RebaseActionResult(
-                    success=False, message="Conflicts in src/api.py", rebase_complete=False
+                    success=False, git_diff_details="Conflicts in src/api.py", rebase_complete=False
                 ),
             ),
         ):
@@ -398,7 +398,7 @@ class TestApproveAndMergeActionRun:
                 new_callable=AsyncMock,
                 return_value=RebaseActionResult(
                     success=False,
-                    message="Rebase completed but stash restore conflicted in src/api.py",
+                    git_diff_details="Rebase completed but stash restore conflicted in src/api.py",
                     rebase_complete=True,
                 ),
             ),
@@ -533,7 +533,7 @@ class TestRebaseTaskBranchAction:
         """PLANNING state: workspace is allocated and prepared before calling rebase."""
         action = self._make_action(mock_task, mock_workspace_service)
 
-        rebase_result = RebaseActionResult(success=True, message="Rebase completed successfully.")
+        rebase_result = RebaseActionResult(success=True, git_diff_details="Rebase completed successfully.")
         with patch(
             "devboard.workflow_actions.task_workflows.execute_rebase_with_result",
             new_callable=AsyncMock,
@@ -549,7 +549,7 @@ class TestRebaseTaskBranchAction:
         mock_task.status = TaskStatus.IMPLEMENTING
         action = self._make_action(mock_task, mock_workspace_service)
 
-        rebase_result = RebaseActionResult(success=True, message="Rebase completed successfully.")
+        rebase_result = RebaseActionResult(success=True, git_diff_details="Rebase completed successfully.")
         with patch(
             "devboard.workflow_actions.task_workflows.execute_rebase_with_result",
             new_callable=AsyncMock,
@@ -566,7 +566,7 @@ class TestRebaseTaskBranchAction:
         mock_task.status = status
         action = self._make_action(mock_task, mock_workspace_service)
 
-        rebase_result = RebaseActionResult(success=False, message="Conflicts in src/api.py and src/models.py")
+        rebase_result = RebaseActionResult(success=False, git_diff_details="Conflicts in src/api.py and src/models.py")
         with patch(
             "devboard.workflow_actions.task_workflows.execute_rebase_with_result",
             new_callable=AsyncMock,
@@ -583,11 +583,15 @@ class TestRebaseTaskBranchAction:
 
     @pytest.mark.asyncio
     async def test_returns_base_changes_prompt_on_success_with_changes(self, mock_task, mock_workspace_service):
-        """Success with base branch changes returns the message wrapped in a rebase_result system_message."""
+        """Success with base branch changes returns the message wrapped in a rebase_result system_message,
+        with the review instruction surfaced as a normal follow-up prompt after the block (not inside it)."""
         action = self._make_action(mock_task, mock_workspace_service)
 
         rebase_result = RebaseActionResult(
-            success=True, message="Rebase done.\n\n3 commits changed 5 files\n\nPlease review.", has_base_changes=True
+            success=True,
+            git_diff_details="Rebase done.\n\n3 commits changed 5 files",
+            has_base_changes=True,
+            message="Please review these changes and note if any are relevant to the current task.",
         )
         with patch(
             "devboard.workflow_actions.task_workflows.execute_rebase_with_result",
@@ -602,6 +606,8 @@ class TestRebaseTaskBranchAction:
         assert blocks[0].message_type == "rebase_result"
         assert "Rebase done." in blocks[0].content
         assert "3 commits changed 5 files" in blocks[0].content
+        assert "Please review these changes" not in blocks[0].content
+        assert "Please review these changes" in remaining
 
     @pytest.mark.asyncio
     async def test_returns_none_on_success_without_base_changes(self, mock_task, mock_workspace_service):
@@ -609,7 +615,7 @@ class TestRebaseTaskBranchAction:
         action = self._make_action(mock_task, mock_workspace_service)
 
         rebase_result = RebaseActionResult(
-            success=True, message="Rebase completed successfully.", has_base_changes=False
+            success=True, git_diff_details="Rebase completed successfully.", has_base_changes=False
         )
         with patch(
             "devboard.workflow_actions.task_workflows.execute_rebase_with_result",
@@ -697,7 +703,7 @@ class TestApproveAndCreatePRActionRun:
             patch(
                 "devboard.workflow_actions.task_workflows.execute_rebase_with_result",
                 new_callable=AsyncMock,
-                return_value=RebaseActionResult(success=True, message="Rebase done.", has_base_changes=False),
+                return_value=RebaseActionResult(success=True, git_diff_details="Rebase done.", has_base_changes=False),
             ),
             patch(
                 "devboard.workflow_actions.task_workflows.TaskGitService.get_task_commit_metadata",
@@ -731,7 +737,7 @@ class TestApproveAndCreatePRActionRun:
                 "devboard.workflow_actions.task_workflows.execute_rebase_with_result",
                 new_callable=AsyncMock,
                 return_value=RebaseActionResult(
-                    success=False, message="Conflicts in src/models.py", rebase_complete=False
+                    success=False, git_diff_details="Conflicts in src/models.py", rebase_complete=False
                 ),
             ),
         ):
@@ -759,7 +765,7 @@ class TestApproveAndCreatePRActionRun:
                 new_callable=AsyncMock,
                 return_value=RebaseActionResult(
                     success=False,
-                    message="Rebase completed but stash restore conflicted in src/models.py",
+                    git_diff_details="Rebase completed but stash restore conflicted in src/models.py",
                     rebase_complete=True,
                 ),
             ),
@@ -814,7 +820,7 @@ class TestApproveAndMergeConflictPromptStructure:
                 "devboard.workflow_actions.task_workflows.execute_rebase_with_result",
                 new_callable=AsyncMock,
                 return_value=RebaseActionResult(
-                    success=False, message="Conflicts detected in src/api.py", rebase_complete=False
+                    success=False, git_diff_details="Conflicts detected in src/api.py", rebase_complete=False
                 ),
             ),
         ):
