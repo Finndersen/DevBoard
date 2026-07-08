@@ -521,6 +521,20 @@ describe('CreateTaskModal — non-blocking submission', () => {
       () => new Promise(resolve => { resolveCreate = resolve })
     )
 
+    // Set up the draft in the store
+    useUIStore.setState({
+      openModalDraft: TEST_DRAFT_ID,
+      modalDrafts: {
+        [TEST_DRAFT_ID]: {
+          type: 'task',
+          formData: {},
+          previewLabel: 'Test Task',
+          createdAt: Date.now(),
+          isCreating: false
+        }
+      }
+    })
+
     const user = userEvent.setup()
 
     render(

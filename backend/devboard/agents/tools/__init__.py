@@ -5,6 +5,7 @@ from .codebase_tools import (
     create_file_search_tool,
     create_text_search_tool,
 )
+from .context_management_tools import create_branch_conversation_tool, create_refocus_conversation_tool
 from .conversation_tools import (
     create_inspect_conversation_tool,
     create_list_conversations_tool,
@@ -42,7 +43,9 @@ from .task_tools import (
 
 __all__ = [
     "build_project_context_document_tools",
+    "create_branch_conversation_tool",
     "create_code_structure_search_tool",
+    "create_refocus_conversation_tool",
     "create_merge_branch_and_finalise_tool",
     "create_create_task_tool",
     "create_edit_own_task_tool",

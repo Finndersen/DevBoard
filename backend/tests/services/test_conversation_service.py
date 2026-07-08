@@ -197,3 +197,51 @@ class TestSetConversationTitleFromMessage:
         conversation_service.set_conversation_title_from_message(conv, "  Hello world  ")
 
         mock_conversation_repo.update_title.assert_called_once_with(conv, "Hello world")
+
+
+class TestCreateSeededConversation:
+    """Tests for create_seeded_conversation method."""
+
+    def test_creates_conversation_with_source_attributes(self, conversation_service, mock_conversation_repo):
+        source = Mock(spec=Conversation)
+        source.parent_entity_type = ParentEntityType.PROJECT
+        source.parent_entity_id = 42
+        source.agent_role = AgentRoleType.PROJECT
+        source.engine = AgentEngine.INTERNAL
+        source.model_id = "anthropic:claude-sonnet-4.5"
+
+        new_conv = Mock(spec=Conversation)
+        mock_conversation_repo.create.return_value = new_conv
+        mock_db = Mock()
+        mock_conversation_repo.db = mock_db
+
+        result = conversation_service.create_seeded_conversation(source, "New Title")
+
+        mock_conversation_repo.create.assert_called_once_with(
+            parent_entity_type=ParentEntityType.PROJECT,
+            parent_entity_id=42,
+            agent_role=AgentRoleType.PROJECT,
+            engine=AgentEngine.INTERNAL,
+            model_id="anthropic:claude-sonnet-4.5",
+            is_active=True,
+        )
+        assert new_conv.title == "New Title"
+        mock_db.flush.assert_called_once()
+        assert result is new_conv
+
+    def test_created_conversation_is_active(self, conversation_service, mock_conversation_repo):
+        source = Mock(spec=Conversation)
+        source.parent_entity_type = ParentEntityType.TASK
+        source.parent_entity_id = 7
+        source.agent_role = AgentRoleType.TASK_PLANNING
+        source.engine = AgentEngine.INTERNAL
+        source.model_id = None
+
+        new_conv = Mock(spec=Conversation)
+        mock_conversation_repo.create.return_value = new_conv
+        mock_conversation_repo.db = Mock()
+
+        conversation_service.create_seeded_conversation(source, "Branch Title")
+
+        call_kwargs = mock_conversation_repo.create.call_args.kwargs
+        assert call_kwargs["is_active"] is True

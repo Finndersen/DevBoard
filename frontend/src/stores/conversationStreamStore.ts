@@ -70,6 +70,7 @@ interface ConversationStreamActions {
     message: string,
     onFirstEvent?: () => void | Promise<void>,
     onError?: (error: Error) => void,
+    options?: { autoRefocus?: boolean }
   ) => Promise<void>
   stopStream: (conversationId: number) => Promise<void>
   completeStream: (conversationId: number) => void
@@ -259,7 +260,7 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       get().addEvent(conversationId, event)
     },
 
-    startStream: async (conversationId, message, onFirstEvent, onError) => {
+    startStream: async (conversationId, message, onFirstEvent, onError, options) => {
       const conversationIdRef = { current: conversationId }
       conversationIdRefs.set(conversationId, conversationIdRef)
 
@@ -306,7 +307,10 @@ export const useConversationStreamStore = create<ConversationStreamStore>()(
       console.log('[StreamStore] Stream started:', { conversationId })
 
       try {
-        await apiClient.sendConversationMessage(conversationIdRef.current, { message })
+        await apiClient.sendConversationMessage(conversationIdRef.current, {
+          message,
+          ...(options?.autoRefocus !== undefined ? { auto_refocus: options.autoRefocus } : {})
+        })
       } catch (error) {
         // POST failed — events will never arrive, so clean up immediately
         onFirstEventCallbacks.delete(conversationId)

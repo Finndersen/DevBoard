@@ -222,6 +222,51 @@ class TestConversationsRouter:
         assert new_conversation is not None
         assert new_conversation.is_active is True
 
+    def test_send_message_auto_refocus_true_augments_message(self, client, test_conversation):
+        """When auto_refocus=True, the message passed to start_agent_execution includes refocus instruction."""
+        message_request = {"message": "What is the project status?", "auto_refocus": True}
+
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_manager = Mock()
+            mock_get_mgr.return_value = mock_manager
+            response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
+
+        assert response.status_code == 200
+        call_args = mock_manager.start_agent_execution.call_args
+        sent_message = call_args[0][1]
+        assert "refocus_conversation" in sent_message
+        assert "What is the project status?" in sent_message
+        assert "<system_message" in sent_message
+
+    def test_send_message_auto_refocus_false_does_not_augment(self, client, test_conversation):
+        """When auto_refocus=False, the message is sent as-is without refocus instruction."""
+        original_message = "What is the project status?"
+        message_request = {"message": original_message, "auto_refocus": False}
+
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_manager = Mock()
+            mock_get_mgr.return_value = mock_manager
+            response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
+
+        assert response.status_code == 200
+        call_args = mock_manager.start_agent_execution.call_args
+        sent_message = call_args[0][1]
+        assert sent_message == original_message
+
+    def test_send_message_auto_refocus_defaults_to_true(self, client, test_conversation):
+        """When auto_refocus is omitted, it defaults to True and augments the message."""
+        message_request = {"message": "Tell me about the project"}
+
+        with patch("devboard.api.routers.conversations.get_execution_manager") as mock_get_mgr:
+            mock_manager = Mock()
+            mock_get_mgr.return_value = mock_manager
+            response = client.post(f"/api/conversations/{test_conversation.id}/messages", json=message_request)
+
+        assert response.status_code == 200
+        call_args = mock_manager.start_agent_execution.call_args
+        sent_message = call_args[0][1]
+        assert "refocus_conversation" in sent_message
+
     def test_reset_conversation_updates_parent_entity(self, client, db_session, test_project):
         """Test that resetting a conversation updates the parent entity's conversation reference."""
         conversation_repo = ConversationRepository(db_session)

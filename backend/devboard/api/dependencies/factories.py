@@ -34,6 +34,7 @@ from devboard.db.repositories.codebase import CodebaseRepository
 from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
 from devboard.db.repositories.project import ProjectRepository
 from devboard.integrations.github import GitHubIntegration
+from devboard.services.conversation_service import ConversationService
 from devboard.services.integration_service import IntegrationService
 from devboard.services.log_entry_service import LogEntryService
 from devboard.services.oauth_service import OAuthService
@@ -124,6 +125,7 @@ async def create_agent_role_for_conversation(
                 task_service=task_service,
                 conversation_repo=conversation_repo,
                 conversation_id=parent_conversation_id,
+                conversation_service=ConversationService(conversation_repo, agent_config_service),
             )
         else:
             raise HTTPException(

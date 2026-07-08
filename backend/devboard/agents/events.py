@@ -183,6 +183,7 @@ class ContextUsage(BaseModel):
     cache_read_tokens: int
     cache_write_tokens: int
     cost_usd: float | None = None
+    context_window: int | None = None
 
 
 class AgentRunStartedEvent(BaseModel):

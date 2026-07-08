@@ -47,3 +47,4 @@ class ChatRequest(BaseModel):
     """Request model for project or task chat."""
 
     message: str
+    auto_refocus: bool = True

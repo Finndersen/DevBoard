@@ -177,6 +177,15 @@ class AgentExecutionService(ABC):
         config = self._agent_config_service.get_agent_configuration(self.conversation.agent_role)
         return config.custom_instructions
 
+    def _enrich_context_usage(self, usage: ContextUsage) -> ContextUsage:
+        """Populate context_window on ContextUsage from the conversation's model config."""
+        if not self.conversation.model_id:
+            return usage
+        model = self._agent_config_service.get_model_by_id(self.conversation.model_id)
+        if model and model.context_window:
+            return usage.model_copy(update={"context_window": model.context_window})
+        return usage
+
     async def send_message_or_approval(
         self,
         message: str,
@@ -262,7 +271,7 @@ class AgentExecutionService(ABC):
                     extra_tools = self._additional_tools + mcp_factory.get_tools()
                     async for event in self._stream_events_impl(message_or_approvals, extra_tools):
                         if isinstance(event, ContextUsage):
-                            last_usage = event
+                            last_usage = self._enrich_context_usage(event)
                             continue  # out-of-band return value — not re-yielded
                         yield event
             except AgentInterruptedError:

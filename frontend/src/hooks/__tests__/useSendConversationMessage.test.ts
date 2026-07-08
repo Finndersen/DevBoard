@@ -6,6 +6,10 @@ vi.mock('../../stores/conversationStreamStore', () => ({
   useConversationStreamStore: vi.fn()
 }))
 
+vi.mock('../../stores/conversationStore', () => ({
+  useConversationStore: vi.fn()
+}))
+
 vi.mock('../../contexts/PendingMessagesContext', () => ({
   usePendingMessages: vi.fn()
 }))
@@ -15,6 +19,7 @@ vi.mock('../../utils/approvalKeys', () => ({
 }))
 
 import { useConversationStreamStore } from '../../stores/conversationStreamStore'
+import { useConversationStore } from '../../stores/conversationStore'
 import { usePendingMessages } from '../../contexts/PendingMessagesContext'
 
 describe('useSendConversationMessage', () => {
@@ -42,14 +47,24 @@ describe('useSendConversationMessage', () => {
       retryMessage: vi.fn()
     })
 
-    vi.mocked(useConversationStreamStore).mockImplementation((selector: (state: { startStream: typeof mockStartStream; addEvent: typeof mockAddEvent }) => unknown) =>
-      selector({ startStream: mockStartStream, addEvent: mockAddEvent })
+    vi.mocked(useConversationStreamStore).mockImplementation((selector) =>
+      selector({
+        startStream: mockStartStream,
+        addEvent: mockAddEvent,
+        conversationMessages: new Map()
+      } as Parameters<typeof useConversationStreamStore>[0])
+    )
+
+    vi.mocked(useConversationStore).mockImplementation((selector) =>
+      selector({
+        conversations: new Map()
+      } as Parameters<typeof useConversationStore>[0])
     )
   })
 
   it('sets status to sent, starts stream, and removes pending message on first event', async () => {
     let capturedOnFirstEvent: (() => void) | undefined
-    mockStartStream.mockImplementation(async (_id: number, _message: string, onFirstEvent: () => void) => {
+    mockStartStream.mockImplementation(async (_id: number, _message: string, onFirstEvent: () => void, _onError: unknown, _options: unknown) => {
       capturedOnFirstEvent = onFirstEvent
       onFirstEvent()
     })
@@ -65,6 +80,7 @@ describe('useSendConversationMessage', () => {
       'Hello',
       expect.any(Function),
       expect.any(Function),
+      { autoRefocus: false }
     )
     expect(mockAddPendingMessage).toHaveBeenCalledWith(pendingKey, {
       conversationId,
@@ -112,7 +128,7 @@ describe('useSendConversationMessage', () => {
 
   it('marks message as failed via onError when execution fails before first event', async () => {
     let capturedOnError: ((error: Error) => void) | undefined
-    mockStartStream.mockImplementation(async (_id: number, _message: string, _onFirstEvent: () => void, onError: (error: Error) => void) => {
+    mockStartStream.mockImplementation(async (_id: number, _message: string, _onFirstEvent: () => void, onError: (error: Error) => void, _options: unknown) => {
       capturedOnError = onError
       // POST succeeded but execution will fail later — onError is called asynchronously by the store
     })
@@ -139,7 +155,7 @@ describe('useSendConversationMessage', () => {
 
   it('uses existing pending message ID for retry flow', async () => {
     const existingId = 'msg_existing'
-    mockStartStream.mockImplementation(async (_id: number, _message: string, onFirstEvent: () => void) => {
+    mockStartStream.mockImplementation(async (_id: number, _message: string, onFirstEvent: () => void, _onError: unknown, _options: unknown) => {
       onFirstEvent()
     })
 

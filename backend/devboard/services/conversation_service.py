@@ -183,6 +183,36 @@ class ConversationService:
             at_cap=(count + 1) >= MAX_PROJECT_CONVERSATIONS,
         )
 
+    def create_seeded_conversation(
+        self,
+        source_conversation: Conversation,
+        title: str,
+    ) -> Conversation:
+        """Create a new conversation cloned from source_conversation's configuration.
+
+        Creates a new active conversation for the same parent entity with the same
+        agent role, engine, and model as the source. Sets the given title.
+        Used by refocus and branch tools to seed a new conversation.
+
+        Args:
+            source_conversation: The conversation to clone configuration from
+            title: Title for the new conversation
+
+        Returns:
+            The newly created Conversation instance
+        """
+        new_conversation = self.conversation_repo.create(
+            parent_entity_type=source_conversation.parent_entity_type,
+            parent_entity_id=source_conversation.parent_entity_id,
+            agent_role=source_conversation.agent_role,
+            engine=source_conversation.engine,
+            model_id=source_conversation.model_id,
+            is_active=True,
+        )
+        new_conversation.title = title
+        self.conversation_repo.db.flush()
+        return new_conversation
+
     def set_conversation_title_from_message(self, conversation: Conversation, message: str) -> None:
         """Auto-set conversation title from first user message if not already set."""
         if conversation.title is None:

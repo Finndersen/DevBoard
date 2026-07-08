@@ -10,6 +10,7 @@ from devboard.agents.engines import AgentEngine
 from devboard.agents.engines.claude_code.session import ClaudeCodeSessionService
 from devboard.agents.exceptions import ConversationBusyError
 from devboard.agents.execution.registry import get_execution_manager
+from devboard.agents.system_message_tags import wrap_system_message
 from devboard.api.dependencies.conversations import get_conversation_history_service
 from devboard.api.dependencies.entities import get_verified_conversation
 from devboard.api.dependencies.repositories import get_conversation_repository
@@ -124,6 +125,19 @@ def _start_agent_execution(
     return {"conversation_id": cid}
 
 
+_REFOCUS_INSTRUCTION = """Your conversation context is approaching its limit. Before responding to the user's message, you should:
+
+1. Save any important decisions, status updates, or context to the project/initiative specification or relevant documents using your document editing tools
+2. Call the `refocus_conversation` tool to continue in a fresh conversation with only the context relevant to the current topic
+
+Provide a comprehensive context summary that captures everything needed to continue the current line of work effectively."""
+
+
+def _augment_with_refocus_instruction(message: str) -> str:
+    wrapped = wrap_system_message(_REFOCUS_INSTRUCTION, "context_management")
+    return f"{wrapped}\n\n{message}"
+
+
 @router.post("/{conversation_id}/messages")
 async def send_conversation_message(
     request: ChatRequest,
@@ -133,7 +147,8 @@ async def send_conversation_message(
     """Send a message and start a background agent execution."""
     # Auto-set title from first user message
     conversation_service.set_conversation_title_from_message(conversation, request.message)
-    return _start_agent_execution(conversation, request.message)
+    message = _augment_with_refocus_instruction(request.message) if request.auto_refocus else request.message
+    return _start_agent_execution(conversation, message)
 
 
 @router.post("/{conversation_id}/approve-tools")

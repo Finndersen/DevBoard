@@ -7,7 +7,9 @@ from devboard.agents.execution.registry import get_execution_manager
 from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import (
     build_project_context_document_tools,
+    create_branch_conversation_tool,
     create_inspect_conversation_tool,
+    create_refocus_conversation_tool,
 )
 from devboard.agents.tools.codebase_management_tools import (
     create_update_codebase_tool,
@@ -31,6 +33,7 @@ from devboard.db.repositories import (
     DocumentRepository,
     LogEntryRepository,
 )
+from devboard.services.conversation_service import ConversationService
 from devboard.services.global_context_service import GlobalContextService
 from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_service import TaskService
@@ -226,6 +229,7 @@ class ProjectQAAgentRole(AgentRole):
         task_service: TaskService,
         conversation_repo: ConversationRepository,
         conversation_id: int | None,
+        conversation_service: ConversationService | None = None,
     ):
         self.project = project
         self.document_repository = document_repository
@@ -233,6 +237,7 @@ class ProjectQAAgentRole(AgentRole):
         self.task_service = task_service
         self.conversation_repo = conversation_repo
         self.conversation_id = conversation_id
+        self.conversation_service = conversation_service
 
     @property
     def event_context_types(self) -> list[str]:
@@ -270,6 +275,19 @@ class ProjectQAAgentRole(AgentRole):
             # Conversation analysis tool
             create_inspect_conversation_tool(self.conversation_repo),
         ]
+
+        # Context management tools (refocus/branch) require a conversation_id and service
+        if self.conversation_id is not None and self.conversation_service is not None:
+            conversation = self.conversation_repo.get_by_id(self.conversation_id)
+            if conversation is not None:
+                tools.extend(
+                    [
+                        create_refocus_conversation_tool(
+                            conversation, self.conversation_service, self.conversation_repo
+                        ),
+                        create_branch_conversation_tool(conversation, self.conversation_service),
+                    ]
+                )
 
         # Add codebase tools if project has codebases
         if self.project.codebases:

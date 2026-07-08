@@ -297,6 +297,7 @@ export interface ContextUsage {
   cache_read_tokens: number
   cache_write_tokens: number
   cost_usd: number | null
+  context_window?: number | null
 }
 
 export interface AgentRunStartedEvent {
@@ -326,6 +327,7 @@ export type ConversationEvent = ConversationMessage | ToolCall | ToolResult | To
 
 export interface UserPrompt {
   message: string
+  auto_refocus?: boolean
 }
 
 export interface ToolApprovalDecision {

@@ -10,6 +10,7 @@ export interface ConversationState {
   scrollPosition: number
   isTyping: boolean
   lastActivity: Date
+  autoRefocus: boolean
 }
 
 interface ConversationsState {
@@ -41,6 +42,9 @@ interface ConversationsActions {
   // Activity
   updateLastActivity: (conversationId: number) => void
 
+  // Auto-refocus toggle
+  setAutoRefocus: (conversationId: number, value: boolean) => void
+
   // Utilities
   hasUnreadMessages: (conversationId: number) => boolean
   getMessageCount: (conversationId: number) => number
@@ -66,7 +70,8 @@ export const useConversationStore = create<ConversationStore>()(
               draftMessage: '',
               scrollPosition: 0,
               isTyping: false,
-              lastActivity: new Date()
+              lastActivity: new Date(),
+              autoRefocus: true,
             })
           }
         })
@@ -153,6 +158,16 @@ export const useConversationStore = create<ConversationStore>()(
         })
       },
 
+      // Auto-refocus toggle
+      setAutoRefocus: (conversationId, value) => {
+        set((draft) => {
+          const conversation = draft.conversations.get(conversationId)
+          if (conversation) {
+            conversation.autoRefocus = value
+          }
+        })
+      },
+
       // Activity
       updateLastActivity: (conversationId) => {
         set((draft) => {
@@ -184,14 +199,15 @@ export const useConversationStore = create<ConversationStore>()(
           scrollPosition: conv.scrollPosition,
           // Don't persist typing state
           isTyping: false,
-          lastActivity: conv.lastActivity
+          lastActivity: conv.lastActivity,
+          autoRefocus: conv.autoRefocus ?? true,
         }))
       }),
       merge: (persistedState, currentState) => {
         const persisted = persistedState as { conversations: Array<{ id: number } & Omit<ConversationState, 'id'>> }
         if (persisted?.conversations) {
           const conversationsMap = new Map(
-            persisted.conversations.map(conv => [conv.id, conv as ConversationState])
+            persisted.conversations.map(conv => [conv.id, { ...conv, autoRefocus: conv.autoRefocus ?? true } as ConversationState])
           )
           return {
             ...currentState,

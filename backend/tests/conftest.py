@@ -302,6 +302,7 @@ def mock_agent_config_service():
     # Mock methods for custom instructions and MCP tools
     mock_service.get_custom_instructions.return_value = None
     mock_service.get_enabled_mcp_tools.return_value = []
+    mock_service.get_model_by_id.return_value = None
     return mock_service
 
 

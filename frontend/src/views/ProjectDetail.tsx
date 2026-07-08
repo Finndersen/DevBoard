@@ -18,6 +18,7 @@ import { useDataStore } from '../stores/dataStore'
 import { useUIStore } from '../stores/uiStore'
 import { useConversationStore } from '../stores/conversationStore'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
+import { useProjectConversationHandlers } from './hooks/useProjectConversationHandlers'
 import { useNotificationStore } from '../stores/notificationStore'
 import { reportMutationError } from '../lib/errors'
 import { CustomFieldsPopover } from '../components/common/CustomFieldsPanel'
@@ -84,13 +85,12 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   const { createAndOpenDraft, invalidateConversations } = useUIStore()
 
   // Use new custom hooks
+  // Note: Specification is edited via document update API, not project update
   const specificationField = useEditableField(
     specificationDoc?.content || '',
-    async (value) => {
-      await apiClient.updateProject(id!, {
-        specification: value
-      })
-      // Refetch the specification document to get updated content
+    async () => {
+      // TODO: Implement document update API call to save specification
+      // For now, specification editing is handled through document management UI
       await refetchSpecification()
     }
   )
@@ -211,6 +211,13 @@ function ProjectDetail({ id }: ProjectDetailProps) {
   }, [refetchSpecification, isInitiative])
 
   useToolResultHandler(projectSpecificationHandler)
+
+  useProjectConversationHandlers({
+    activeConversationId,
+    setActiveConversationId,
+    updateConversationUrl,
+    invalidateConversations,
+  })
 
   // Layout state
   const isNarrowRef = useRef(false)

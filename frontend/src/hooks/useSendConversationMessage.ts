@@ -1,8 +1,11 @@
 import { useCallback } from 'react'
 import type { ConversationEvent } from '../lib/api'
 import { useConversationStreamStore } from '../stores/conversationStreamStore'
+import { useConversationStore } from '../stores/conversationStore'
 import { usePendingMessages } from '../contexts/PendingMessagesContext'
 import { createConversationPendingKey } from '../utils/approvalKeys'
+
+const AUTO_REFOCUS_THRESHOLD = 0.7
 
 interface UseSendConversationMessageOptions {
   conversationId: number
@@ -21,6 +24,12 @@ export function useSendConversationMessage({
 
   const startStream = useConversationStreamStore(state => state.startStream)
   const addEvent = useConversationStreamStore(state => state.addEvent)
+  const contextUsage = useConversationStreamStore(
+    state => state.conversationMessages.get(conversationId)?.contextUsage
+  )
+  const autoRefocusToggle = useConversationStore(
+    state => state.conversations.get(conversationId)?.autoRefocus ?? true
+  )
 
   const sendMessage = useCallback(async (
     messageText: string,
@@ -41,6 +50,12 @@ export function useSendConversationMessage({
         timestamp: new Date().toISOString()
       }
 
+      const contextWindow = contextUsage?.context_window
+      const utilizationExceedsThreshold = contextWindow != null && contextWindow > 0
+        ? (contextUsage!.input_tokens / contextWindow) >= AUTO_REFOCUS_THRESHOLD
+        : false
+      const autoRefocus = autoRefocusToggle && utilizationExceedsThreshold
+
       await startStream(
         conversationId,
         messageText,
@@ -53,6 +68,7 @@ export function useSendConversationMessage({
           // Execution failed before any events arrived — show error on pending message
           updateMessageStatus(pendingKey, pendingMessageId, 'failed', error.message)
         },
+        { autoRefocus },
       )
     } catch (error) {
       // POST failed
@@ -72,7 +88,9 @@ export function useSendConversationMessage({
     updateMessageStatus,
     removeMessage,
     startStream,
-    addEvent
+    addEvent,
+    contextUsage,
+    autoRefocusToggle,
   ])
 
   return { sendMessage }
