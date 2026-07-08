@@ -525,11 +525,16 @@ async def _run_agent_for_conversation(
             event_timestamp = datetime.datetime.now(datetime.UTC)
             sys_blocks, remaining = extract_system_messages(message_or_approvals)
             for block in sys_blocks:
+                try:
+                    meta_type = MetaMessageType(block.message_type)
+                except ValueError:
+                    logfire.warn("Unknown system_message type in user prompt", message_type=block.message_type)
+                    continue
                 await broadcast_queue.put(
                     (
                         conversation_id,
                         MetaMessage(
-                            meta_type=MetaMessageType(block.message_type),
+                            meta_type=meta_type,
                             text_content=block.content,
                             timestamp=event_timestamp,
                         ),

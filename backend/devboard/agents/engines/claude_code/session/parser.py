@@ -49,8 +49,8 @@ def _extract_text_from_content(content_raw: str | list[Any]) -> str:
 
 def _parse_local_command_from_text(
     text: str, uuid: str, timestamp: datetime, line_num: int, is_sidechain: bool
-) -> LocalCommandSessionMessage | None:
-    """Try to parse a local command from user message text content. Returns None if not a command."""
+) -> LocalCommandSessionMessage | MetaSessionMessage | None:
+    """Try to parse a local command or meta message from user message text content. Returns None if not recognised."""
     bash_input = _parse_xml_tag(text, "bash-input")
     if bash_input is not None:
         return LocalCommandSessionMessage(
@@ -97,6 +97,29 @@ def _parse_local_command_from_text(
             is_sidechain=is_sidechain,
             command_type=LocalCommandType.SLASH_COMMAND,
             output=local_cmd_stdout,
+        )
+
+    # Task notification (sub-agent completed/failed/stopped)
+    task_notification = _parse_xml_tag(text, "task-notification")
+    if task_notification is not None:
+        status = _parse_xml_tag(task_notification, "status") or "unknown"
+        summary = _parse_xml_tag(task_notification, "summary") or ""
+        usage_xml = _parse_xml_tag(task_notification, "usage")
+        parts = [f"**Status**: {status}", f"**Summary**: {summary}"]
+        if usage_xml:
+            total_tokens = _parse_xml_tag(usage_xml, "total_tokens")
+            tool_uses = _parse_xml_tag(usage_xml, "tool_uses")
+            duration_ms = _parse_xml_tag(usage_xml, "duration_ms")
+            if total_tokens and tool_uses and duration_ms:
+                duration_s = round(int(duration_ms) / 1000, 1)
+                parts.append(f"\n**Usage**: {int(total_tokens):,} tokens · {tool_uses} tool uses · {duration_s}s")
+        return MetaSessionMessage(
+            uuid=uuid,
+            timestamp=timestamp,
+            line_num=line_num,
+            is_sidechain=is_sidechain,
+            meta_type=MetaMessageType.TASK_NOTIFICATION,
+            text_content="\n".join(parts),
         )
 
     return None
@@ -180,6 +203,11 @@ def parse_session_message(entry: MessageEntry, line_num: int) -> SessionMessage 
 
         # Check for local command patterns in non-meta user messages
         text = _extract_text_from_content(content_raw)
+
+        # Skip task-started entries — ephemeral live-stream badge, not useful in history replay
+        if _parse_xml_tag(text, "task-started") is not None:
+            return None
+
         local_cmd = _parse_local_command_from_text(text, uuid, timestamp, line_num, is_sidechain)
         if local_cmd is not None:
             return local_cmd

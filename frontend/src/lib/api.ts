@@ -217,7 +217,7 @@ export type MessageRole = 'user' | 'agent'
 
 export type ConversationEventType = 'message' | 'tool_call' | 'tool_result' | 'tool_call_request' | 'system' | 'meta_message' | 'local_command' | 'thinking' | 'agent_run_started' | 'agent_run_completed'
 
-export type MetaMessageType = 'compact_summary' | 'skill_content' | 'initial_context' | 'event_context' | 'git_status' | 'initial_instructions' | 'rebase_result'
+export type MetaMessageType = 'compact_summary' | 'skill_content' | 'initial_context' | 'event_context' | 'git_status' | 'initial_instructions' | 'rebase_result' | 'task_notification'
 
 export interface MetaMessage {
   event_type: 'meta_message'
@@ -239,7 +239,7 @@ export interface LocalCommand {
   uuid?: string
 }
 
-export type SystemEventType = 'task_updated' | 'conversation_updated' | 'workspace_allocate' | 'workspace_branch_checkout' | 'workspace_create' | 'workspace_setup' | 'stream_error' | 'stream_interrupted' | 'branch_rebased' | 'stash_apply_conflict' | 'session_expired' | 'compacting_conversation' | 'rate_limit' | 'implementation_step_started'
+export type SystemEventType = 'task_updated' | 'conversation_updated' | 'workspace_allocate' | 'workspace_branch_checkout' | 'workspace_create' | 'workspace_setup' | 'stream_error' | 'stream_interrupted' | 'branch_rebased' | 'stash_apply_conflict' | 'session_expired' | 'compacting_conversation' | 'rate_limit' | 'implementation_step_started' | 'task_started'
 
 export interface ConversationMessage {
   event_type: 'message'

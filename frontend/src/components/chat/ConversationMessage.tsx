@@ -117,6 +117,10 @@ function getSystemEventLabel(type: SystemEventType, data?: Record<string, unknow
       return null // Don't show conversation_updated events
     case 'stream_error':
       return null // Rendered as a full Alert component below
+    case 'task_started': {
+      const description = data?.description as string | undefined
+      return description ? `Sub-agent: ${description}` : 'Sub-agent started'
+    }
     case 'compacting_conversation':
       return 'Compacting conversation...'
     case 'rate_limit': {
@@ -210,6 +214,7 @@ function MetaMessageDisplay({ message, highlightRing }: { message: MetaMessage; 
     git_status: 'Git status',
     initial_instructions: 'Instructions',
     rebase_result: 'Rebase result',
+    task_notification: 'Sub-agent notification',
   }
   const label = metaLabels[message.meta_type]
   const [isModalOpen, setIsModalOpen] = useState(false)

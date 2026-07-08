@@ -10,6 +10,8 @@ from claude_agent_sdk import (
     AssistantMessage,
     ResultMessage,
     SystemMessage,
+    TaskNotificationMessage,
+    TaskStartedMessage,
     TextBlock,
     ThinkingBlock,
     ToolResultBlock,
@@ -20,7 +22,18 @@ from pydantic_ai import Tool
 
 from devboard.agents.engines.claude_code.agent import ClaudeCodeAgent, _should_retry_error_result
 from devboard.agents.engines.claude_code.session import AssistantSessionMessage
-from devboard.agents.events import MessageRole, TextMessage, ThinkingEvent, ToolCall, ToolCallRequest, ToolResult
+from devboard.agents.events import (
+    MessageRole,
+    MetaMessage,
+    MetaMessageType,
+    SystemEvent,
+    SystemEventType,
+    TextMessage,
+    ThinkingEvent,
+    ToolCall,
+    ToolCallRequest,
+    ToolResult,
+)
 from devboard.agents.language_models import LLMProvider, ModelType
 from devboard.agents.roles.base import AgentRole
 from devboard.api.schemas.agent_conversation import ToolApprovalDecision, ToolApprovals
@@ -1434,3 +1447,107 @@ class TestClaudeCodeAgentRun:
 
         with pytest.raises(AssertionError, match="Expected exactly 1 TextMessage"):
             await agent_with_function_tool.run("Test prompt")
+
+
+class TestStreamEventsTaskMessages:
+    """Tests for stream_events() handling TaskNotificationMessage and TaskStartedMessage."""
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_task_notification_message_yields_meta_message(self, mock_client_class, agent_with_virtual_tool):
+        """Test that TaskNotificationMessage yields a MetaMessage(TASK_NOTIFICATION) with correct text_content."""
+        task_msg = TaskNotificationMessage(
+            subtype="task_notification",
+            data={},
+            task_id="task-abc-1",
+            status="completed",
+            output_file="",
+            summary="The refactoring task was completed successfully.",
+            uuid="msg-uuid-notif-1",
+            session_id="test-session-123",
+            usage={"total_tokens": 5000, "tool_uses": 12, "duration_ms": 45000},
+        )
+        setup_mock_client(
+            mock_client_class,
+            [
+                SystemMessage(subtype="session_start", data={"session_id": "test-session-123"}),
+                task_msg,
+                create_mock_result_message("", session_id="test-session-123"),
+            ],
+        )
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        meta_events = [e for e in events if isinstance(e, MetaMessage)]
+        assert len(meta_events) == 1
+        assert meta_events[0].meta_type == MetaMessageType.TASK_NOTIFICATION
+        expected_text = (
+            "**Status**: completed\n"
+            "**Summary**: The refactoring task was completed successfully.\n"
+            "\n**Usage**: 5,000 tokens · 12 tool uses · 45.0s"
+        )
+        assert meta_events[0].text_content == expected_text
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_task_notification_no_usage_omits_usage_line(self, mock_client_class, agent_with_virtual_tool):
+        """Test that TaskNotificationMessage without usage omits the usage line."""
+        task_msg = TaskNotificationMessage(
+            subtype="task_notification",
+            data={},
+            task_id="task-abc-2",
+            status="failed",
+            output_file="",
+            summary="Task failed due to a runtime error.",
+            uuid="msg-uuid-notif-2",
+            session_id="test-session-123",
+            usage=None,
+        )
+        setup_mock_client(
+            mock_client_class,
+            [
+                SystemMessage(subtype="session_start", data={"session_id": "test-session-123"}),
+                task_msg,
+                create_mock_result_message("", session_id="test-session-123"),
+            ],
+        )
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        meta_events = [e for e in events if isinstance(e, MetaMessage)]
+        assert len(meta_events) == 1
+        assert meta_events[0].meta_type == MetaMessageType.TASK_NOTIFICATION
+        assert meta_events[0].text_content == "**Status**: failed\n**Summary**: Task failed due to a runtime error."
+
+    @pytest.mark.asyncio
+    @patch("devboard.agents.engines.claude_code.agent.ClaudeClient")
+    async def test_task_started_message_yields_system_event(self, mock_client_class, agent_with_virtual_tool):
+        """Test that TaskStartedMessage yields a SystemEvent(TASK_STARTED) with description in data."""
+        task_msg = TaskStartedMessage(
+            subtype="task_started",
+            data={},
+            task_id="task-abc-3",
+            description="Implement the authentication module",
+            uuid="msg-uuid-started-1",
+            session_id="test-session-123",
+        )
+        setup_mock_client(
+            mock_client_class,
+            [
+                SystemMessage(subtype="session_start", data={"session_id": "test-session-123"}),
+                task_msg,
+                create_mock_result_message("", session_id="test-session-123"),
+            ],
+        )
+
+        events = []
+        async for event in agent_with_virtual_tool.stream_events("Test prompt"):
+            events.append(event)
+
+        task_events = [e for e in events if isinstance(e, SystemEvent) and e.sub_type == SystemEventType.TASK_STARTED]
+        assert len(task_events) == 1
+        assert task_events[0].data == {"description": "Implement the authentication module"}

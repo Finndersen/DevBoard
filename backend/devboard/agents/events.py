@@ -33,6 +33,7 @@ class MetaMessageType(StrEnum):
     GIT_STATUS = "git_status"
     INITIAL_INSTRUCTIONS = "initial_instructions"
     REBASE_RESULT = "rebase_result"
+    TASK_NOTIFICATION = "task_notification"
 
 
 class LocalCommandType(StrEnum):
@@ -60,6 +61,7 @@ class SystemEventType(StrEnum):
     COMPACTING_CONVERSATION = "compacting_conversation"
     RATE_LIMIT = "rate_limit"
     IMPLEMENTATION_STEP_STARTED = "implementation_step_started"
+    TASK_STARTED = "task_started"
 
 
 class TextMessage(BaseModel):

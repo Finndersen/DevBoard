@@ -254,6 +254,75 @@ class TestClaudeCodeSessionService:
         assert session_msg.command == ""
         assert session_msg.output == "Set model to opus"
 
+    def test_parse_task_notification_message(self):
+        """Test parsing user entry with task-notification XML (with usage) → MetaSessionMessage(TASK_NOTIFICATION)."""
+        content = (
+            "<task-notification>"
+            "<status>completed</status>"
+            "<summary>The feature was implemented successfully.</summary>"
+            "<usage>"
+            "<total_tokens>5000</total_tokens>"
+            "<tool_uses>12</tool_uses>"
+            "<duration_ms>45000</duration_ms>"
+            "</usage>"
+            "</task-notification>"
+        )
+        entry = {
+            "type": "user",
+            "uuid": "user-task-notif-1",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
+            "message": {"role": "user", "content": content},
+        }
+
+        session_msg = parse_session_message(entry, line_num=6)
+
+        assert isinstance(session_msg, MetaSessionMessage)
+        assert session_msg.meta_type == MetaMessageType.TASK_NOTIFICATION
+        expected = (
+            "**Status**: completed\n"
+            "**Summary**: The feature was implemented successfully.\n"
+            "\n**Usage**: 5,000 tokens · 12 tool uses · 45.0s"
+        )
+        assert session_msg.text_content == expected
+
+    def test_parse_task_notification_no_usage(self):
+        """Test parsing task-notification without usage block omits usage line."""
+        content = (
+            "<task-notification>"
+            "<status>failed</status>"
+            "<summary>Task failed due to an error.</summary>"
+            "</task-notification>"
+        )
+        entry = {
+            "type": "user",
+            "uuid": "user-task-notif-2",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
+            "message": {"role": "user", "content": content},
+        }
+
+        session_msg = parse_session_message(entry, line_num=7)
+
+        assert isinstance(session_msg, MetaSessionMessage)
+        assert session_msg.meta_type == MetaMessageType.TASK_NOTIFICATION
+        assert session_msg.text_content == "**Status**: failed\n**Summary**: Task failed due to an error."
+
+    def test_parse_task_started_message(self):
+        """Test that task-started XML is skipped on history replay (ephemeral live-stream badge)."""
+        content = "<task-started><description>Implement the new feature</description></task-started>"
+        entry = {
+            "type": "user",
+            "uuid": "user-task-started-1",
+            "timestamp": "2025-10-08T15:10:57.769Z",
+            "isSidechain": False,
+            "message": {"role": "user", "content": content},
+        }
+
+        session_msg = parse_session_message(entry, line_num=8)
+
+        assert session_msg is None
+
     def test_parse_system_local_command_entry(self):
         """Test parsing system entry with subtype=local_command."""
         entry = {

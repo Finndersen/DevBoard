@@ -14,6 +14,8 @@ from claude_agent_sdk import (
     RateLimitEvent,
     ResultMessage,
     SystemMessage,
+    TaskNotificationMessage,
+    TaskStartedMessage,
     TextBlock,
     UserMessage,
 )
@@ -39,6 +41,8 @@ from devboard.agents.engines.claude_code.virtual_tools import (
 from devboard.agents.events import (
     ContextUsage,
     ConversationEvent,
+    MetaMessage,
+    MetaMessageType,
     SystemEvent,
     SystemEventType,
     TextMessage,
@@ -250,7 +254,7 @@ class ClaudeCodeAgent(BaseAgent):
         self,
         user_message: str,
         interrupt_event: asyncio.Event | None = None,
-    ) -> AsyncGenerator[AssistantMessage | UserMessage | SystemEvent, None]:
+    ) -> AsyncGenerator[AssistantMessage | UserMessage | SystemEvent | MetaMessage, None]:
         """Stream raw SDK messages from Claude, handling API error retries internally.
 
         Handles session_id updates, rate limit events, compaction notifications, and
@@ -302,6 +306,31 @@ class ClaudeCodeAgent(BaseAgent):
                             self.last_result_message = message
                         # Don't break - let the stream finish naturally so the
                         # subprocess can flush the session file before exiting
+                        continue
+
+                    if isinstance(message, TaskNotificationMessage):
+                        parts = [
+                            f"**Status**: {message.status}",
+                            f"**Summary**: {message.summary}",
+                        ]
+                        if message.usage:
+                            duration_s = round(message.usage["duration_ms"] / 1000, 1)
+                            parts.append(
+                                f"\n**Usage**: {message.usage['total_tokens']:,} tokens · {message.usage['tool_uses']} tool uses · {duration_s}s"
+                            )
+                        yield MetaMessage(
+                            meta_type=MetaMessageType.TASK_NOTIFICATION,
+                            text_content="\n".join(parts),
+                            timestamp=datetime.datetime.now(datetime.UTC),
+                        )
+                        continue
+
+                    if isinstance(message, TaskStartedMessage):
+                        yield SystemEvent(
+                            sub_type=SystemEventType.TASK_STARTED,
+                            data={"description": message.description},
+                            timestamp=datetime.datetime.now(datetime.UTC),
+                        )
                         continue
 
                     if isinstance(message, SystemMessage):
@@ -397,12 +426,12 @@ class ClaudeCodeAgent(BaseAgent):
 
         # Retry loop for handling virtual tool call validation errors
         for attempt in range(MAX_RETRY_ATTEMPTS + 1):
-            raw_stream: AsyncGenerator[AssistantMessage | UserMessage | SystemEvent, None] = self._stream_raw_messages(
-                current_message, interrupt_event
+            raw_stream: AsyncGenerator[AssistantMessage | UserMessage | SystemEvent | MetaMessage, None] = (
+                self._stream_raw_messages(current_message, interrupt_event)
             )  # type: ignore[assignment]
             try:
                 async for raw_item in raw_stream:
-                    if isinstance(raw_item, SystemEvent):
+                    if isinstance(raw_item, SystemEvent | MetaMessage):
                         yield raw_item
                         continue
 

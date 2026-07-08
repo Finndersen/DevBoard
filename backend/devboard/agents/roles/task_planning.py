@@ -219,6 +219,7 @@ class TaskPlanningAgentRole(TaskAgentRoleBase):
         return ["task.merged", "document.updated", "project.updated"]
 
     def get_system_prompt(self) -> str:
+        """Get the system prompt for task planning role."""
         return PLANNING_ROLE_PROMPT
 
     def get_initial_instructions(self) -> str | None:
