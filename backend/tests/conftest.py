@@ -1,19 +1,6 @@
 import datetime
-import sys
 from collections.abc import Generator, Iterator
-from unittest.mock import AsyncMock, MagicMock, Mock
-
-# Stub out optional SDK packages so tests can import production modules even
-# when the packages are not installed in the dev/CI environment.
-if "claude_interactive_sdk" not in sys.modules:
-    sys.modules["claude_interactive_sdk"] = MagicMock()
-if "openai_codex" not in sys.modules:
-    _codex_stub = MagicMock()
-    sys.modules["openai_codex"] = _codex_stub
-    sys.modules["openai_codex.client"] = MagicMock()
-    sys.modules["openai_codex.generated"] = MagicMock()
-    sys.modules["openai_codex.generated.v2_all"] = MagicMock()
-    sys.modules["openai_codex.models"] = MagicMock()
+from unittest.mock import AsyncMock, Mock
 
 import logfire
 import pytest

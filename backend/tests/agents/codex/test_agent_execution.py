@@ -89,7 +89,7 @@ class TestThreadIdProperty:
 class TestContextMessageInjection:
     @pytest.mark.asyncio
     async def test_builds_context_message_when_thread_id_is_none(self):
-        """On first run (no thread_id), _build_context_message wraps the user message."""
+        """On first run (no thread_id), _enrich_message is called with is_first_message=True."""
         service = _make_service(external_session_id=None)
         mock_agent = _make_mock_agent(thread_id=None)
 
@@ -98,18 +98,18 @@ class TestContextMessageInjection:
             patch.object(service, "_setup_mcp_host", new=AsyncMock(return_value=(None, ()))),
             patch.object(
                 service,
-                "_build_context_message",
+                "_enrich_message",
                 new=AsyncMock(return_value="[context] original message"),
-            ) as mock_build,
+            ) as mock_enrich,
         ):
             async for _ in service._stream_events_impl("original message", []):
                 pass
 
-        mock_build.assert_called_once_with("original message")
+        mock_enrich.assert_called_once_with("original message", is_first_message=True)
 
     @pytest.mark.asyncio
     async def test_does_not_build_context_when_thread_id_exists(self):
-        """On subsequent runs (thread_id set), _build_context_message is NOT called."""
+        """On subsequent runs (thread_id set), _enrich_message is called with is_first_message=False."""
         service = _make_service(external_session_id="existing_thread")
         mock_agent = _make_mock_agent(thread_id="existing_thread")
 
@@ -118,14 +118,14 @@ class TestContextMessageInjection:
             patch.object(service, "_setup_mcp_host", new=AsyncMock(return_value=(None, ()))),
             patch.object(
                 service,
-                "_build_context_message",
-                new=AsyncMock(return_value="should not be called"),
-            ) as mock_build,
+                "_enrich_message",
+                new=AsyncMock(return_value="follow-up message"),
+            ) as mock_enrich,
         ):
             async for _ in service._stream_events_impl("follow-up message", []):
                 pass
 
-        mock_build.assert_not_called()
+        mock_enrich.assert_called_once_with("follow-up message", is_first_message=False)
 
 
 class TestExternalSessionIdUpdate:
@@ -143,7 +143,7 @@ class TestExternalSessionIdUpdate:
         with (
             patch.object(service, "_get_agent", return_value=mock_agent),
             patch.object(service, "_setup_mcp_host", new=AsyncMock(return_value=(None, ()))),
-            patch.object(service, "_build_context_message", new=AsyncMock(return_value="ctx + msg")),
+            patch.object(service, "_enrich_message", new=AsyncMock(return_value="ctx + msg")),
         ):
             events = [e async for e in service._stream_events_impl("start", [])]
 
@@ -171,7 +171,7 @@ class TestExternalSessionIdUpdate:
         with (
             patch.object(service, "_get_agent", return_value=mock_agent),
             patch.object(service, "_setup_mcp_host", new=AsyncMock(return_value=(None, ()))),
-            patch.object(service, "_build_context_message", new=AsyncMock(return_value="ctx")),
+            patch.object(service, "_enrich_message", new=AsyncMock(return_value="ctx")),
         ):
             events = [e async for e in service._stream_events_impl("msg", [])]
 
@@ -202,7 +202,7 @@ class TestExternalSessionIdUpdate:
         with (
             patch.object(service, "_get_agent", return_value=mock_agent),
             patch.object(service, "_setup_mcp_host", new=AsyncMock(return_value=(None, ()))),
-            patch.object(service, "_build_context_message", new=AsyncMock(return_value="ctx")),
+            patch.object(service, "_enrich_message", new=AsyncMock(return_value="ctx")),
         ):
             events = [e async for e in service._stream_events_impl("start", [])]
 
@@ -385,7 +385,7 @@ class TestInterruptHandling:
 class TestRunImpl:
     @pytest.mark.asyncio
     async def test_builds_context_message_on_first_run(self):
-        """_run_impl calls _build_context_message when thread_id is None."""
+        """_run_impl calls _enrich_message with is_first_message=True when thread_id is None."""
         service = _make_service(external_session_id=None)
 
         mock_agent = MagicMock()
@@ -403,18 +403,18 @@ class TestRunImpl:
             patch.object(service, "_setup_mcp_host", new=AsyncMock(return_value=(None, ()))),
             patch.object(
                 service,
-                "_build_context_message",
+                "_enrich_message",
                 new=AsyncMock(return_value="[ctx] original"),
-            ) as mock_build,
+            ) as mock_enrich,
         ):
             await service._run_impl("original", [])
 
-        mock_build.assert_called_once_with("original")
+        mock_enrich.assert_called_once_with("original", is_first_message=True)
         mock_agent.run.assert_called_once_with("[ctx] original")
 
     @pytest.mark.asyncio
     async def test_does_not_build_context_when_thread_id_exists(self):
-        """_run_impl skips _build_context_message when thread_id is set."""
+        """_run_impl calls _enrich_message with is_first_message=False when thread_id is set."""
         service = _make_service(external_session_id="existing")
 
         mock_agent = MagicMock()
@@ -432,13 +432,13 @@ class TestRunImpl:
             patch.object(service, "_setup_mcp_host", new=AsyncMock(return_value=(None, ()))),
             patch.object(
                 service,
-                "_build_context_message",
-                new=AsyncMock(return_value="should not be called"),
-            ) as mock_build,
+                "_enrich_message",
+                new=AsyncMock(return_value="follow-up"),
+            ) as mock_enrich,
         ):
             await service._run_impl("follow-up", [])
 
-        mock_build.assert_not_called()
+        mock_enrich.assert_called_once_with("follow-up", is_first_message=False)
         mock_agent.run.assert_called_once_with("follow-up")
 
     @pytest.mark.asyncio
@@ -459,7 +459,7 @@ class TestRunImpl:
         with (
             patch.object(service, "_get_agent", return_value=mock_agent),
             patch.object(service, "_setup_mcp_host", new=AsyncMock(return_value=(None, ()))),
-            patch.object(service, "_build_context_message", new=AsyncMock(return_value="ctx + msg")),
+            patch.object(service, "_enrich_message", new=AsyncMock(return_value="ctx + msg")),
         ):
             await service._run_impl("start", [])
 
