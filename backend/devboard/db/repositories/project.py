@@ -23,17 +23,21 @@ class ProjectRepository(BaseRepository[Project]):
     def get_all(
         self,
         parent_project_id: int | None = None,
+        root_only: bool = False,
         complete: bool | None = None,
     ) -> list[Project]:
         """Get projects with optional filtering.
 
         Args:
             parent_project_id: If provided, filter to initiatives under this parent.
+            root_only: If True, return only root projects (no parent).
             complete: Filter by completion status. Defaults to False (non-complete only).
         """
         stmt = select(Project).options(joinedload(Project.parent))
         if parent_project_id is not None:
             stmt = stmt.where(Project.parent_project_id == parent_project_id)
+        elif root_only:
+            stmt = stmt.where(Project.parent_project_id == None)  # noqa: E711
         # Default: exclude complete projects
         filter_complete = complete if complete is not None else False
         stmt = stmt.where(Project.complete == filter_complete)

@@ -20,7 +20,10 @@ from .document_editing import (
 )
 from .github_tools import create_get_pr_feedback_tool, create_get_pr_status_tool, create_github_pr_tool
 from .project_tools import (
+    create_complete_project_tool,
+    create_create_initiative_tool,
     create_edit_project_specification_tool,
+    create_list_project_initiatives_tool,
     create_list_projects_tool,
     create_set_project_specification_content_tool,
     create_view_project_details_tool,
@@ -45,6 +48,8 @@ __all__ = [
     "build_project_context_document_tools",
     "create_branch_conversation_tool",
     "create_code_structure_search_tool",
+    "create_complete_project_tool",
+    "create_create_initiative_tool",
     "create_refocus_conversation_tool",
     "create_merge_branch_and_finalise_tool",
     "create_create_task_tool",
@@ -62,6 +67,7 @@ __all__ = [
     "create_document_edit_tool",
     "create_edit_project_specification_tool",
     "create_file_search_tool",
+    "create_list_project_initiatives_tool",
     "create_list_projects_tool",
     "create_set_project_specification_content_tool",
     "create_view_project_details_tool",

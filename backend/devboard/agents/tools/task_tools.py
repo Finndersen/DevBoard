@@ -96,8 +96,8 @@ def create_list_tasks_tool(
         Results are ordered by most recently updated first.
 
         Args:
-            project_id: Filter by project ID. Defaults to the current project when scoped to one.
-                Pass None to see tasks across all projects.
+            project_id: Filter by project or initiative ID. Defaults to the current project when scoped to one.
+                Pass None to see tasks across all projects and initiatives.
             status_filter: Filter by one or more status values.
                 Valid values: 'planning', 'implementing', 'pr_open', 'complete'
             created_after_date: Filter tasks created on or after this date (format: 'YYYY-MM-DD')
@@ -541,7 +541,7 @@ def create_edit_task_tool(
         custom_fields: dict[str, Any] | None = None,
         specification_content: str | None = None,
     ) -> str:
-        """Edit metadata fields and/or specification content of an existing task within the current project."""
+        """Edit metadata fields and/or specification content of an existing task within the current project or initiative."""
         if title is None and custom_fields is None and specification_content is None:
             raise ModelRetry(
                 "No fields to update. Provide at least one of: title, custom_fields, specification_content."
@@ -569,7 +569,7 @@ def create_edit_task_tool(
     return Tool.from_schema(
         function=edit_task,
         name="edit_task",
-        description="Edit metadata fields (title, custom fields) and/or specification content of an existing task within the current project.",
+        description="Edit metadata fields (title, custom fields) and/or specification content of an existing task within the current project or initiative.",
         json_schema=json_schema,
     )
 
@@ -646,7 +646,7 @@ def create_create_task_tool(
         custom_fields: dict[str, Any] | None = None,
         initial_prompt: str | None = None,
     ) -> str:
-        """Create a new task within the current project.
+        """Create a new task within the current project or initiative.
 
         Use this tool to create a new task for tracking work to be done.
         Optionally provide initial_prompt to immediately launch agent execution on the task's planning conversation.
@@ -718,7 +718,7 @@ def create_create_task_tool(
         function=create_task,
         name="create_task",
         description=(
-            "Create a new task within the current project. "
+            "Create a new task within the current project or initiative. "
             "Patterns: (1) provide specification_content + initial_prompt (e.g. 'The spec is complete. Create the implementation plan.') "
             "to create with spec and immediately begin planning; "
             "(2) provide specification_content only — task created with spec for manual review; "

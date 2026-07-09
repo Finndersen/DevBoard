@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 from devboard.agents.roles.background_agent import BackgroundAgentRole
 from devboard.agents.roles.base import AgentRole
-from devboard.agents.roles.project_qa import ProjectQAAgentRole
+from devboard.agents.roles.project_agent import ProjectAgentRole
 from devboard.agents.roles.task_planning import TaskPlanningAgentRole
 from devboard.agents.roles.task_pr_review import TaskPRReviewAgentRole
 
@@ -26,16 +26,17 @@ def _make_task_planning_role() -> TaskPlanningAgentRole:
     )
 
 
-def _make_project_qa_role() -> ProjectQAAgentRole:
+def _make_project_agent_role() -> ProjectAgentRole:
     project = Mock()
     project.id = 1
-    return ProjectQAAgentRole(
+    return ProjectAgentRole(
         project=project,
         document_repository=Mock(),
         agent_config_service=Mock(),
         task_service=Mock(),
         conversation_repo=Mock(),
         conversation_id=None,
+        project_service=Mock(),
     )
 
 
@@ -96,14 +97,15 @@ class TestEventContextTypesProperty:
         role = _make_task_planning_role()
         assert set(role.event_context_types) == {"task.merged", "document.updated", "project.updated"}
 
-    def test_project_qa_role_event_context_types(self):
-        role = _make_project_qa_role()
+    def test_project_agent_role_event_context_types(self):
+        role = _make_project_agent_role()
         assert set(role.event_context_types) == {
             "task.created",
             "task.merged",
             "task.deleted",
             "document.updated",
             "project.updated",
+            "project.completed",
         }
 
     def test_task_pr_review_role_event_context_types(self):

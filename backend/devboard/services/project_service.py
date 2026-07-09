@@ -97,3 +97,18 @@ class ProjectService:
         self.system_event_emitter.emit_project_created(project)
 
         return project
+
+    def complete_project(self, project: Project, summary: str) -> Project:
+        """Mark a project or initiative as complete.
+
+        Args:
+            project: The project or initiative to complete
+            summary: A summary of what was accomplished
+
+        Returns:
+            Updated Project instance with complete=True
+        """
+        project.complete = True
+        updated = self.project_repo.update(project)
+        self.system_event_emitter.emit_project_completed(updated, summary)
+        return updated

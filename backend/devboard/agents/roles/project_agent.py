@@ -1,4 +1,4 @@
-"""Project Q&A role for answering questions and managing project specifications."""
+"""Project and initiative agent role for managing specifications, tasks, and lifecycle."""
 
 from pydantic_ai import Tool
 
@@ -14,6 +14,11 @@ from devboard.agents.tools import (
 from devboard.agents.tools.codebase_management_tools import (
     create_update_codebase_tool,
     create_view_codebase_details_tool,
+)
+from devboard.agents.tools.project_tools import (
+    create_complete_project_tool,
+    create_create_initiative_tool,
+    create_list_project_initiatives_tool,
 )
 from devboard.agents.tools.sub_agent_tools import CodebaseInvestigationContext, create_multi_codebase_investigation_tool
 from devboard.agents.tools.task_agent_tools import (
@@ -33,24 +38,58 @@ from devboard.db.repositories import (
     DocumentRepository,
     LogEntryRepository,
 )
+from devboard.db.repositories.project import ProjectRepository
 from devboard.services.conversation_service import ConversationService
 from devboard.services.global_context_service import GlobalContextService
+from devboard.services.project_service import ProjectService
 from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_service import TaskService
 
-PROJECT_QA_ROLE_PROMPT = """
-You are a Project Assistant for DevBoard, an AI-powered developer command center.
+_VISUAL_CONTENT_SECTION = """\
+## VISUAL CONTENT
 
-Your role is to assist a developer working on a software project by:
-- Answering questions about the project based on the specification, tasks, and associated context
-- Discussing requirements and goals to create new tasks or refine the project specification
-- Managing project tasks
+The frontend renders these fenced code blocks as live visuals in both conversation messages
+and documents:
+
+- **` ```mermaid `** — interactive diagrams for architecture, data flows, state machines,
+  or sequences
+- **` ```html `** / **` ```svg `** — sandboxed live previews (scripts enabled) for UI mockups,
+  styled components, or interactive demos
+- **` ```html `** blocks can also load external JS libraries from CDNs (e.g. Chart.js, D3.js,
+  Plotly) for rich dashboards, charts, or interactive data tables — provide a complete
+  self-contained HTML document
+
+Use these proactively: diagrams in conversation to explain ideas, visual mockups mid-discussion
+rather than waiting for a formal spec update, dashboards to summarise project status."""
+
+_BEHAVIOUR_GUIDELINES_SECTION = """\
+## BEHAVIOUR GUIDELINES
+
+- **Confirm before editing** — only modify the project or initiative document when explicitly
+  instructed or after asking and receiving confirmation.
+- **Discuss first** — when a user raises a change, ask clarifying questions to reach mutual
+  understanding before proposing an update.
+- **After editing** — briefly note what changed and invite feedback; do not repeat the full
+  document content.
+- **Be accurate and honest** — base responses on provided context; acknowledge when context is
+  insufficient rather than speculating.
+- **Be concise** — use Markdown formatting, short paragraphs, and bullets. Avoid walls of text."""
+
+_TASK_CREATION_SECTION = """\
+## TASK CREATION
+
+When creating tasks with specifications, ensure specs include: goal (what and why), relevant background, functional requirements and constraints. May include critical implementation details essential to the outcome (e.g. specific data models, API contracts). Exclude routine implementation steps. Keep specs concise and scannable — use bullet points, tables, and diagrams."""
+
+PROJECT_ROLE_PROMPT = f"""\
+You are a Project Assistant for DevBoard, an AI-powered developer command center.
+You help manage a top-level **project** — a container for related development work with its own
+specification document, tasks, and child initiatives.
 
 ## PROJECT SPECIFICATION
 
 The project specification is a living reference document shared as context with every task agent
-in the project. It gives task agents (and human reviewers) rapid orientation — keep it accurate
-and concise, not exhaustive.
+and initiative agent in the project. It gives agents (and human reviewers) rapid orientation —
+keep it accurate and concise, not exhaustive.
 
 **Recommended structure:**
 
@@ -69,54 +108,70 @@ What has been built and where things stand. Keep this up-to-date as work progres
 When proposing updates to the specification, follow this structure. Use visual content
 (diagrams, tables) where it reduces ambiguity — see **VISUAL CONTENT** below.
 
-## VISUAL CONTENT
+## INITIATIVES
 
-The frontend renders these fenced code blocks as live visuals in both conversation messages
-and documents:
+An initiative is a sub-project with its own scoped goal, context document, and tasks. Outcomes
+from an initiative feed back into this project's specification.
 
-- **` ```mermaid `** — interactive diagrams for architecture, data flows, state machines,
-  or sequences
-- **` ```html `** / **` ```svg `** — sandboxed live previews (scripts enabled) for UI mockups,
-  styled components, or interactive demos
-- **` ```html `** blocks can also load external JS libraries from CDNs (e.g. Chart.js, D3.js,
-  Plotly) for rich dashboards, charts, or interactive data tables — provide a complete
-  self-contained HTML document
+**When to propose creating one:**
+- The user describes a body of work spanning 3 or more related tasks with a clear sub-goal.
+- An investigation or discovery phase is likely to generate structured follow-up work.
 
-Use these proactively: diagrams in conversation to explain ideas, visual mockups mid-discussion
-rather than waiting for a formal spec update, dashboards to summarise project status.
+**How:** Use `create_initiative` to create one. After creating, help the user open it and set up
+its context document.
 
-## BEHAVIOUR GUIDELINES
+## LIFECYCLE
 
-- **Confirm before editing** — only modify the project specification when explicitly instructed
-  or after asking and receiving confirmation.
-- **Discuss first** — when a user raises a change, ask clarifying questions to reach mutual
-  understanding before proposing a specification update.
-- **After editing** — briefly note what changed and invite feedback; do not repeat the full
-  document content.
-- **Be accurate and honest** — base responses on provided context; acknowledge when context is
-  insufficient rather than speculating.
-- **Be concise** — use Markdown formatting, short paragraphs, and bullets. Avoid walls of text.
+When all active tasks and initiatives are complete with no obvious follow-ups, proactively ask the
+user: create follow-up work, or mark this project as complete? Use `complete_project` to finalise.
 
-## TASK CREATION
+{_VISUAL_CONTENT_SECTION}
 
-When creating tasks with specifications, ensure specs include: goal (what and why), relevant background, functional requirements and constraints. May include critical implementation details essential to the outcome (e.g. specific data models, API contracts). Exclude routine implementation steps. Keep specs concise and scannable — use bullet points, tables, and diagrams.
+{_BEHAVIOUR_GUIDELINES_SECTION}
+
+{_TASK_CREATION_SECTION}
 """
 
+INITIATIVE_ROLE_PROMPT = f"""\
+You are an Initiative Assistant for DevBoard, an AI-powered developer command center.
+An initiative is a **sub-project** focused on a specific scoped goal within a larger parent project.
+You help manage this initiative's context document, tasks, and progress toward its goal.
 
-_INITIATIVE_PROMPT_SUFFIX = """
-## INITIATIVE CONTEXT
+## INITIATIVE CONTEXT DOCUMENT
 
-You are acting as assistant for an **initiative** (sub-project) that sits within a larger parent project.
+Your initiative context document captures initiative-specific goals, progress, and decisions.
+The parent project specification (provided in context) describes the broader project.
 
-- Your initiative context document captures initiative-specific goals, progress, and decisions.
-- The parent project specification (provided in context) describes the broader project.
-- You have separate, purpose-named tools for each document — you never pass a project id:
-  - `edit_initiative_context` / `set_initiative_context_content` edit your own initiative's document.
-  - `edit_project_specification` edits the parent project's specification.
-- **Edit your own initiative context** for initiative-level detail and progress.
-- **Update the parent project spec** only when feeding outcomes, key decisions, or follow-up work
-  upward — for example when completing a significant milestone or wrapping up the initiative.
-- Keep the parent project spec high-level; detailed initiative progress belongs in the initiative context.
+You have separate, purpose-named tools for each document — you never pass a project id:
+- `edit_initiative_context` / `set_initiative_context_content` edit your own initiative's document.
+- `edit_project_specification` edits the parent project's specification.
+
+**Edit your own initiative context** for initiative-level detail and progress.
+**Update the parent project spec** only when feeding outcomes, key decisions, or follow-up work
+upward — for example when completing a significant milestone or wrapping up the initiative.
+Keep the parent project spec high-level; detailed initiative progress belongs in the initiative context.
+
+## SCOPE CONSTRAINTS
+
+Initiatives cannot have child initiatives (max nesting depth = 1). If the user identifies work
+that may warrant a sibling initiative under the parent project, communicate this — they can create
+it via the parent project agent.
+
+Scope tasks to this initiative's goal; keep the parent project specification high-level.
+
+## LIFECYCLE
+
+When all tasks are done with no obvious follow-ups in scope, proactively ask the user: create
+follow-up tasks, or mark this initiative as complete?
+
+Before completing: update the parent project spec with outcomes, key decisions, and any follow-up
+recommendations. Then call `complete_project` to finalise this initiative.
+
+{_VISUAL_CONTENT_SECTION}
+
+{_BEHAVIOUR_GUIDELINES_SECTION}
+
+{_TASK_CREATION_SECTION}
 """
 
 _INITIAL_SETUP_GUIDANCE = """\
@@ -165,7 +220,7 @@ def _format_initiatives_section(project: Project) -> str:
     return f"INITIATIVES:\n{header}\n" + "\n".join(rows) + "\n"
 
 
-def build_project_qa_context(
+def build_project_context(
     project: Project,
     active_tasks: list[Task],
     recent_completed_tasks: list[Task],
@@ -218,8 +273,8 @@ This is an initiative under the project above.
     return context
 
 
-class ProjectQAAgentRole(AgentRole):
-    """Role for project Q&A and specification management."""
+class ProjectAgentRole(AgentRole):
+    """Role for project and initiative agents — manages specification, tasks, and lifecycle."""
 
     def __init__(
         self,
@@ -227,6 +282,7 @@ class ProjectQAAgentRole(AgentRole):
         document_repository: DocumentRepository,
         agent_config_service: AgentConfigService,
         task_service: TaskService,
+        project_service: ProjectService,
         conversation_repo: ConversationRepository,
         conversation_id: int | None,
         conversation_service: ConversationService | None = None,
@@ -235,27 +291,31 @@ class ProjectQAAgentRole(AgentRole):
         self.document_repository = document_repository
         self.agent_config_service = agent_config_service
         self.task_service = task_service
+        self.project_service = project_service
         self.conversation_repo = conversation_repo
         self.conversation_id = conversation_id
         self.conversation_service = conversation_service
 
     @property
     def event_context_types(self) -> list[str]:
-        return ["task.created", "task.merged", "task.deleted", "document.updated", "project.updated"]
+        return [
+            "task.created",
+            "task.merged",
+            "task.deleted",
+            "document.updated",
+            "project.updated",
+            "project.completed",
+        ]
 
     def get_system_prompt(self) -> str:
-        if self.project.parent:
-            return PROJECT_QA_ROLE_PROMPT + _INITIATIVE_PROMPT_SUFFIX
-        return PROJECT_QA_ROLE_PROMPT
+        if self.project.is_initiative:
+            return INITIATIVE_ROLE_PROMPT
+        return PROJECT_ROLE_PROMPT
 
     def get_tools(self) -> list[Tool]:
-        """Get tools for project Q&A role.
-
-        Returns:
-            List of document editing tools, task query tools, and codebase investigation tool
-        """
         log_entry_repo = LogEntryRepository(self.document_repository.db)
         event_emitter = SystemEventEmitter(log_entry_repo)
+        project_repo = ProjectRepository(self.conversation_repo.db)
 
         tools: list[Tool] = [
             *build_project_context_document_tools(
@@ -274,7 +334,14 @@ class ProjectQAAgentRole(AgentRole):
             create_get_task_agent_status_tool(self.project, self.task_service, self.conversation_repo),
             # Conversation analysis tool
             create_inspect_conversation_tool(self.conversation_repo),
+            # Lifecycle tool (available to both project and initiative agents)
+            create_complete_project_tool(self.project, self.project_service),
         ]
+
+        # Root-project-only tools
+        if not self.project.is_initiative:
+            tools.append(create_create_initiative_tool(self.project, self.project_service))
+            tools.append(create_list_project_initiatives_tool(self.project, project_repo))
 
         # Context management tools (refocus/branch) require a conversation_id and service
         if self.conversation_id is not None and self.conversation_service is not None:
@@ -313,14 +380,9 @@ class ProjectQAAgentRole(AgentRole):
         return tools
 
     async def get_context_content(self) -> str:
-        """Get context content for project Q&A role.
-
-        Returns:
-            Formatted context containing project details, specification, and task summaries
-        """
         gc = GlobalContextService().get().content or None
         active_tasks, recent_completed = self.task_service.get_project_task_summaries(self.project.id)
-        return build_project_qa_context(self.project, active_tasks, recent_completed, global_context=gc)
+        return build_project_context(self.project, active_tasks, recent_completed, global_context=gc)
 
     @property
     def allowed_builtin_tools(self) -> list[str]:

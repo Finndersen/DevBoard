@@ -89,3 +89,69 @@ class TestProjectServiceCreateProject:
         project_service.create_project(name="Initiative", parent_project_id=5)
 
         mock_document_repo.create.assert_called_once_with(DocumentType.INITIATIVE_CONTEXT, "")
+
+
+class TestProjectServiceCompleteProject:
+    def test_sets_complete_to_true(self, project_service, mock_project_repo):
+        """complete_project() sets project.complete = True."""
+        project = MagicMock()
+        project.id = 10
+        project.name = "Test Project"
+        project.complete = False
+        mock_project_repo.update.return_value = project
+
+        project_service.complete_project(project, "All work done")
+
+        assert project.complete is True
+
+    def test_calls_project_repo_update(self, project_service, mock_project_repo):
+        """complete_project() calls project_repo.update() with the project."""
+        project = MagicMock()
+        project.id = 10
+        project.name = "Test Project"
+        updated_project = MagicMock()
+        updated_project.id = 10
+        updated_project.name = "Test Project"
+        updated_project.complete = True
+        mock_project_repo.update.return_value = updated_project
+
+        result = project_service.complete_project(project, "Finished")
+
+        mock_project_repo.update.assert_called_once_with(project)
+        assert result == updated_project
+
+    def test_emits_project_completed_event(self, project_service, mock_project_repo, mock_system_event_emitter):
+        """complete_project() emits a project.completed system event."""
+        project = MagicMock()
+        project.id = 10
+        project.name = "Test Project"
+        updated_project = MagicMock()
+        updated_project.id = 10
+        updated_project.name = "Test Project"
+        updated_project.complete = True
+        mock_project_repo.update.return_value = updated_project
+
+        project_service.complete_project(project, "All tasks done")
+
+        mock_system_event_emitter.emit_project_completed.assert_called_once_with(updated_project, "All tasks done")
+
+    def test_emits_event_after_update(self, project_service, mock_project_repo, mock_system_event_emitter):
+        """project.completed is emitted after the project is updated."""
+        project = MagicMock()
+        project.id = 10
+        project.name = "Test Project"
+        updated_project = MagicMock()
+        updated_project.id = 10
+        updated_project.name = "Test Project"
+        mock_project_repo.update.return_value = updated_project
+
+        call_order = []
+        mock_project_repo.update.side_effect = lambda p: (
+            call_order.append("update"),
+            updated_project,
+        )[-1]
+        mock_system_event_emitter.emit_project_completed.side_effect = lambda p, s: call_order.append("emit")
+
+        project_service.complete_project(project, "Done")
+
+        assert call_order.index("update") < call_order.index("emit")

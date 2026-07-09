@@ -8,6 +8,7 @@ from pydantic_ai import ModelRetry
 
 from devboard.agents.tools.project_tools import (
     create_edit_project_specification_tool,
+    create_list_project_initiatives_tool,
     create_list_projects_tool,
     create_set_project_specification_content_tool,
     create_view_project_details_tool,
@@ -89,18 +90,17 @@ def mock_completed_task():
 
 
 class TestListProjectsTool:
-    def test_returns_all_projects(self, mock_project_repo, mock_project):
+    def test_returns_root_projects_only(self, mock_project_repo, mock_project):
         tool = create_list_projects_tool(mock_project_repo)
         result = tool.function()
 
+        mock_project_repo.get_all.assert_called_once_with(root_only=True)
         data = json.loads(result)
         assert data == [
             {
                 "id": 1,
                 "name": "Test Project",
                 "description": "A test project description",
-                "type": "project",
-                "parent_project_id": None,
                 "codebases": ["backend"],
             }
         ]
@@ -123,6 +123,55 @@ class TestListProjectsTool:
     def test_tool_name(self, mock_project_repo):
         tool = create_list_projects_tool(mock_project_repo)
         assert tool.name == "list_projects"
+
+
+class TestListProjectInitiativesTool:
+    def test_returns_initiatives_for_project(self, mock_project, mock_project_repo):
+        initiative = Mock(spec=Project)
+        initiative.id = 2
+        initiative.name = "My Initiative"
+        initiative.description = "Initiative description"
+        initiative.complete = False
+        mock_project_repo.get_all.return_value = [initiative]
+
+        tool = create_list_project_initiatives_tool(mock_project, mock_project_repo)
+        result = tool.function()
+
+        mock_project_repo.get_all.assert_called_once_with(parent_project_id=mock_project.id)
+        data = json.loads(result)
+        assert data == [
+            {
+                "id": 2,
+                "name": "My Initiative",
+                "description": "Initiative description",
+                "status": "active",
+            }
+        ]
+
+    def test_shows_complete_status(self, mock_project, mock_project_repo):
+        initiative = Mock(spec=Project)
+        initiative.id = 3
+        initiative.name = "Done Initiative"
+        initiative.description = None
+        initiative.complete = True
+        mock_project_repo.get_all.return_value = [initiative]
+
+        tool = create_list_project_initiatives_tool(mock_project, mock_project_repo)
+        result = tool.function()
+
+        data = json.loads(result)
+        assert data[0]["status"] == "complete"
+
+    def test_returns_empty_list_when_no_initiatives(self, mock_project, mock_project_repo):
+        mock_project_repo.get_all.return_value = []
+        tool = create_list_project_initiatives_tool(mock_project, mock_project_repo)
+        result = tool.function()
+
+        assert json.loads(result) == []
+
+    def test_tool_name(self, mock_project, mock_project_repo):
+        tool = create_list_project_initiatives_tool(mock_project, mock_project_repo)
+        assert tool.name == "list_project_initiatives"
 
 
 class TestViewProjectDetailsTool:

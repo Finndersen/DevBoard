@@ -99,6 +99,18 @@ class SystemEventEmitter:
             pinned=False,
         )
 
+    def emit_project_completed(self, project: Project, summary: str) -> LogEntry:
+        """Emit a project.completed event."""
+        return self.log_entry_repo.create(
+            source=LogEntrySource.SYSTEM,
+            type="project.completed",
+            content=f"Project '{project.name}' was marked complete: {summary}",
+            project_id=project.id,
+            entry_metadata={"project_name": project.name, "summary": summary},
+            status=LogEntryStatus.ACTIVE,
+            pinned=False,
+        )
+
     def emit_agent_run_completed(
         self,
         conversation: Conversation,

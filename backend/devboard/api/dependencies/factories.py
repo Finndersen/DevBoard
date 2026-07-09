@@ -15,7 +15,7 @@ from devboard.agents.engines.internal import PydanticAIAgentExecutionService
 from devboard.agents.execution.agent_execution import AgentExecutionService
 from devboard.agents.roles import AgentRole, AgentRoleType
 from devboard.agents.roles.background_agent import BackgroundAgentRole
-from devboard.agents.roles.project_qa import ProjectQAAgentRole
+from devboard.agents.roles.project_agent import ProjectAgentRole
 from devboard.agents.roles.task_finalisation import TaskFinalisationAgentRole
 from devboard.agents.roles.task_implementation import TaskImplementationAgentRole
 from devboard.agents.roles.task_planning import TaskPlanningAgentRole
@@ -38,6 +38,8 @@ from devboard.services.conversation_service import ConversationService
 from devboard.services.integration_service import IntegrationService
 from devboard.services.log_entry_service import LogEntryService
 from devboard.services.oauth_service import OAuthService
+from devboard.services.project_service import ProjectService
+from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_implementation_plan import TaskImplementationPlanService
 from devboard.services.task_service import TaskService
 
@@ -118,11 +120,19 @@ async def create_agent_role_for_conversation(
     elif isinstance(parent_entity, Project):
         # Must be a project
         if conversation.agent_role == AgentRoleType.PROJECT:
-            return ProjectQAAgentRole(
+            log_entry_repo = LogEntryRepository(conversation_repo.db)
+            project_service = ProjectService(
+                conversation_service=ConversationService(conversation_repo, agent_config_service),
+                document_repo=document_repo,
+                project_repo=ProjectRepository(conversation_repo.db),
+                system_event_emitter=SystemEventEmitter(log_entry_repo),
+            )
+            return ProjectAgentRole(
                 project=parent_entity,
                 document_repository=document_repo,
                 agent_config_service=agent_config_service,
                 task_service=task_service,
+                project_service=project_service,
                 conversation_repo=conversation_repo,
                 conversation_id=parent_conversation_id,
                 conversation_service=ConversationService(conversation_repo, agent_config_service),

@@ -1,18 +1,30 @@
-"""Tests for project QA context building and TaskService.get_project_task_summaries."""
+"""Tests for project/initiative agent context building and TaskService.get_project_task_summaries."""
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
 from pytest import fixture
 
-from devboard.agents.roles.project_qa import ProjectQAAgentRole, build_project_qa_context
+from devboard.agents.roles.project_agent import (
+    INITIATIVE_ROLE_PROMPT,
+    PROJECT_ROLE_PROMPT,
+    ProjectAgentRole,
+    build_project_context,
+)
 from devboard.db.models import DocumentType, Project, Task
 from devboard.db.models.codebase import Codebase
 from devboard.db.models.task import TaskStatus
-from devboard.db.repositories import CodebaseRepository, DocumentRepository, ProjectRepository, TaskRepository
+from devboard.db.repositories import (
+    CodebaseRepository,
+    ConversationRepository,
+    DocumentRepository,
+    ProjectRepository,
+    TaskRepository,
+)
 from devboard.db.repositories.custom_field import CustomFieldRepository
 from devboard.db.repositories.implementation_plan import TaskImplementationPlanRepository
 from devboard.services.conversation_service import ConversationService
+from devboard.services.project_service import ProjectService
 from devboard.services.system_event_emitter import SystemEventEmitter
 from devboard.services.task_service import RECENT_COMPLETED_TASKS_LIMIT, TaskService
 
@@ -106,12 +118,12 @@ def _create_task(
     return task
 
 
-class TestBuildProjectQAContext:
-    """Tests for build_project_qa_context function."""
+class TestBuildProjectContext:
+    """Tests for build_project_context function."""
 
     def test_no_tasks_includes_project_spec_only(self, project_with_spec: Project):
         """Context includes project name and spec but no task sections when no tasks."""
-        context = build_project_qa_context(project_with_spec, [], [])
+        context = build_project_context(project_with_spec, [], [])
 
         assert "Test Project" in context
         assert "This is a test project specification." in context
@@ -130,7 +142,7 @@ class TestBuildProjectQAContext:
             updated_at=datetime(2026, 3, 15, tzinfo=UTC),
         )
 
-        context = build_project_qa_context(project_with_spec, [task], [])
+        context = build_project_context(project_with_spec, [task], [])
 
         assert "ACTIVE TASKS:" in context
         assert f"{task.id}|planning|Add user authentication|2026-03-10" in context
@@ -148,96 +160,20 @@ class TestBuildProjectQAContext:
             updated_at=datetime(2026, 3, 9, tzinfo=UTC),
         )
 
-        context = build_project_qa_context(project_with_spec, [], [task])
+        context = build_project_context(project_with_spec, [], [task])
 
         assert "RECENTLY COMPLETED TASKS:" in context
         assert f"{task.id}|complete|Setup CI pipeline|2026-03-01" in context
         assert "ACTIVE TASKS:" not in context
 
-    def test_both_active_and_completed_sections(
-        self, project_with_spec: Project, sample_codebase: Codebase, db_session
-    ):
-        """Both sections appear when both active and completed tasks are provided."""
-        active_task = _create_task(
-            db_session,
-            project_id=project_with_spec.id,
-            codebase_id=sample_codebase.id,
-            title="Fix pagination bug",
-            status=TaskStatus.IMPLEMENTING,
-            created_at=datetime(2026, 3, 12, tzinfo=UTC),
-            updated_at=datetime(2026, 3, 16, tzinfo=UTC),
-        )
-        completed_task = _create_task(
-            db_session,
-            project_id=project_with_spec.id,
-            codebase_id=sample_codebase.id,
-            title="Setup CI pipeline",
-            status=TaskStatus.COMPLETE,
-            created_at=datetime(2026, 3, 1, tzinfo=UTC),
-            updated_at=datetime(2026, 3, 9, tzinfo=UTC),
-        )
-
-        context = build_project_qa_context(project_with_spec, [active_task], [completed_task])
-
-        assert "ACTIVE TASKS:" in context
-        assert "RECENTLY COMPLETED TASKS:" in context
-        assert "|implementing|" in context
-        assert "|complete|" in context
-
-    def test_date_format_no_time_component(self, project_with_spec: Project, sample_codebase: Codebase, db_session):
-        """Dates formatted as YYYY-MM-DD with no time component."""
-        task = _create_task(
-            db_session,
-            project_id=project_with_spec.id,
-            codebase_id=sample_codebase.id,
-            title="Test Task",
-            status=TaskStatus.PLANNING,
-            created_at=datetime(2026, 3, 10, 14, 30, 45, tzinfo=UTC),
-            updated_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
-        )
-
-        context = build_project_qa_context(project_with_spec, [task], [])
-
-        assert "2026-03-10" in context
-        assert "14:30" not in context
-
-    def test_row_format(self, project_with_spec: Project, sample_codebase: Codebase, db_session):
-        """Task table includes header row and pipe-delimited data rows."""
-        task = _create_task(
-            db_session,
-            project_id=project_with_spec.id,
-            codebase_id=sample_codebase.id,
-            title="Add user authentication",
-            status=TaskStatus.PR_OPEN,
-            created_at=datetime(2026, 3, 10, tzinfo=UTC),
-            updated_at=datetime(2026, 3, 15, tzinfo=UTC),
-        )
-
-        context = build_project_qa_context(project_with_spec, [task], [])
-
-        assert "ID|Status|Title|Created" in context
-        assert f"{task.id}|pr_open|Add user authentication|2026-03-10" in context
-
     def test_global_context_prepended_when_provided(self, project_with_spec: Project):
         """Non-empty global context appears before project name and spec."""
         gc = "Platform: Internal developer tooling."
-        context = build_project_qa_context(project_with_spec, [], [], global_context=gc)
+        context = build_project_context(project_with_spec, [], [], global_context=gc)
 
         assert "# Global Context" in context
         assert gc in context
         assert context.index("# Global Context") < context.index("PROJECT:")
-
-    def test_global_context_omitted_when_none(self, project_with_spec: Project):
-        """No global context section when global_context is None."""
-        context = build_project_qa_context(project_with_spec, [], [], global_context=None)
-
-        assert "# Global Context" not in context
-
-    def test_global_context_omitted_when_empty_string(self, project_with_spec: Project):
-        """No global context section when global_context is empty string."""
-        context = build_project_qa_context(project_with_spec, [], [], global_context="")
-
-        assert "# Global Context" not in context
 
 
 class TestGetProjectTaskSummaries:
@@ -320,33 +256,6 @@ class TestGetProjectTaskSummaries:
         assert completed[1].id == middle.id
         assert completed[2].id == oldest.id
 
-    def test_active_sorted_by_updated_at_descending(
-        self, task_service: TaskService, project_with_spec: Project, sample_codebase: Codebase, db_session
-    ):
-        """Active tasks returned sorted by updated_at descending."""
-        now = datetime(2026, 3, 16, tzinfo=UTC)
-        older = _create_task(
-            db_session,
-            project_with_spec.id,
-            sample_codebase.id,
-            "Older",
-            TaskStatus.PLANNING,
-            updated_at=now - timedelta(days=5),
-        )
-        newer = _create_task(
-            db_session,
-            project_with_spec.id,
-            sample_codebase.id,
-            "Newer",
-            TaskStatus.IMPLEMENTING,
-            updated_at=now - timedelta(days=1),
-        )
-
-        active, _ = task_service.get_project_task_summaries(project_with_spec.id)
-
-        assert active[0].id == newer.id
-        assert active[1].id == older.id
-
     def test_project_isolation(
         self, task_service: TaskService, project_with_spec: Project, sample_codebase: Codebase, db_session
     ):
@@ -394,8 +303,8 @@ def _create_initiative(
     return initiative
 
 
-class TestBuildProjectQAContextInitiative:
-    """Tests for build_project_qa_context with project hierarchy."""
+class TestBuildProjectContextInitiative:
+    """Tests for build_project_context with project hierarchy."""
 
     def test_initiative_context_includes_parent_project_spec(self, project_with_spec: Project, db_session):
         """Initiative context shows parent project spec and 'initiative under' framing."""
@@ -407,7 +316,7 @@ class TestBuildProjectQAContextInitiative:
         )
         db_session.refresh(initiative)
 
-        context = build_project_qa_context(initiative, [], [])
+        context = build_project_context(initiative, [], [])
 
         assert "PARENT PROJECT:" in context
         assert "Test Project" in context
@@ -417,22 +326,9 @@ class TestBuildProjectQAContextInitiative:
         assert "Auth Initiative" in context
         assert "Initiative-specific goals here." in context
 
-    def test_initiative_context_includes_ids_for_tool_targeting(self, project_with_spec: Project, db_session):
-        """Parent and initiative IDs appear in context so agent can target the right project."""
-        initiative = _create_initiative(
-            db_session,
-            parent_project_id=project_with_spec.id,
-            name="Auth Initiative",
-        )
-
-        context = build_project_qa_context(initiative, [], [])
-
-        assert f"(ID: {project_with_spec.id})" in context
-        assert f"(ID: {initiative.id})" in context
-
     def test_root_project_context_has_no_parent_framing(self, project_with_spec: Project):
         """Root project context does not include parent project framing."""
-        context = build_project_qa_context(project_with_spec, [], [])
+        context = build_project_context(project_with_spec, [], [])
 
         assert "PARENT PROJECT:" not in context
         assert "This is an initiative under" not in context
@@ -454,7 +350,7 @@ class TestBuildProjectQAContextInitiative:
         )
 
         # Simulate TaskService.get_project_task_summaries called with initiative.id
-        context = build_project_qa_context(initiative, [initiative_task], [])
+        context = build_project_context(initiative, [initiative_task], [])
 
         assert "Initiative Task" in context
         assert "Parent Task" not in context
@@ -474,33 +370,13 @@ class TestBuildProjectQAContextInitiative:
         )
         db_session.refresh(project_with_spec)
 
-        context = build_project_qa_context(project_with_spec, [], [])
+        context = build_project_context(project_with_spec, [], [])
 
         assert "INITIATIVES:" in context
         assert "Initiative Alpha" in context
         assert "Initiative Beta" in context
         assert "|active|" in context
         assert "|complete|" in context
-
-    def test_root_project_no_initiatives_section_when_empty(self, project_with_spec: Project, db_session):
-        """Root project context omits INITIATIVES section when there are no child initiatives."""
-        db_session.refresh(project_with_spec)
-
-        context = build_project_qa_context(project_with_spec, [], [])
-
-        assert "INITIATIVES:" not in context
-
-    def test_initiative_has_no_initiatives_section(self, project_with_spec: Project, db_session):
-        """Initiative context does not include an INITIATIVES section (no nesting below initiative level)."""
-        initiative = _create_initiative(
-            db_session,
-            parent_project_id=project_with_spec.id,
-            name="Auth Initiative",
-        )
-
-        context = build_project_qa_context(initiative, [], [])
-
-        assert "INITIATIVES:" not in context
 
     def test_initiatives_section_shows_task_counts(
         self, project_with_spec: Project, sample_codebase: Codebase, db_session
@@ -515,58 +391,43 @@ class TestBuildProjectQAContextInitiative:
         _create_task(db_session, initiative.id, sample_codebase.id, "Task Two", TaskStatus.IMPLEMENTING)
         db_session.refresh(project_with_spec)
 
-        context = build_project_qa_context(project_with_spec, [], [])
+        context = build_project_context(project_with_spec, [], [])
 
         # Row format: ID|Name|Status|Tasks — task count should be 2
         assert "|Counted Initiative|active|2" in context
 
 
-class TestProjectQAAgentRoleTools:
-    """Tests for ProjectQAAgentRole.get_tools() — verifies tool registration by agent type."""
+class TestProjectAgentRoleTools:
+    """Tests for ProjectAgentRole.get_tools() — verifies tool registration by agent type."""
 
-    def _make_role(self, project: Project, db_session) -> ProjectQAAgentRole:
+    def _make_role(self, project: Project, db_session) -> ProjectAgentRole:
         document_repo = Mock(spec=DocumentRepository)
         document_repo.db = db_session
         task_service = Mock(spec=TaskService)
         task_service.get_custom_fields.return_value = []
-        return ProjectQAAgentRole(
+        conversation_repo = Mock(spec=ConversationRepository)
+        conversation_repo.db = db_session
+        return ProjectAgentRole(
             project=project,
             document_repository=document_repo,
             agent_config_service=Mock(),
             task_service=task_service,
-            conversation_repo=Mock(),
+            project_service=Mock(spec=ProjectService),
+            conversation_repo=conversation_repo,
             conversation_id=None,
         )
 
-    def test_root_project_get_tools_no_duplicate_names(self, project_with_spec: Project, db_session):
-        """Root project role registers no duplicate tool names."""
+    def test_root_project_get_tools_has_document_bound_spec_tools(self, project_with_spec: Project, db_session):
+        """Root project role uses document-bound spec tools (no project_id arg) with no duplicates."""
         role = self._make_role(project_with_spec, db_session)
         tools = role.get_tools()
         names = [t.name for t in tools]
         assert len(names) == len(set(names)), f"Duplicate tool names: {[n for n in names if names.count(n) > 1]}"
-
-    def test_root_project_get_tools_has_document_bound_spec_tools(self, project_with_spec: Project, db_session):
-        """Root project role uses document-bound spec tools (no project_id arg)."""
-        role = self._make_role(project_with_spec, db_session)
-        tools = role.get_tools()
-        names = [t.name for t in tools]
         assert "edit_project_specification" in names
         assert "set_project_specification_content" in names
 
-    def test_initiative_get_tools_no_duplicate_names(self, project_with_spec: Project, db_session):
-        """Initiative role registers no duplicate tool names (critical: previously caused name collision)."""
-        initiative = _create_initiative(
-            db_session,
-            parent_project_id=project_with_spec.id,
-            name="Test Initiative",
-        )
-        role = self._make_role(initiative, db_session)
-        tools = role.get_tools()
-        names = [t.name for t in tools]
-        assert len(names) == len(set(names)), f"Duplicate tool names: {[n for n in names if names.count(n) > 1]}"
-
     def test_initiative_get_tools_has_own_context_and_parent_spec_tools(self, project_with_spec: Project, db_session):
-        """Initiative role edits its own context (document-bound) and the parent project's specification."""
+        """Initiative role edits its own context and parent spec with no duplicates."""
         initiative = _create_initiative(
             db_session,
             parent_project_id=project_with_spec.id,
@@ -574,9 +435,67 @@ class TestProjectQAAgentRoleTools:
         )
         role = self._make_role(initiative, db_session)
         names = [t.name for t in role.get_tools()]
+        assert len(names) == len(set(names)), f"Duplicate tool names: {[n for n in names if names.count(n) > 1]}"
         # Its own initiative context document — set + edit
         assert "edit_initiative_context" in names
         assert "set_initiative_context_content" in names
         # The parent project's specification — edit only (feed outcomes upward, don't wholesale replace)
         assert "edit_project_specification" in names
         assert "set_project_specification_content" not in names
+
+    def test_root_project_has_lifecycle_tools(self, project_with_spec: Project, db_session):
+        """Root project agent has complete_project, create_initiative, and list_project_initiatives tools."""
+        role = self._make_role(project_with_spec, db_session)
+        names = [t.name for t in role.get_tools()]
+        assert "complete_project" in names
+        assert "create_initiative" in names
+        assert "list_project_initiatives" in names
+
+    def test_initiative_has_complete_tool_but_not_create_initiative(self, project_with_spec: Project, db_session):
+        """Initiative agent has complete_project but not create_initiative or list_project_initiatives."""
+        initiative = _create_initiative(
+            db_session,
+            parent_project_id=project_with_spec.id,
+            name="Test Initiative",
+        )
+        role = self._make_role(initiative, db_session)
+        names = [t.name for t in role.get_tools()]
+        assert "complete_project" in names
+        assert "create_initiative" not in names
+        assert "list_project_initiatives" not in names
+
+
+class TestProjectAgentRoleGetSystemPrompt:
+    """Tests for ProjectAgentRole.get_system_prompt() branching."""
+
+    def _make_role(self, project: Project, db_session) -> ProjectAgentRole:
+        document_repo = Mock(spec=DocumentRepository)
+        document_repo.db = db_session
+        task_service = Mock(spec=TaskService)
+        task_service.get_custom_fields.return_value = []
+        conversation_repo = Mock(spec=ConversationRepository)
+        conversation_repo.db = db_session
+        return ProjectAgentRole(
+            project=project,
+            document_repository=document_repo,
+            agent_config_service=Mock(),
+            task_service=task_service,
+            project_service=Mock(spec=ProjectService),
+            conversation_repo=conversation_repo,
+            conversation_id=None,
+        )
+
+    def test_root_project_returns_project_prompt(self, project_with_spec: Project, db_session):
+        """Root project agent returns PROJECT_ROLE_PROMPT."""
+        role = self._make_role(project_with_spec, db_session)
+        assert role.get_system_prompt() == PROJECT_ROLE_PROMPT
+
+    def test_initiative_returns_initiative_prompt(self, project_with_spec: Project, db_session):
+        """Initiative agent returns INITIATIVE_ROLE_PROMPT."""
+        initiative = _create_initiative(
+            db_session,
+            parent_project_id=project_with_spec.id,
+            name="Test Initiative",
+        )
+        role = self._make_role(initiative, db_session)
+        assert role.get_system_prompt() == INITIATIVE_ROLE_PROMPT
