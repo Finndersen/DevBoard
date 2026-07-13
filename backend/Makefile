@@ -1,6 +1,6 @@
 # DevBoard Backend - Development Commands
 
-.PHONY: help install dev lint typecheck validate test start migrate migrate-auto migrate-heads migrate-merge clean
+.PHONY: help install dev lint typecheck validate test start migrate makemigrations migrate-heads migrate-merge clean
 
 help:		## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -33,8 +33,11 @@ start:		## Start development server (use BACKEND_PORT=XXXX to override default 8
 migrate:	## Run database migrations
 	uv run --frozen alembic upgrade head
 
-migrate-auto:	## Generate new migration (always run `make migrate` first, see README)
-	uv run --frozen alembic revision --autogenerate
+makemigrations:	## Generate a new migration by autogenerating against a fresh throwaway DB at head (never touches your dev DB)
+	@tmpdb=$$(mktemp "$${TMPDIR:-/tmp}/devboard_makemigrations.XXXXXX"); \
+	trap 'rm -f "$$tmpdb"' EXIT; \
+	DATABASE_URL="sqlite:///$$tmpdb" uv run --frozen alembic upgrade head && \
+	DATABASE_URL="sqlite:///$$tmpdb" uv run --frozen alembic revision --autogenerate
 
 migrate-heads:	## Show current migration head(s) - more than one means a merge migration is needed
 	uv run --frozen alembic heads

@@ -32,7 +32,7 @@ make validate      # run lint + typecheck together
 
 By default (no `DATABASE_URL` set), the backend uses a repo-relative SQLite database at
 `backend/data/devboard.db` — isolated per checkout/worktree, safe to blow away, and what
-`make migrate`, `make migrate-auto`, and `make start` all operate on. The real, persistent
+`make migrate` and `make start` operate on by default. The real, persistent
 application database lives at `~/.devboard/data/devboard.db` and is only used when
 `DATABASE_URL` is explicitly exported — `../start.sh` does this and runs `make migrate`
 against it before starting the server, so the real database is always migrated to head
@@ -45,10 +45,11 @@ make migrate
 
 Generate a new migration:
 ```bash
-make migrate       # always run this FIRST — autogenerate diffs against current DB state,
-                    # so a stale local DB produces a migration with the wrong down_revision
-make migrate-auto
+make makemigrations
 ```
+`makemigrations` autogenerates against a fresh throwaway DB migrated to head, not your
+persistent dev DB — so it always diffs against the true current head and never picks up
+manual schema drift, and there's no need to run `make migrate` first.
 
 After generating a migration, check for multiple heads (common when two branches each add
 a migration on top of the same parent revision):
