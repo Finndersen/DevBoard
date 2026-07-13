@@ -40,12 +40,20 @@ def mock_system_event_emitter():
 
 
 @pytest.fixture
-def project_service(mock_conversation_service, mock_document_repo, mock_project_repo, mock_system_event_emitter):
+def mock_initiative_repo():
+    return MagicMock()
+
+
+@pytest.fixture
+def project_service(
+    mock_conversation_service, mock_document_repo, mock_project_repo, mock_system_event_emitter, mock_initiative_repo
+):
     return ProjectService(
         conversation_service=mock_conversation_service,
         document_repo=mock_document_repo,
         project_repo=mock_project_repo,
         system_event_emitter=mock_system_event_emitter,
+        initiative_repo=mock_initiative_repo,
     )
 
 
@@ -79,16 +87,6 @@ class TestProjectServiceCreateProject:
         project_service.create_project(name="Top Level")
 
         mock_document_repo.create.assert_called_once_with(DocumentType.PROJECT_SPECIFICATION, "")
-
-    def test_initiative_gets_initiative_context_document(self, project_service, mock_document_repo, mock_project_repo):
-        """An initiative's document is created with type INITIATIVE_CONTEXT."""
-        parent = MagicMock()
-        parent.parent_project_id = None
-        mock_project_repo.get_by_id.return_value = parent
-
-        project_service.create_project(name="Initiative", parent_project_id=5)
-
-        mock_document_repo.create.assert_called_once_with(DocumentType.INITIATIVE_CONTEXT, "")
 
 
 class TestProjectServiceCompleteProject:

@@ -58,10 +58,7 @@ const mockGitStatus: TaskGitStatus = {
   base_has_conflicting_uncommitted: false,
 }
 
-const mockProject = {
-  id: 1,
-  name: 'Test Project',
-}
+const mockProject = { id: 1, name: 'Test Project' }
 
 const defaultProps = {
   task: mockTask,
@@ -96,41 +93,16 @@ describe('TaskDetailHeader', () => {
   })
 
   describe('Project breadcrumb', () => {
-    it('shows ◆ symbol and project name when task is directly under a project', () => {
+    it('shows ◆ symbol and project name', () => {
       renderWithRouter(<TaskDetailHeader {...defaultProps} />)
       expect(screen.getByText('◆')).toBeInTheDocument()
       expect(screen.getByText('Test Project')).toBeInTheDocument()
     })
 
-    it('shows parent project and initiative when task is in an initiative', () => {
-      const initiativeProject = {
-        id: 2,
-        name: 'My Initiative',
-        parent_project_id: 1,
-        parent_project_name: 'Parent Project',
-      }
-      renderWithRouter(
-        <TaskDetailHeader {...defaultProps} project={initiativeProject} />
-      )
-      expect(screen.getByText('◆')).toBeInTheDocument()
-      expect(screen.getByText('Parent Project')).toBeInTheDocument()
-      expect(screen.getByText('›')).toBeInTheDocument()
-      expect(screen.getByText('▸')).toBeInTheDocument()
-      expect(screen.getByText('My Initiative')).toBeInTheDocument()
-    })
-
-    it('parent project name is a link to the parent project', () => {
-      const initiativeProject = {
-        id: 2,
-        name: 'My Initiative',
-        parent_project_id: 5,
-        parent_project_name: 'Parent Project',
-      }
-      renderWithRouter(
-        <TaskDetailHeader {...defaultProps} project={initiativeProject} />
-      )
-      const parentLink = screen.getByTitle('Parent Project').closest('a')
-      expect(parentLink).toHaveAttribute('href', '/projects/5')
+    it('project name links to the project', () => {
+      renderWithRouter(<TaskDetailHeader {...defaultProps} />)
+      const link = screen.getByTitle('Test Project').closest('a')
+      expect(link).toHaveAttribute('href', '/projects/1')
     })
   })
 

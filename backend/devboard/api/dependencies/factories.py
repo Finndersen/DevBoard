@@ -27,6 +27,7 @@ from devboard.db.repositories import (
     BackgroundAgentRunRepository,
     ConversationRepository,
     DocumentRepository,
+    InitiativeRepository,
     LogEntryRepository,
     TaskRepository,
 )
@@ -125,6 +126,7 @@ async def create_agent_role_for_conversation(
                 conversation_service=ConversationService(conversation_repo, agent_config_service),
                 document_repo=document_repo,
                 project_repo=ProjectRepository(conversation_repo.db),
+                initiative_repo=InitiativeRepository(conversation_repo.db),
                 system_event_emitter=SystemEventEmitter(log_entry_repo),
             )
             return ProjectAgentRole(

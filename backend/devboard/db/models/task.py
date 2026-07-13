@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from .codebase import Codebase
     from .document import Document
     from .implementation_plan import ImplementationPlan
+    from .initiative import Initiative
     from .project import Project
     from .worktree_slot import WorktreeSlot
 
@@ -36,6 +37,7 @@ class Task(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
+    initiative_id: Mapped[int | None] = mapped_column(ForeignKey("initiatives.id"), nullable=True)
     codebase_id: Mapped[int] = mapped_column(ForeignKey("codebases.id"))
 
     title: Mapped[str] = mapped_column(String(255))
@@ -59,6 +61,7 @@ class Task(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(default=lambda: datetime.datetime.now(datetime.UTC))
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
+    initiative: Mapped["Initiative | None"] = relationship(back_populates="tasks", lazy="joined")
     codebase: Mapped["Codebase"] = relationship(back_populates="tasks")
     worktree_slots: Mapped[list["WorktreeSlot"]] = relationship(
         foreign_keys="WorktreeSlot.last_used_by_task_id", back_populates="last_used_by_task"

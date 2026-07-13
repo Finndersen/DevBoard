@@ -17,6 +17,7 @@ from devboard.api.dependencies.repositories import (
     get_conversation_repository,
     get_custom_field_repository,
     get_document_repository,
+    get_initiative_repository,
     get_project_repository,
     get_task_repository,
 )
@@ -31,6 +32,8 @@ from devboard.api.dependencies.services import (
 from devboard.api.schemas import (
     CodebaseResponse,
     DeleteResponse,
+    InitiativeCreate,
+    InitiativeResponse,
     ProjectCreate,
     ProjectResponse,
     ProjectUpdate,
@@ -51,6 +54,7 @@ from devboard.db.repositories import (
     ConversationRepository,
     CustomFieldRepository,
     DocumentRepository,
+    InitiativeRepository,
     ProjectRepository,
     TaskRepository,
 )
@@ -100,24 +104,20 @@ def _build_project_response(project: Project, conversation_id: int | None = None
         specification_document_id=project.specification.id,
         default_conversation_id=conversation_id,
         custom_fields=project.custom_fields,
-        parent_project_id=project.parent_project_id,
-        parent_project_name=project.parent_project_name,
         complete=project.complete,
     )
 
 
 @router.get("/", response_model=list[ProjectResponse])
 async def list_projects(
-    parent_project_id: int | None = Query(None),
     complete: bool | None = Query(None),
     project_repo: ProjectRepository = Depends(get_project_repository),
 ):
-    """List projects with optional hierarchy and completion filters.
+    """List projects with optional completion filter.
 
     By default, only non-complete projects are returned. Pass complete=true to get completed ones.
-    Pass parent_project_id to list initiatives under a specific project.
     """
-    projects = project_repo.get_all(parent_project_id=parent_project_id, complete=complete)
+    projects = project_repo.get_all(complete=complete)
     return [_build_project_response(p) for p in projects]
 
 
@@ -129,7 +129,7 @@ async def create_project(
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     custom_field_repo: CustomFieldRepository = Depends(get_custom_field_repository),
 ):
-    """Create a new project (or initiative when parent_project_id is provided)."""
+    """Create a new project."""
     mandatory_fields = custom_field_repo.get_mandatory_fields(entity_type=EntityType.PROJECT)
     if mandatory_fields:
         custom_fields = project.custom_fields or {}
@@ -149,7 +149,6 @@ async def create_project(
             name=project.name,
             description=project.description,
             custom_fields=project.custom_fields,
-            parent_project_id=project.parent_project_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -192,17 +191,6 @@ async def update_project(
     specification = update_data.pop("specification", None)
     if specification is not None:
         document_repo.update_content(project.specification, specification)
-
-    # A project's position in the hierarchy is fixed at creation: a top-level project can never
-    # become an initiative (nor vice versa), which keeps its specification/context document type
-    # stable. Reject any attempt to change the parent.
-    if "parent_project_id" in update_data:
-        new_parent_id = update_data.pop("parent_project_id")
-        if new_parent_id != project.parent_project_id:
-            raise HTTPException(
-                status_code=400,
-                detail="A project's parent cannot be changed after creation.",
-            )
 
     # Handle custom fields with merge semantics: merge provided fields, remove keys set to None
     custom_fields = update_data.pop("custom_fields", None)
@@ -248,6 +236,85 @@ async def delete_project(
     project_repo.delete_by_id(project_id)
     project_repo.db.commit()
     return {"message": "Project deleted successfully", "success": True}
+
+
+# Initiative Endpoints
+
+
+@router.post("/{project_id}/initiatives", response_model=InitiativeResponse, status_code=201)
+async def create_initiative(
+    project_id: int,
+    initiative: InitiativeCreate,
+    project: Project = Depends(get_verified_project),
+    project_service: ProjectService = Depends(get_project_service),
+    project_repo: ProjectRepository = Depends(get_project_repository),
+) -> InitiativeResponse:
+    """Create a new initiative under a project."""
+    try:
+        created = project_service.create_initiative(
+            project_id=project_id,
+            name=initiative.name,
+            description=initiative.description,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    project_repo.db.commit()
+    project_repo.db.refresh(created)
+    return InitiativeResponse(
+        id=created.id,
+        name=created.name,
+        description=created.description,
+        project_id=created.project_id,
+        specification_document_id=created.specification_document_id,
+        complete=created.complete,
+        created_at=created.created_at,
+    )
+
+
+@router.get("/{project_id}/initiatives", response_model=list[InitiativeResponse])
+async def list_initiatives(
+    project_id: int,
+    complete: bool | None = Query(None),
+    project: Project = Depends(get_verified_project),
+    initiative_repo: InitiativeRepository = Depends(get_initiative_repository),
+) -> list[InitiativeResponse]:
+    """List initiatives for a project."""
+    initiatives = initiative_repo.get_all(project_id=project_id, complete=complete)
+    return [
+        InitiativeResponse(
+            id=i.id,
+            name=i.name,
+            description=i.description,
+            project_id=i.project_id,
+            specification_document_id=i.specification_document_id,
+            complete=i.complete,
+            created_at=i.created_at,
+        )
+        for i in initiatives
+    ]
+
+
+@router.get("/{project_id}/initiatives/{initiative_id}", response_model=InitiativeResponse)
+async def get_initiative(
+    project_id: int,
+    initiative_id: int,
+    project: Project = Depends(get_verified_project),
+    initiative_repo: InitiativeRepository = Depends(get_initiative_repository),
+) -> InitiativeResponse:
+    """Get a specific initiative."""
+    initiative = initiative_repo.get_by_id(initiative_id)
+    if not initiative or initiative.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Initiative not found")
+    return InitiativeResponse(
+        id=initiative.id,
+        name=initiative.name,
+        description=initiative.description,
+        project_id=initiative.project_id,
+        specification_document_id=initiative.specification_document_id,
+        complete=initiative.complete,
+        created_at=initiative.created_at,
+    )
 
 
 # Project Conversation Endpoints

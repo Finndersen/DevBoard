@@ -15,7 +15,7 @@ import { useConversationStreamStore } from '../../stores/conversationStreamStore
 import { useUIStore } from '../../stores/uiStore'
 import type { ViewType } from '../../stores/uiStore'
 import type { ConversationResponse } from '../../lib/api'
-import { textColors, surfaces, borderColors, hoverColors } from '../../styles/designSystem'
+import { textColors, surfaces, borderColors, hoverColors, projectColors, initiativeColors } from '../../styles/designSystem'
 import { useViewStreamStatus } from '../../hooks/useViewStreamStatus'
 import { StatusIndicator } from '../github/PRStatusComponents'
 import { useGithubStore } from '../../stores/githubStore'
@@ -473,35 +473,43 @@ export default function ConversationsPanel() {
                       <span className="inline-flex rounded-full h-2 w-2 bg-blue-500 shrink-0" />
                     )}
                   </div>
-                  {/* Row 2: Role + timestamp */}
+                  {/* Row 2: Role + task ID (for tasks) + timestamp */}
                   <div className="text-xs mt-0.5 ml-6">
                     <span className={roleColor}>{roleLabel}</span>
+                    {isTaskConversation && (
+                      <span className={textColors.muted}> · #{item.parent_entity_id}</span>
+                    )}
                     <span className={textColors.muted}> · {formatRelativeTime(timestamp)}</span>
                   </div>
-                  {/* Row 3: Project name (tasks) or entity name (project/codebase conversations) */}
-                  {secondaryLabel && (
-                    <div className={`text-xs mt-0.5 ml-6 truncate ${textColors.muted}`}>
-                      {isTaskConversation && (
-                        <span className="shrink-0 mr-1">Task #{item.parent_entity_id}</span>
-                      )}
-                      {isTaskConversation && prStatus?.pr_number && (
-                        <span className="shrink-0 mx-1">•</span>
-                      )}
-                      {prStatus?.pr_number && (
-                        <a
-                          href={prStatus.pr_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`flex items-center gap-1 shrink-0 hover:underline ${textColors.accent}`}
-                          onClick={e => e.stopPropagation()}
-                          title="Open PR in GitHub"
-                        >
-                          PR #{prStatus.pr_number}
-                          <ArrowTopRightOnSquareIcon className="w-2.5 h-2.5 flex-shrink-0 opacity-60 hover:opacity-100" />
-                        </a>
-                      )}
-                      {secondaryLabel && (
-                        <span className="shrink-0 ml-1">{secondaryLabel}</span>
+                  {/* Row 3: Project/initiative (tasks) or entity name (project/codebase conversations) */}
+                  {(isTaskConversation ? item.project_name : secondaryLabel) && (
+                    <div className={`text-xs mt-0.5 ml-6 flex items-center gap-1 min-w-0`}>
+                      {isTaskConversation ? (
+                        <>
+                          {prStatus?.pr_number && (
+                            <a
+                              href={prStatus.pr_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`flex items-center gap-1 shrink-0 hover:underline ${textColors.accent}`}
+                              onClick={e => e.stopPropagation()}
+                              title="Open PR in GitHub"
+                            >
+                              PR #{prStatus.pr_number}
+                              <ArrowTopRightOnSquareIcon className="w-2.5 h-2.5 flex-shrink-0 opacity-60 hover:opacity-100" />
+                            </a>
+                          )}
+                          {prStatus?.pr_number && <span className={`shrink-0 ${textColors.muted}`}>•</span>}
+                          <span className={`${projectColors.icon} truncate`}>{item.project_name}</span>
+                          {item.initiative_name && (
+                            <>
+                              <span className={`shrink-0 ${textColors.muted}`}>›</span>
+                              <span className={`${initiativeColors.icon} truncate`}>{item.initiative_name}</span>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <span className={`truncate ${textColors.muted}`}>{secondaryLabel}</span>
                       )}
                     </div>
                   )}

@@ -21,6 +21,7 @@ from .implementation_plan import (
     ImplementationStepStatus,
     ImplementationStepType,
 )
+from .initiative import Initiative
 from .language_model import LanguageModelDB
 from .log_entry import LogEntry, LogEntrySource, LogEntryStatus
 from .mcp_server import (
@@ -43,6 +44,7 @@ from .task import Task, TaskStatus
 from .worktree_slot import WorktreeSlot
 
 ParentEntity = Task | Project | Codebase | BackgroundAgent
+
 
 __all__ = [
     "AgentRoleConfig",
@@ -81,6 +83,7 @@ __all__ = [
     "ImplementationStep",
     "ImplementationStepStatus",
     "ImplementationStepType",
+    "Initiative",
     "ParentEntity",
     "ParentEntityType",
     "PendingOAuthAuthorization",

@@ -2,6 +2,7 @@ from pydantic_ai import ModelRetry, Tool
 
 from devboard.api.schemas import DocumentEdit
 from devboard.db.models import Document
+from devboard.db.models.initiative import Initiative
 from devboard.db.models.project import Project
 from devboard.db.models.task import Task
 from devboard.db.repositories import DocumentRepository
@@ -12,7 +13,7 @@ from devboard.services.system_event_emitter import SystemEventEmitter
 def create_document_edit_tool(
     document: Document,
     document_repo: DocumentRepository,
-    document_parent: Task | Project,
+    document_parent: Task | Project | Initiative,
     requires_approval: bool = True,
     system_event_emitter: SystemEventEmitter | None = None,
 ) -> Tool:
@@ -84,7 +85,7 @@ def create_document_edit_tool(
 def create_set_document_content_tool(
     document: Document,
     document_repo: DocumentRepository,
-    document_parent: Task | Project,
+    document_parent: Task | Project | Initiative,
     requires_approval: bool | None = None,
     system_event_emitter: SystemEventEmitter | None = None,
 ) -> Tool:
@@ -149,23 +150,17 @@ def build_project_context_document_tools(
     system_event_emitter: SystemEventEmitter | None = None,
     include_set_content: bool = False,
 ) -> list[Tool]:
-    """Build the context-document editing tools scoped to a project's place in the hierarchy.
+    """Build the specification editing tools for a project, bound to its document.
 
-    Each tool is bound to a specific document, so the agent never supplies a project id it
-    would have to guess. Tool names come from each document's type:
-
-    - Top-level project → `edit_project_specification` (+ `set_project_specification_content`
-      when include_set_content).
-    - Initiative → `edit_initiative_context` (+ `set_initiative_context_content` when
-      include_set_content) for its own document, plus `edit_project_specification` targeting the
-      parent project's document so an initiative agent can also feed outcomes up to the parent.
+    Each tool is bound to a specific document, so the agent never supplies a project id.
+    Tool names come from the document's type (e.g. `edit_project_specification`,
+    `set_project_specification_content`).
 
     Args:
-        project: The project (or initiative) the agent is scoped to.
+        project: The project the agent is scoped to.
         document_repo: Repository for document operations.
         system_event_emitter: Optional emitter for document.updated events.
-        include_set_content: Whether to also expose a full-replace tool for the project's own
-            document. The parent document is always edit-only.
+        include_set_content: Whether to also expose a full-replace tool.
     """
     tools: list[Tool] = []
     if include_set_content:
@@ -185,13 +180,4 @@ def build_project_context_document_tools(
             system_event_emitter=system_event_emitter,
         )
     )
-    if project.parent is not None:
-        tools.append(
-            create_document_edit_tool(
-                project.parent.specification,
-                document_repo,
-                document_parent=project.parent,
-                system_event_emitter=system_event_emitter,
-            )
-        )
     return tools

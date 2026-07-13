@@ -61,7 +61,7 @@ from .oauth import (
     OAuthCallbackQueryParams,
     OAuthCallbackResponse,
 )
-from .project import ProjectBase, ProjectCreate, ProjectResponse, ProjectUpdate
+from .project import InitiativeCreate, InitiativeResponse, ProjectBase, ProjectCreate, ProjectResponse, ProjectUpdate
 from .prompt_action import PromptActionRequest
 from .task import (
     CheckoutToMainResponse,
@@ -145,6 +145,8 @@ __all__ = [
     "UpdateAgentModelRequest",
     "UpdateConversationModelRequest",
     # Project
+    "InitiativeCreate",
+    "InitiativeResponse",
     "ProjectBase",
     "ProjectCreate",
     "ProjectResponse",

@@ -4,10 +4,10 @@ import { PlusIcon, FolderIcon } from '@heroicons/react/24/outline'
 import { useUIStore } from '../stores/uiStore'
 import { useProjects, useCreateProject, useUpdateProject } from '../hooks'
 import { apiClient } from '../lib/api'
-import type { Project, CustomFieldDefinition } from '../lib/api'
+import type { CustomFieldDefinition } from '../lib/api'
 import Alert from '../components/ui/Alert'
 import { Button, Card, Modal, Input, Textarea, ErrorMessage } from '../components/ui'
-import { loadingSpinner, textColors, projectColors, initiativeColors } from '../styles/designSystem'
+import { loadingSpinner, textColors, projectColors } from '../styles/designSystem'
 import ViewHeader from '../components/layout/ViewHeader'
 import { CustomFieldInputs } from '../components/common/CustomFieldInputs'
 
@@ -21,8 +21,7 @@ export default function ProjectsList() {
   const { mutate: updateProject } = useUpdateProject()
 
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [presetParentId, setPresetParentId] = useState<number | null>(null)
-  const [newProject, setNewProject] = useState({ name: '', description: '', parent_project_id: null as number | null })
+  const [newProject, setNewProject] = useState({ name: '', description: '' })
 
   const [createProjectError, setCreateProjectError] = useState<string | null>(null)
   const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
@@ -69,16 +68,14 @@ export default function ProjectsList() {
     })
   }
 
-  const openCreateModal = (parentId: number | null = null) => {
-    setPresetParentId(parentId)
-    setNewProject({ name: '', description: '', parent_project_id: parentId })
+  const openCreateModal = () => {
+    setNewProject({ name: '', description: '' })
     setCreateProjectError(null)
     setShowCreateModal(true)
   }
 
   const handleCloseModal = () => {
     setShowCreateModal(false)
-    setPresetParentId(null)
     setCreateProjectError(null)
   }
 
@@ -96,7 +93,6 @@ export default function ProjectsList() {
       const createdProject = await createProject({
         name: newProject.name,
         description: newProject.description,
-        parent_project_id: newProject.parent_project_id ?? undefined,
         custom_fields: Object.keys(customFields).length > 0 ? customFields : null,
       })
       await Promise.all([refetchActive(), refetchComplete()])
@@ -121,19 +117,6 @@ export default function ProjectsList() {
   const loading = activeLoading || completeLoading
   const error = activeError
 
-  // Group active initiatives by parent
-  const topLevelActive = (activeProjects ?? []).filter(p => !p.parent_project_id)
-  const initiativesByParent = (activeProjects ?? [])
-    .filter(p => p.parent_project_id !== null)
-    .reduce<Record<number, Project[]>>((acc, init) => {
-      const parentId = init.parent_project_id!
-      acc[parentId] = [...(acc[parentId] ?? []), init]
-      return acc
-    }, {})
-
-  // Top-level projects available as parent choices in the create modal
-  const topLevelForSelect = topLevelActive
-
   const totalActiveCount = (activeProjects ?? []).length
   const completeCount = (completeProjects ?? []).length
 
@@ -144,7 +127,7 @@ export default function ProjectsList() {
         title="Projects"
         count={totalActiveCount}
         actions={
-          <Button onClick={() => openCreateModal(null)} icon={<PlusIcon />}>
+          <Button onClick={openCreateModal} icon={<PlusIcon />}>
             New Project
           </Button>
         }
@@ -166,76 +149,40 @@ export default function ProjectsList() {
                 <p className={`text-sm ${textColors.secondary} mb-4`}>
                   Get started by creating your first project
                 </p>
-                <Button onClick={() => openCreateModal(null)} icon={<PlusIcon />}>
+                <Button onClick={openCreateModal} icon={<PlusIcon />}>
                   Create Project
                 </Button>
               </Card>
             ) : (
               <div className="space-y-4">
-                {topLevelActive.map((project) => (
-                  <div key={project.id}>
-                    <Card
-                      className="p-4 cursor-pointer"
-                      onClick={() => handleOpenProject(project)}
-                      hover
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={`${projectColors.icon} text-base shrink-0`} aria-hidden>◆</span>
-                          <h3 className={`text-base font-semibold ${textColors.primary} truncate`}>
-                            {project.name}
-                          </h3>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Button
-                            onClick={(e) => { e.stopPropagation(); openCreateModal(project.id) }}
-                            icon={<PlusIcon />}
-                          >
-                            Initiative
-                          </Button>
-                          <Button
-                            onClick={(e) => handleToggleComplete(e, project)}
-                          >
-                            Complete
-                          </Button>
-                        </div>
+                {(activeProjects ?? []).map((project) => (
+                  <Card
+                    key={project.id}
+                    className="p-4 cursor-pointer"
+                    onClick={() => handleOpenProject(project)}
+                    hover
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`${projectColors.icon} text-base shrink-0`} aria-hidden>◆</span>
+                        <h3 className={`text-base font-semibold ${textColors.primary} truncate`}>
+                          {project.name}
+                        </h3>
                       </div>
-                      {project.description && (
-                        <p className={`text-sm ${textColors.secondary} line-clamp-2 mt-1 ml-6`}>
-                          {project.description}
-                        </p>
-                      )}
-                    </Card>
-
-                    {(initiativesByParent[project.id] ?? []).map((initiative) => (
-                      <div key={initiative.id} className="ml-8 mt-2">
-                        <Card
-                          className="p-3 cursor-pointer"
-                          onClick={() => handleOpenProject(initiative)}
-                          hover
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          onClick={(e) => handleToggleComplete(e, project)}
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className={`${initiativeColors.icon} text-base shrink-0`} aria-hidden>▸</span>
-                              <h3 className={`text-sm font-semibold ${textColors.primary} truncate`}>
-                                {initiative.name}
-                              </h3>
-                            </div>
-                            <Button
-                              onClick={(e) => handleToggleComplete(e, initiative)}
-                            >
-                              Complete
-                            </Button>
-                          </div>
-                          {initiative.description && (
-                            <p className={`text-sm ${textColors.secondary} line-clamp-1 mt-1 ml-6`}>
-                              {initiative.description}
-                            </p>
-                          )}
-                        </Card>
+                          Complete
+                        </Button>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                    {project.description && (
+                      <p className={`text-sm ${textColors.secondary} line-clamp-2 mt-1 ml-6`}>
+                        {project.description}
+                      </p>
+                    )}
+                  </Card>
                 ))}
               </div>
             )}
@@ -254,20 +201,10 @@ export default function ProjectsList() {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className={`${project.parent_project_id ? initiativeColors.icon : projectColors.icon} text-sm shrink-0`}
-                          aria-hidden
-                        >
-                          {project.parent_project_id ? '▸' : '◆'}
-                        </span>
+                        <span className={`${projectColors.icon} text-sm shrink-0`} aria-hidden>◆</span>
                         <span className={`text-sm font-medium ${textColors.muted} truncate`}>
                           {project.name}
                         </span>
-                        {project.parent_project_name && (
-                          <span className={`text-xs ${textColors.muted} shrink-0`}>
-                            ({project.parent_project_name})
-                          </span>
-                        )}
                       </div>
                       <Button
                         onClick={(e) => handleToggleComplete(e, project)}
@@ -286,7 +223,7 @@ export default function ProjectsList() {
       <Modal
         isOpen={showCreateModal}
         onClose={handleCloseModal}
-        title={presetParentId ? 'Create Initiative' : 'Create New Project'}
+        title="Create New Project"
       >
         <form onSubmit={handleCreateProject} className="space-y-4">
           <Input
@@ -302,26 +239,6 @@ export default function ProjectsList() {
             onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
             rows={3}
           />
-          {topLevelForSelect.length > 0 && (
-            <div>
-              <label className={`block text-sm font-medium ${textColors.primary} mb-1`}>
-                Parent Project
-              </label>
-              <select
-                className={`w-full rounded-md border px-3 py-2 text-sm ${textColors.primary} bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                value={newProject.parent_project_id ?? ''}
-                onChange={(e) => setNewProject({
-                  ...newProject,
-                  parent_project_id: e.target.value ? Number(e.target.value) : null
-                })}
-              >
-                <option value="">None (top-level project)</option>
-                {topLevelForSelect.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
           <CustomFieldInputs
             definitions={customFieldDefinitions}
             values={customFieldValues}
@@ -334,7 +251,7 @@ export default function ProjectsList() {
               Cancel
             </Button>
             <Button type="submit" disabled={creatingProject || !newProject.name || !areMandatoryFieldsFilled()}>
-              {creatingProject ? 'Creating...' : (presetParentId ? 'Create Initiative' : 'Create Project')}
+              {creatingProject ? 'Creating...' : 'Create Project'}
             </Button>
           </div>
         </form>

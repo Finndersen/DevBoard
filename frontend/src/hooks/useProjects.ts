@@ -2,7 +2,7 @@ import { apiClient } from '../lib/api'
 import type { Codebase, Project, ProjectCreate } from '../lib/api'
 import { useApi, useMutation, type UseApiOptions } from './useApi'
 
-export function useProjects(params?: { parentProjectId?: number; complete?: boolean }) {
+export function useProjects(params?: { complete?: boolean }) {
   return useApi(() => apiClient.getProjects(params))
 }
 

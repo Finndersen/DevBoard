@@ -56,6 +56,7 @@ async def list_conversations(
             created_at=row["conversation"].created_at,
             parent_entity_name=row["parent_entity_name"],
             project_name=row["project_name"],
+            initiative_name=row["initiative_name"],
         )
         for row in rows
     ]

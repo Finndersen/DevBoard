@@ -1,4 +1,4 @@
-"""Project and initiative agent role for managing specifications, tasks, and lifecycle."""
+"""Project agent role for managing specifications, tasks, and lifecycle."""
 
 from pydantic_ai import Tool
 
@@ -6,19 +6,24 @@ from devboard.agents.agent_config_service import AgentConfigService
 from devboard.agents.execution.registry import get_execution_manager
 from devboard.agents.roles.base import AgentRole
 from devboard.agents.tools import (
-    build_project_context_document_tools,
     create_branch_conversation_tool,
+    create_document_edit_tool,
     create_inspect_conversation_tool,
     create_refocus_conversation_tool,
+    create_set_document_content_tool,
 )
 from devboard.agents.tools.codebase_management_tools import (
     create_update_codebase_tool,
     create_view_codebase_details_tool,
 )
 from devboard.agents.tools.project_tools import (
+    create_complete_initiative_tool,
     create_complete_project_tool,
     create_create_initiative_tool,
+    create_edit_initiative_context_tool,
     create_list_project_initiatives_tool,
+    create_set_initiative_context_content_tool,
+    create_view_initiative_details_tool,
 )
 from devboard.agents.tools.sub_agent_tools import CodebaseInvestigationContext, create_multi_codebase_investigation_tool
 from devboard.agents.tools.task_agent_tools import (
@@ -36,9 +41,9 @@ from devboard.db.repositories import (
     CodebaseRepository,
     ConversationRepository,
     DocumentRepository,
+    InitiativeRepository,
     LogEntryRepository,
 )
-from devboard.db.repositories.project import ProjectRepository
 from devboard.services.conversation_service import ConversationService
 from devboard.services.global_context_service import GlobalContextService
 from devboard.services.project_service import ProjectService
@@ -88,7 +93,7 @@ specification document, tasks, and child initiatives.
 ## PROJECT SPECIFICATION
 
 The project specification is a living reference document shared as context with every task agent
-and initiative agent in the project. It gives agents (and human reviewers) rapid orientation —
+in the project. It gives agents (and human reviewers) rapid orientation —
 keep it accurate and concise, not exhaustive.
 
 **Recommended structure:**
@@ -117,55 +122,15 @@ from an initiative feed back into this project's specification.
 - The user describes a body of work spanning 3 or more related tasks with a clear sub-goal.
 - An investigation or discovery phase is likely to generate structured follow-up work.
 
-**How:** Use `create_initiative` to create one. After creating, help the user open it and set up
-its context document.
+**How:** Use `create_initiative` to create one. After creating, help the user set up its context
+document using `set_initiative_context_content`. To view or edit an existing initiative's context,
+use `view_initiative_details`, `edit_initiative_context`, or `set_initiative_context_content`.
+When an initiative is complete, use `complete_initiative`.
 
 ## LIFECYCLE
 
 When all active tasks and initiatives are complete with no obvious follow-ups, proactively ask the
 user: create follow-up work, or mark this project as complete? Use `complete_project` to finalise.
-
-{_VISUAL_CONTENT_SECTION}
-
-{_BEHAVIOUR_GUIDELINES_SECTION}
-
-{_TASK_CREATION_SECTION}
-"""
-
-INITIATIVE_ROLE_PROMPT = f"""\
-You are an Initiative Assistant for DevBoard, an AI-powered developer command center.
-An initiative is a **sub-project** focused on a specific scoped goal within a larger parent project.
-You help manage this initiative's context document, tasks, and progress toward its goal.
-
-## INITIATIVE CONTEXT DOCUMENT
-
-Your initiative context document captures initiative-specific goals, progress, and decisions.
-The parent project specification (provided in context) describes the broader project.
-
-You have separate, purpose-named tools for each document — you never pass a project id:
-- `edit_initiative_context` / `set_initiative_context_content` edit your own initiative's document.
-- `edit_project_specification` edits the parent project's specification.
-
-**Edit your own initiative context** for initiative-level detail and progress.
-**Update the parent project spec** only when feeding outcomes, key decisions, or follow-up work
-upward — for example when completing a significant milestone or wrapping up the initiative.
-Keep the parent project spec high-level; detailed initiative progress belongs in the initiative context.
-
-## SCOPE CONSTRAINTS
-
-Initiatives cannot have child initiatives (max nesting depth = 1). If the user identifies work
-that may warrant a sibling initiative under the parent project, communicate this — they can create
-it via the parent project agent.
-
-Scope tasks to this initiative's goal; keep the parent project specification high-level.
-
-## LIFECYCLE
-
-When all tasks are done with no obvious follow-ups in scope, proactively ask the user: create
-follow-up tasks, or mark this initiative as complete?
-
-Before completing: update the parent project spec with outcomes, key decisions, and any follow-up
-recommendations. Then call `complete_project` to finalise this initiative.
 
 {_VISUAL_CONTENT_SECTION}
 
@@ -208,7 +173,7 @@ def _format_task_table(tasks: list[Task]) -> str:
 
 
 def _format_initiatives_section(project: Project) -> str:
-    """Format the initiatives summary table for a root project."""
+    """Format the initiatives summary table for a project."""
     if not project.initiatives:
         return ""
     header = "ID|Name|Status|Tasks"
@@ -230,29 +195,10 @@ def build_project_context(
     spec_content = project.specification.content or _INITIAL_SETUP_GUIDANCE
     global_context_section = f"# Global Context\n<document>\n{global_context}\n</document>\n" if global_context else ""
 
-    parent_section = ""
-    if project.parent is not None:
-        parent_spec = project.parent.specification.content or "<empty>"
-        parent_section = f"""PARENT PROJECT: {project.parent.name} (ID: {project.parent.id})
-
-PARENT PROJECT SPECIFICATION DOCUMENT:
-<document>
-{parent_spec}
-</document>
-
-This is an initiative under the project above.
-
-"""
-
-    if project.is_initiative:
-        entity_label, document_label = "INITIATIVE", "INITIATIVE CONTEXT DOCUMENT"
-    else:
-        entity_label, document_label = "PROJECT", "PROJECT SPECIFICATION DOCUMENT"
-
     context = f"""
-{global_context_section}{parent_section}{entity_label}: {project.name} (ID: {project.id})
+{global_context_section}PROJECT: {project.name} (ID: {project.id})
 
-{document_label}:
+PROJECT SPECIFICATION DOCUMENT:
 <document>
 {spec_content}
 </document>
@@ -264,17 +210,15 @@ This is an initiative under the project above.
     if recent_completed_tasks:
         context += f"\nRECENTLY COMPLETED TASKS:\n{_format_task_table(recent_completed_tasks)}\n"
 
-    # A top-level project agent also sees a summary of its child initiatives.
-    if not project.is_initiative:
-        initiatives_section = _format_initiatives_section(project)
-        if initiatives_section:
-            context += f"\n{initiatives_section}"
+    initiatives_section = _format_initiatives_section(project)
+    if initiatives_section:
+        context += f"\n{initiatives_section}"
 
     return context
 
 
 class ProjectAgentRole(AgentRole):
-    """Role for project and initiative agents — manages specification, tasks, and lifecycle."""
+    """Role for project agents — manages specification, tasks, and lifecycle."""
 
     def __init__(
         self,
@@ -308,21 +252,26 @@ class ProjectAgentRole(AgentRole):
         ]
 
     def get_system_prompt(self) -> str:
-        if self.project.is_initiative:
-            return INITIATIVE_ROLE_PROMPT
         return PROJECT_ROLE_PROMPT
 
     def get_tools(self) -> list[Tool]:
         log_entry_repo = LogEntryRepository(self.document_repository.db)
         event_emitter = SystemEventEmitter(log_entry_repo)
-        project_repo = ProjectRepository(self.conversation_repo.db)
+        initiative_repo = InitiativeRepository(self.conversation_repo.db)
 
         tools: list[Tool] = [
-            *build_project_context_document_tools(
-                self.project,
+            # Project specification editing tools (bound directly to the project's spec document)
+            create_set_document_content_tool(
+                self.project.specification,
                 self.document_repository,
+                document_parent=self.project,
                 system_event_emitter=event_emitter,
-                include_set_content=True,
+            ),
+            create_document_edit_tool(
+                self.project.specification,
+                self.document_repository,
+                document_parent=self.project,
+                system_event_emitter=event_emitter,
             ),
             # Task query tools
             create_list_tasks_tool(self.project, self.task_service),
@@ -334,14 +283,16 @@ class ProjectAgentRole(AgentRole):
             create_get_task_agent_status_tool(self.project, self.task_service, self.conversation_repo),
             # Conversation analysis tool
             create_inspect_conversation_tool(self.conversation_repo),
-            # Lifecycle tool (available to both project and initiative agents)
+            # Project lifecycle tool
             create_complete_project_tool(self.project, self.project_service),
+            # Initiative management tools
+            create_create_initiative_tool(self.project, self.project_service),
+            create_list_project_initiatives_tool(self.project, initiative_repo),
+            create_view_initiative_details_tool(self.project, initiative_repo),
+            create_edit_initiative_context_tool(self.project, initiative_repo, self.document_repository),
+            create_set_initiative_context_content_tool(self.project, initiative_repo, self.document_repository),
+            create_complete_initiative_tool(self.project, initiative_repo, self.project_service),
         ]
-
-        # Root-project-only tools
-        if not self.project.is_initiative:
-            tools.append(create_create_initiative_tool(self.project, self.project_service))
-            tools.append(create_list_project_initiatives_tool(self.project, project_repo))
 
         # Context management tools (refocus/branch) require a conversation_id and service
         if self.conversation_id is not None and self.conversation_service is not None:

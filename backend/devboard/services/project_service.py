@@ -9,8 +9,10 @@ from typing import Any
 from devboard.agents.roles import AgentRoleType
 from devboard.db.models import ParentEntityType
 from devboard.db.models.document import DocumentType
+from devboard.db.models.initiative import Initiative
 from devboard.db.models.project import Project
 from devboard.db.repositories.document import DocumentRepository
+from devboard.db.repositories.initiative import InitiativeRepository
 from devboard.db.repositories.project import ProjectRepository
 from devboard.services.conversation_service import ConversationService
 from devboard.services.project_directory import ensure_project_directory
@@ -25,34 +27,20 @@ class ProjectService:
         conversation_service: ConversationService,
         document_repo: DocumentRepository,
         project_repo: ProjectRepository,
+        initiative_repo: InitiativeRepository,
         system_event_emitter: SystemEventEmitter,
     ):
         self.conversation_service = conversation_service
         self.document_repo = document_repo
         self.project_repo = project_repo
+        self.initiative_repo = initiative_repo
         self.system_event_emitter = system_event_emitter
-
-    def validate_parent(self, parent_project_id: int) -> None:
-        """Validate parent project constraints for a new initiative.
-
-        Args:
-            parent_project_id: ID of the proposed parent project
-
-        Raises:
-            ValueError: If the parent is invalid (not found, or itself an initiative)
-        """
-        parent = self.project_repo.get_by_id(parent_project_id)
-        if not parent:
-            raise ValueError(f"Parent project {parent_project_id} not found")
-        if parent.parent_project_id is not None:
-            raise ValueError("Cannot nest more than one level deep: the target parent is already an initiative")
 
     def create_project(
         self,
         name: str,
         description: str | None = None,
         custom_fields: dict[str, Any] | None = None,
-        parent_project_id: int | None = None,
     ) -> Project:
         """Create a new project with initial conversation.
 
@@ -63,25 +51,17 @@ class ProjectService:
             name: Project name
             description: Optional project description
             custom_fields: Optional custom field values
-            parent_project_id: Optional parent project ID (makes this an initiative)
 
         Returns:
             Created Project instance with active conversation
         """
-        if parent_project_id is not None:
-            self.validate_parent(parent_project_id)
+        specification_doc = self.document_repo.create(DocumentType.PROJECT_SPECIFICATION, "")
 
-        # Create specification/context document — type reflects whether this is an initiative
-        document_type = DocumentType.for_project(is_initiative=parent_project_id is not None)
-        specification_doc = self.document_repo.create(document_type, "")
-
-        # Create project using repository
         project = self.project_repo.create(
             name=name,
             description=description,
             specification=specification_doc,
             custom_fields=custom_fields,
-            parent_project_id=parent_project_id,
         )
 
         # Create project working directory eagerly
@@ -98,11 +78,43 @@ class ProjectService:
 
         return project
 
-    def complete_project(self, project: Project, summary: str) -> Project:
-        """Mark a project or initiative as complete.
+    def create_initiative(self, project_id: int, name: str, description: str) -> Initiative:
+        """Create a new initiative under a project.
 
         Args:
-            project: The project or initiative to complete
+            project_id: ID of the parent project
+            name: Initiative name
+            description: Initiative description
+
+        Returns:
+            Created Initiative instance
+
+        Raises:
+            ValueError: If the parent project is not found
+        """
+        project = self.project_repo.get_by_id(project_id)
+        if not project:
+            raise ValueError(f"Project {project_id} not found")
+
+        specification_doc = self.document_repo.create(DocumentType.INITIATIVE_CONTEXT, "")
+        initiative = self.initiative_repo.create(
+            name=name,
+            description=description,
+            specification=specification_doc,
+            project_id=project_id,
+        )
+        self.system_event_emitter.emit_initiative_created(initiative)
+        return initiative
+
+    def get_initiative(self, initiative_id: int) -> Initiative | None:
+        """Get an initiative by ID."""
+        return self.initiative_repo.get_by_id(initiative_id)
+
+    def complete_project(self, project: Project, summary: str) -> Project:
+        """Mark a project as complete.
+
+        Args:
+            project: The project to complete
             summary: A summary of what was accomplished
 
         Returns:
@@ -111,4 +123,19 @@ class ProjectService:
         project.complete = True
         updated = self.project_repo.update(project)
         self.system_event_emitter.emit_project_completed(updated, summary)
+        return updated
+
+    def complete_initiative(self, initiative: Initiative, summary: str) -> Initiative:
+        """Mark an initiative as complete.
+
+        Args:
+            initiative: The initiative to complete
+            summary: A summary of what was accomplished
+
+        Returns:
+            Updated Initiative instance with complete=True
+        """
+        initiative.complete = True
+        updated = self.initiative_repo.update(initiative)
+        self.system_event_emitter.emit_initiative_completed(updated, summary)
         return updated

@@ -46,23 +46,22 @@ def mock_task_in_initiative():
         status=TaskStatus.MERGED,
         specification_content="# Task Specification\n\nInitiative task content",
     )
-    # Set up the initiative (task.project) with a parent (root project)
-    root_project = Mock()
-    root_project.id = 10
-    root_project.name = "Root Project"
-    root_project.description = "The root project"
-    root_project.parent = None
-    root_project.is_initiative = False
-    root_project.specification = Mock()
-    root_project.specification.content = "# Root Spec\n\nRoot project overview."
-
-    task.project.id = 200
-    task.project.name = "My Initiative"
-    task.project.description = "An initiative under root project"
-    task.project.parent = root_project
-    task.project.is_initiative = True
+    # Project is the parent project
+    task.project.id = 10
+    task.project.name = "Root Project"
+    task.project.description = "The root project"
     task.project.specification = Mock()
-    task.project.specification.content = "## Overview\n\nInitiative overview.\n\nMore details here."
+    task.project.specification.content = "# Root Spec\n\nRoot project overview."
+
+    # Initiative is a separate entity linked to the task
+    initiative = Mock()
+    initiative.id = 200
+    initiative.name = "My Initiative"
+    initiative.description = "An initiative under root project"
+    initiative.specification = Mock()
+    initiative.specification.content = "## Overview\n\nInitiative overview.\n\nMore details here."
+    task.initiative = initiative
+    task.initiative_id = 200
     return task
 
 
@@ -133,14 +132,12 @@ class TestTaskFinalisationAgentRole:
 
     def test_get_tools_for_initiative_task_includes_both_context_tools(self, role, mock_task):
         """A task under an initiative can edit both the initiative's context and the parent project."""
-        parent = Mock()
-        parent_spec = Mock(spec=Document)
-        parent_spec.document_type = DocumentType.PROJECT_SPECIFICATION
-        parent_spec.content = "# Parent"
-        parent.specification = parent_spec
-        mock_task.project.is_initiative = True
-        mock_task.project.parent = parent
-        mock_task.project.specification.document_type = DocumentType.INITIATIVE_CONTEXT
+        initiative = Mock()
+        initiative_spec = Mock(spec=Document)
+        initiative_spec.document_type = DocumentType.INITIATIVE_CONTEXT
+        initiative_spec.content = "# Initiative"
+        initiative.specification = initiative_spec
+        mock_task.initiative = initiative
 
         tool_names = [tool.name for tool in role.get_tools()]
 
@@ -226,7 +223,7 @@ class TestTaskFinalisationAgentRole:
 
         content = await role.get_context_content()
 
-        assert "# Parent Project" in content
+        assert "# Project" in content
         assert "ID: 10" in content
         assert "Root Project" in content
         assert "## Project Specification" in content

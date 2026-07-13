@@ -1,4 +1,4 @@
-"""Tests for project/initiative agent context building and TaskService.get_project_task_summaries."""
+"""Tests for project agent context building and TaskService.get_project_task_summaries."""
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
@@ -6,18 +6,19 @@ from unittest.mock import Mock
 from pytest import fixture
 
 from devboard.agents.roles.project_agent import (
-    INITIATIVE_ROLE_PROMPT,
     PROJECT_ROLE_PROMPT,
     ProjectAgentRole,
     build_project_context,
 )
 from devboard.db.models import DocumentType, Project, Task
 from devboard.db.models.codebase import Codebase
+from devboard.db.models.initiative import Initiative
 from devboard.db.models.task import TaskStatus
 from devboard.db.repositories import (
     CodebaseRepository,
     ConversationRepository,
     DocumentRepository,
+    InitiativeRepository,
     ProjectRepository,
     TaskRepository,
 )
@@ -118,6 +119,33 @@ def _create_task(
     return task
 
 
+def _create_initiative(
+    db_session,
+    project_id: int,
+    name: str,
+    spec_content: str = "",
+    complete: bool = False,
+) -> Initiative:
+    """Create an Initiative linked to a project."""
+    initiative_repo = InitiativeRepository(db_session)
+    document_repo = DocumentRepository(db_session)
+    spec_doc = document_repo.create(
+        document_type=DocumentType.INITIATIVE_CONTEXT,
+        content=spec_content,
+    )
+    initiative = initiative_repo.create(
+        name=name,
+        description=f"{name} description",
+        specification=spec_doc,
+        project_id=project_id,
+    )
+    if complete:
+        initiative.complete = True
+    db_session.commit()
+    db_session.refresh(initiative)
+    return initiative
+
+
 class TestBuildProjectContext:
     """Tests for build_project_context function."""
 
@@ -174,6 +202,58 @@ class TestBuildProjectContext:
         assert "# Global Context" in context
         assert gc in context
         assert context.index("# Global Context") < context.index("PROJECT:")
+
+    def test_root_project_context_has_no_parent_framing(self, project_with_spec: Project):
+        """Root project context does not include parent project framing."""
+        context = build_project_context(project_with_spec, [], [])
+
+        assert "PARENT PROJECT:" not in context
+        assert "This is an initiative under" not in context
+        assert "INITIATIVE:" not in context
+        assert "PROJECT:" in context
+
+    def test_root_project_lists_initiatives_section(self, project_with_spec: Project, db_session):
+        """Root project context includes INITIATIVES section when initiatives exist."""
+        _create_initiative(db_session, project_id=project_with_spec.id, name="Initiative Alpha")
+        _create_initiative(db_session, project_id=project_with_spec.id, name="Initiative Beta", complete=True)
+        db_session.refresh(project_with_spec)
+
+        context = build_project_context(project_with_spec, [], [])
+
+        assert "INITIATIVES:" in context
+        assert "Initiative Alpha" in context
+        assert "Initiative Beta" in context
+        assert "|active|" in context
+        assert "|complete|" in context
+
+    def test_initiatives_section_shows_task_counts(
+        self, project_with_spec: Project, sample_codebase: Codebase, db_session
+    ):
+        """INITIATIVES section shows task count for each initiative."""
+        initiative = _create_initiative(db_session, project_id=project_with_spec.id, name="Counted Initiative")
+        # Create tasks belonging to this initiative
+        task_repo = TaskRepository(db_session)
+        document_repo = DocumentRepository(db_session)
+        for title in ("Task One", "Task Two"):
+            spec_doc = document_repo.create(DocumentType.TASK_SPECIFICATION, "")
+            task = task_repo.create(
+                project_id=project_with_spec.id,
+                title=title,
+                status=TaskStatus.PLANNING,
+                specification=spec_doc,
+                implementation_plan=None,
+                base_branch="main",
+                branch_name=f"feature/{title.lower().replace(' ', '-')}",
+                codebase_id=sample_codebase.id,
+            )
+            task.initiative_id = initiative.id
+        db_session.commit()
+        db_session.refresh(project_with_spec)
+
+        context = build_project_context(project_with_spec, [], [])
+
+        # Row format: ID|Name|Status|Tasks — task count should be 2
+        assert "|Counted Initiative|active|2" in context
 
 
 class TestGetProjectTaskSummaries:
@@ -276,129 +356,8 @@ class TestGetProjectTaskSummaries:
         assert other_task.id not in active_ids
 
 
-def _create_initiative(
-    db_session,
-    parent_project_id: int,
-    name: str,
-    spec_content: str = "",
-    complete: bool = False,
-) -> Project:
-    """Create an initiative (sub-project) linked to a parent project."""
-    project_repo = ProjectRepository(db_session)
-    document_repo = DocumentRepository(db_session)
-    spec_doc = document_repo.create(
-        document_type=DocumentType.INITIATIVE_CONTEXT,
-        content=spec_content,
-    )
-    initiative = project_repo.create(
-        name=name,
-        description=f"{name} description",
-        specification=spec_doc,
-        parent_project_id=parent_project_id,
-    )
-    if complete:
-        initiative.complete = True
-    db_session.commit()
-    db_session.refresh(initiative)
-    return initiative
-
-
-class TestBuildProjectContextInitiative:
-    """Tests for build_project_context with project hierarchy."""
-
-    def test_initiative_context_includes_parent_project_spec(self, project_with_spec: Project, db_session):
-        """Initiative context shows parent project spec and 'initiative under' framing."""
-        initiative = _create_initiative(
-            db_session,
-            parent_project_id=project_with_spec.id,
-            name="Auth Initiative",
-            spec_content="Initiative-specific goals here.",
-        )
-        db_session.refresh(initiative)
-
-        context = build_project_context(initiative, [], [])
-
-        assert "PARENT PROJECT:" in context
-        assert "Test Project" in context
-        assert "This is a test project specification." in context
-        assert "This is an initiative under the project above." in context
-        assert "INITIATIVE:" in context
-        assert "Auth Initiative" in context
-        assert "Initiative-specific goals here." in context
-
-    def test_root_project_context_has_no_parent_framing(self, project_with_spec: Project):
-        """Root project context does not include parent project framing."""
-        context = build_project_context(project_with_spec, [], [])
-
-        assert "PARENT PROJECT:" not in context
-        assert "This is an initiative under" not in context
-        assert "INITIATIVE:" not in context
-        assert "PROJECT:" in context
-
-    def test_initiative_tasks_listed_not_parent_tasks(
-        self, project_with_spec: Project, sample_codebase: Codebase, db_session
-    ):
-        """Initiative agent lists only its own tasks, not the parent project's tasks."""
-        initiative = _create_initiative(
-            db_session,
-            parent_project_id=project_with_spec.id,
-            name="Auth Initiative",
-        )
-        _create_task(db_session, project_with_spec.id, sample_codebase.id, "Parent Task", TaskStatus.PLANNING)
-        initiative_task = _create_task(
-            db_session, initiative.id, sample_codebase.id, "Initiative Task", TaskStatus.IMPLEMENTING
-        )
-
-        # Simulate TaskService.get_project_task_summaries called with initiative.id
-        context = build_project_context(initiative, [initiative_task], [])
-
-        assert "Initiative Task" in context
-        assert "Parent Task" not in context
-
-    def test_root_project_lists_initiatives_section(self, project_with_spec: Project, db_session):
-        """Root project context includes INITIATIVES section when child initiatives exist."""
-        _create_initiative(
-            db_session,
-            parent_project_id=project_with_spec.id,
-            name="Initiative Alpha",
-        )
-        _create_initiative(
-            db_session,
-            parent_project_id=project_with_spec.id,
-            name="Initiative Beta",
-            complete=True,
-        )
-        db_session.refresh(project_with_spec)
-
-        context = build_project_context(project_with_spec, [], [])
-
-        assert "INITIATIVES:" in context
-        assert "Initiative Alpha" in context
-        assert "Initiative Beta" in context
-        assert "|active|" in context
-        assert "|complete|" in context
-
-    def test_initiatives_section_shows_task_counts(
-        self, project_with_spec: Project, sample_codebase: Codebase, db_session
-    ):
-        """INITIATIVES section shows task count for each initiative."""
-        initiative = _create_initiative(
-            db_session,
-            parent_project_id=project_with_spec.id,
-            name="Counted Initiative",
-        )
-        _create_task(db_session, initiative.id, sample_codebase.id, "Task One", TaskStatus.PLANNING)
-        _create_task(db_session, initiative.id, sample_codebase.id, "Task Two", TaskStatus.IMPLEMENTING)
-        db_session.refresh(project_with_spec)
-
-        context = build_project_context(project_with_spec, [], [])
-
-        # Row format: ID|Name|Status|Tasks — task count should be 2
-        assert "|Counted Initiative|active|2" in context
-
-
 class TestProjectAgentRoleTools:
-    """Tests for ProjectAgentRole.get_tools() — verifies tool registration by agent type."""
+    """Tests for ProjectAgentRole.get_tools() — verifies tool registration."""
 
     def _make_role(self, project: Project, db_session) -> ProjectAgentRole:
         document_repo = Mock(spec=DocumentRepository)
@@ -417,8 +376,8 @@ class TestProjectAgentRoleTools:
             conversation_id=None,
         )
 
-    def test_root_project_get_tools_has_document_bound_spec_tools(self, project_with_spec: Project, db_session):
-        """Root project role uses document-bound spec tools (no project_id arg) with no duplicates."""
+    def test_project_get_tools_has_document_bound_spec_tools(self, project_with_spec: Project, db_session):
+        """Project role uses document-bound spec tools (no project_id arg) with no duplicates."""
         role = self._make_role(project_with_spec, db_session)
         tools = role.get_tools()
         names = [t.name for t in tools]
@@ -426,47 +385,32 @@ class TestProjectAgentRoleTools:
         assert "edit_project_specification" in names
         assert "set_project_specification_content" in names
 
-    def test_initiative_get_tools_has_own_context_and_parent_spec_tools(self, project_with_spec: Project, db_session):
-        """Initiative role edits its own context and parent spec with no duplicates."""
-        initiative = _create_initiative(
-            db_session,
-            parent_project_id=project_with_spec.id,
-            name="Test Initiative",
-        )
-        role = self._make_role(initiative, db_session)
-        names = [t.name for t in role.get_tools()]
-        assert len(names) == len(set(names)), f"Duplicate tool names: {[n for n in names if names.count(n) > 1]}"
-        # Its own initiative context document — set + edit
-        assert "edit_initiative_context" in names
-        assert "set_initiative_context_content" in names
-        # The parent project's specification — edit only (feed outcomes upward, don't wholesale replace)
-        assert "edit_project_specification" in names
-        assert "set_project_specification_content" not in names
-
-    def test_root_project_has_lifecycle_tools(self, project_with_spec: Project, db_session):
-        """Root project agent has complete_project, create_initiative, and list_project_initiatives tools."""
+    def test_project_has_lifecycle_tools(self, project_with_spec: Project, db_session):
+        """Project agent has complete_project, create_initiative, and list_project_initiatives tools."""
         role = self._make_role(project_with_spec, db_session)
         names = [t.name for t in role.get_tools()]
         assert "complete_project" in names
         assert "create_initiative" in names
         assert "list_project_initiatives" in names
 
-    def test_initiative_has_complete_tool_but_not_create_initiative(self, project_with_spec: Project, db_session):
-        """Initiative agent has complete_project but not create_initiative or list_project_initiatives."""
-        initiative = _create_initiative(
-            db_session,
-            parent_project_id=project_with_spec.id,
-            name="Test Initiative",
-        )
-        role = self._make_role(initiative, db_session)
+    def test_project_has_initiative_management_tools(self, project_with_spec: Project, db_session):
+        """Project agent has all initiative management tools."""
+        role = self._make_role(project_with_spec, db_session)
         names = [t.name for t in role.get_tools()]
-        assert "complete_project" in names
-        assert "create_initiative" not in names
-        assert "list_project_initiatives" not in names
+        assert "view_initiative_details" in names
+        assert "edit_initiative_context" in names
+        assert "set_initiative_context_content" in names
+        assert "complete_initiative" in names
+
+    def test_no_duplicate_tool_names(self, project_with_spec: Project, db_session):
+        """No duplicate tool names in the tool list."""
+        role = self._make_role(project_with_spec, db_session)
+        names = [t.name for t in role.get_tools()]
+        assert len(names) == len(set(names)), f"Duplicate tool names: {[n for n in names if names.count(n) > 1]}"
 
 
 class TestProjectAgentRoleGetSystemPrompt:
-    """Tests for ProjectAgentRole.get_system_prompt() branching."""
+    """Tests for ProjectAgentRole.get_system_prompt()."""
 
     def _make_role(self, project: Project, db_session) -> ProjectAgentRole:
         document_repo = Mock(spec=DocumentRepository)
@@ -485,17 +429,7 @@ class TestProjectAgentRoleGetSystemPrompt:
             conversation_id=None,
         )
 
-    def test_root_project_returns_project_prompt(self, project_with_spec: Project, db_session):
-        """Root project agent returns PROJECT_ROLE_PROMPT."""
+    def test_returns_project_prompt(self, project_with_spec: Project, db_session):
+        """Project agent always returns PROJECT_ROLE_PROMPT."""
         role = self._make_role(project_with_spec, db_session)
         assert role.get_system_prompt() == PROJECT_ROLE_PROMPT
-
-    def test_initiative_returns_initiative_prompt(self, project_with_spec: Project, db_session):
-        """Initiative agent returns INITIATIVE_ROLE_PROMPT."""
-        initiative = _create_initiative(
-            db_session,
-            parent_project_id=project_with_spec.id,
-            name="Test Initiative",
-        )
-        role = self._make_role(initiative, db_session)
-        assert role.get_system_prompt() == INITIATIVE_ROLE_PROMPT

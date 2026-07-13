@@ -14,6 +14,7 @@ from devboard.api.dependencies.repositories import (
     get_conversation_repository,
     get_custom_field_repository,
     get_document_repository,
+    get_initiative_repository,
     get_language_model_repository,
     get_log_entry_repository,
     get_mcp_server_repository,
@@ -30,6 +31,7 @@ from devboard.db.repositories import (
     ConversationRepository,
     CustomFieldRepository,
     DocumentRepository,
+    InitiativeRepository,
     LanguageModelRepository,
     LogEntryRepository,
     MCPServerRepository,
@@ -183,6 +185,7 @@ def get_project_service(
     conversation_service: ConversationService = Depends(get_conversation_service),
     document_repo: DocumentRepository = Depends(get_document_repository),
     project_repo: ProjectRepository = Depends(get_project_repository),
+    initiative_repo: InitiativeRepository = Depends(get_initiative_repository),
     system_event_emitter: SystemEventEmitter = Depends(get_system_event_emitter),
 ):
     """Get ProjectService instance."""
@@ -190,6 +193,7 @@ def get_project_service(
         conversation_service=conversation_service,
         document_repo=document_repo,
         project_repo=project_repo,
+        initiative_repo=initiative_repo,
         system_event_emitter=system_event_emitter,
     )
 

@@ -14,8 +14,6 @@ function makeProject(overrides: Partial<Project> & Pick<Project, 'id' | 'name'>)
     default_conversation_id: null,
     created_at: '2024-01-01T00:00:00Z',
     custom_fields: null,
-    parent_project_id: null,
-    parent_project_name: null,
     complete: false,
     ...overrides,
   }
@@ -46,12 +44,11 @@ function setupHandlers({
       return HttpResponse.json({ ...project, ...updates })
     }),
     http.post('*/api/projects', async ({ request }) => {
-      const body = await request.json() as { name: string; description: string; parent_project_id?: number | null }
+      const body = await request.json() as { name: string; description: string }
       return HttpResponse.json(makeProject({
         id: 99,
         name: body.name,
         description: body.description,
-        parent_project_id: body.parent_project_id ?? null,
       }))
     }),
   )
@@ -93,28 +90,6 @@ describe('ProjectsList', () => {
     expect(icons).toHaveLength(2)
   })
 
-  it('renders initiatives indented under their parent with amber arrow icon', async () => {
-    const projects = [
-      makeProject({ id: 1, name: 'Parent Project' }),
-      makeProject({ id: 2, name: 'Child Initiative', parent_project_id: 1, parent_project_name: 'Parent Project' }),
-    ]
-    setupHandlers({ activeProjects: projects })
-    renderProjectsList()
-
-    await waitFor(() => {
-      expect(screen.getByText('Parent Project')).toBeInTheDocument()
-      expect(screen.getByText('Child Initiative')).toBeInTheDocument()
-    })
-
-    // Parent has ◆ icon, initiative has ▸ icon
-    expect(screen.getByText('◆')).toBeInTheDocument()
-    expect(screen.getByText('▸')).toBeInTheDocument()
-
-    // Initiative card is indented (ml-8 wrapper)
-    const initiativeText = screen.getByText('Child Initiative')
-    const card = initiativeText.closest('[class*="ml-8"]')
-    expect(card).toBeInTheDocument()
-  })
 
   it('navigates to project when project card is clicked', async () => {
     const user = userEvent.setup()
@@ -138,7 +113,7 @@ describe('ProjectsList', () => {
     const activeProjects = [makeProject({ id: 1, name: 'Active Project' })]
     const completeProjects = [
       makeProject({ id: 2, name: 'Done Project', complete: true }),
-      makeProject({ id: 3, name: 'Done Initiative', complete: true, parent_project_id: 1, parent_project_name: 'Active Project' }),
+      makeProject({ id: 3, name: 'Another Done Project', complete: true }),
     ]
     setupHandlers({ activeProjects, completeProjects })
     renderProjectsList()
@@ -146,7 +121,7 @@ describe('ProjectsList', () => {
     await waitFor(() => {
       expect(screen.getByText('Active Project')).toBeInTheDocument()
       expect(screen.getByText('Done Project')).toBeInTheDocument()
-      expect(screen.getByText('Done Initiative')).toBeInTheDocument()
+      expect(screen.getByText('Another Done Project')).toBeInTheDocument()
     })
 
     // Completed section heading
@@ -155,19 +130,6 @@ describe('ProjectsList', () => {
     // Completed items have Restore buttons
     const restoreButtons = screen.getAllByText('Restore')
     expect(restoreButtons).toHaveLength(2)
-  })
-
-  it('completed initiative shows parent project name', async () => {
-    const completeProjects = [
-      makeProject({ id: 3, name: 'Done Initiative', complete: true, parent_project_id: 1, parent_project_name: 'Parent Project' }),
-    ]
-    setupHandlers({ completeProjects })
-    renderProjectsList()
-
-    await waitFor(() => {
-      expect(screen.getByText('Done Initiative')).toBeInTheDocument()
-      expect(screen.getByText('(Parent Project)')).toBeInTheDocument()
-    })
   })
 
   it('toggling complete on a project calls PATCH and refetches', async () => {
@@ -252,93 +214,42 @@ describe('ProjectsList', () => {
     expect(screen.getByText('Create New Project')).toBeInTheDocument()
   })
 
-  it('opens create initiative modal when Initiative button on project card is clicked', async () => {
+  it('creates a project with name and description in request', async () => {
     const user = userEvent.setup()
-    const projects = [makeProject({ id: 1, name: 'Parent Project' })]
-    setupHandlers({ activeProjects: projects })
-    renderProjectsList()
-
-    await waitFor(() => {
-      expect(screen.getByText('Parent Project')).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: /Initiative/i }))
-
-    // Modal should open with "Create Initiative" title
-    expect(screen.getByRole('heading', { name: 'Create Initiative' })).toBeInTheDocument()
-    // Parent Project should be pre-selected in the dropdown
-    const select = screen.getByRole('combobox')
-    expect((select as HTMLSelectElement).value).toBe('1')
-  })
-
-  it('parent project dropdown shows all top-level projects in create modal', async () => {
-    const user = userEvent.setup()
-    const projects = [
-      makeProject({ id: 1, name: 'Alpha Project' }),
-      makeProject({ id: 2, name: 'Beta Project' }),
-    ]
-    setupHandlers({ activeProjects: projects })
-    renderProjectsList()
-
-    await waitFor(() => {
-      expect(screen.getByText('Alpha Project')).toBeInTheDocument()
-    })
-
-    // Open create modal via "New Project" button
-    await user.click(screen.getByRole('button', { name: /New Project/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText('Create New Project')).toBeInTheDocument()
-    })
-
-    // Parent dropdown should list both projects
-    expect(screen.getByRole('option', { name: 'Alpha Project' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Beta Project' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: /None/ })).toBeInTheDocument()
-  })
-
-  it('creating an initiative includes parent_project_id in request', async () => {
-    const user = userEvent.setup()
-    const projects = [makeProject({ id: 1, name: 'Parent Project' })]
-    const requestBodies: { name: string; parent_project_id?: number | null }[] = []
+    const requestBodies: { name: string; description?: string }[] = []
 
     server.use(
       http.get('*/api/projects', ({ request }) => {
         const url = new URL(request.url)
         if (url.searchParams.get('complete') === 'true') return HttpResponse.json([])
-        return HttpResponse.json(projects)
+        return HttpResponse.json([])
       }),
       http.get('*/api/custom-fields/', () => HttpResponse.json([])),
       http.post('*/api/projects', async ({ request }) => {
-        const body = await request.json() as { name: string; parent_project_id?: number | null }
+        const body = await request.json() as { name: string; description?: string }
         requestBodies.push(body)
-        return HttpResponse.json(makeProject({ id: 10, name: body.name, parent_project_id: body.parent_project_id ?? null }))
+        return HttpResponse.json(makeProject({ id: 10, name: body.name }))
       }),
     )
 
     renderProjectsList()
 
     await waitFor(() => {
-      expect(screen.getByText('Parent Project')).toBeInTheDocument()
+      expect(screen.getByText('No projects yet')).toBeInTheDocument()
     })
 
-    // Click "Initiative" button on the project card
-    await user.click(screen.getByRole('button', { name: /Initiative/i }))
+    await user.click(screen.getByRole('button', { name: /New Project/i }))
+    await waitFor(() => expect(screen.getByText('Create New Project')).toBeInTheDocument())
 
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Create Initiative' })).toBeInTheDocument()
-    })
-
-    await user.type(screen.getByLabelText(/Name/i), 'My Initiative')
-    await user.click(screen.getByRole('button', { name: 'Create Initiative' }))
+    await user.type(screen.getByLabelText(/Name/i), 'My New Project')
+    const submitBtn = screen.getAllByRole('button', { name: 'Create Project' }).find(b => b.getAttribute('type') === 'submit')!
+    await user.click(submitBtn)
 
     await waitFor(() => {
       expect(requestBodies).toHaveLength(1)
-      expect(requestBodies[0].parent_project_id).toBe(1)
-      expect(requestBodies[0].name).toBe('My Initiative')
+      expect(requestBodies[0].name).toBe('My New Project')
     })
 
-    // Should navigate to the new project
     expect(mockNavigate).toHaveBeenCalledWith('/projects/10?tab=settings')
   })
 })

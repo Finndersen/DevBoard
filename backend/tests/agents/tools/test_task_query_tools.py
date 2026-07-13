@@ -41,9 +41,6 @@ def mock_project(mock_codebase):
     project.id = 1
     project.name = "Test Project"
     project.codebases = [mock_codebase]
-    project.parent_project_id = None
-    project.parent_project_name = None
-    project.is_initiative = False
     return project
 
 
@@ -54,6 +51,8 @@ def mock_task(mock_codebase, mock_project):
     task.id = 1
     task.project_id = 1
     task.project = mock_project
+    task.initiative = None
+    task.initiative_id = None
     task.title = "Implement feature X"
     task.status = TaskStatus.PLANNING
     task.created_at = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
@@ -150,7 +149,7 @@ class TestTaskToToonRecord:
             "status": "planning",
             "created_at": "2024-01-15T10:00:00+00:00",
             "project_id": 1,
-            "parent_project_id": None,
+            "initiative_id": None,
             "codebase": "backend",
             "branch": "implement-feature-x",
             "agent_running": False,
@@ -173,14 +172,14 @@ class TestTaskToToonRecord:
 
         assert result["custom_fields"] == "{}"
 
-    def test_initiative_task_includes_parent_project_id(self, mock_task):
-        """A task under an initiative reports its project's parent id."""
-        mock_task.project.parent_project_id = 3
+    def test_initiative_task_includes_initiative_id(self, mock_task):
+        """A task under an initiative reports its initiative_id."""
+        mock_task.initiative_id = 7
 
         result = _task_to_toon_record(mock_task)
 
         assert result["project_id"] == 1
-        assert result["parent_project_id"] == 3
+        assert result["initiative_id"] == 7
 
 
 class TestFormatTasksAsToon:
@@ -446,13 +445,10 @@ class TestCreateViewTaskDetailsTool:
     @pytest.mark.asyncio
     async def test_view_task_details_initiative_shows_project_and_initiative(self, mock_task_service, mock_task):
         """For a task under an initiative, both the initiative and its parent project are shown."""
-        initiative = mock_task.project
+        initiative = Mock()
         initiative.id = 7
         initiative.name = "My Initiative"
-        initiative.is_initiative = True
-        initiative.parent_project_id = 3
-        initiative.parent_project_name = "Parent Project"
-        mock_task.project_id = 7
+        mock_task.initiative = initiative
         mock_task_service.get_task_by_id.return_value = mock_task
 
         # Global access (project=None) so the scoped-project security check is skipped.
@@ -460,7 +456,7 @@ class TestCreateViewTaskDetailsTool:
         result = await tool.function(task_id=1)
 
         assert "**Initiative:** My Initiative (#7)" in result
-        assert "**Project:** Parent Project (#3)" in result
+        assert "**Project:** Test Project (#1)" in result
 
     @pytest.mark.asyncio
     async def test_view_task_details_with_all_fields(self, mock_project, mock_task_service, mock_task_with_details):

@@ -63,8 +63,6 @@ const mockProjects: Project[] = [
     default_conversation_id: 1,
     created_at: '2024-01-01T00:00:00Z',
     custom_fields: null,
-    parent_project_id: null,
-    parent_project_name: null,
     complete: false,
   },
   {
@@ -75,8 +73,6 @@ const mockProjects: Project[] = [
     default_conversation_id: 2,
     created_at: '2024-01-02T00:00:00Z',
     custom_fields: null,
-    parent_project_id: null,
-    parent_project_name: null,
     complete: false,
   },
 ]
@@ -153,7 +149,7 @@ export const handlers = [
   }),
 
   http.post('*/api/projects', async ({ request }) => {
-    const newProject = await request.json() as { name: string; description: string; parent_project_id?: number | null }
+    const newProject = await request.json() as { name: string; description: string }
     const now = new Date().toISOString()
     const project: Project = {
       id: Date.now(),
@@ -163,8 +159,6 @@ export const handlers = [
       default_conversation_id: null,
       created_at: now,
       custom_fields: null,
-      parent_project_id: newProject.parent_project_id ?? null,
-      parent_project_name: null,
       complete: false,
     }
     return HttpResponse.json(project)

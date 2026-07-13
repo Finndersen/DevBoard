@@ -13,7 +13,6 @@ from devboard.api.dependencies.entities import get_verified_task
 from devboard.api.dependencies.repositories import (
     get_conversation_repository,
     get_document_repository,
-    get_project_repository,
     get_task_repository,
     get_worktree_slot_repository,
 )
@@ -56,7 +55,6 @@ from devboard.db.models.task import Task, TaskStatus
 from devboard.db.repositories import (
     ConversationRepository,
     DocumentRepository,
-    ProjectRepository,
     TaskRepository,
     WorktreeSlotRepository,
 )
@@ -76,29 +74,18 @@ router = APIRouter()
 
 def _build_task_list_response(task: Task) -> TaskListResponse:
     """Build a TaskListResponse from a Task, populating initiative fields when applicable."""
-    project = task.project
-    # When the task's project is an initiative (has a parent), populate initiative fields
-    # and use the top-level project name for project_name.
-    if project.parent_project_id is not None:
-        project_name = project.parent.name if project.parent else project.name
-        initiative_id: int | None = project.id
-        initiative_name: str | None = project.name
-    else:
-        project_name = project.name
-        initiative_id = None
-        initiative_name = None
-
+    initiative = task.initiative
     return TaskListResponse(
         id=task.id,
         title=task.title,
         project_id=task.project_id,
-        project_name=project_name,
+        project_name=task.project.name,
         codebase_id=task.codebase_id,
         status=task.status,
         created_at=task.created_at,
         updated_at=task.updated_at,
-        initiative_id=initiative_id,
-        initiative_name=initiative_name,
+        initiative_id=initiative.id if initiative else None,
+        initiative_name=initiative.name if initiative else None,
     )
 
 
@@ -118,25 +105,12 @@ async def list_all_tasks(
     project_id: int | None = Query(None),
     status: list[TaskStatus] | None = Query(None),
     task_repo: TaskRepository = Depends(get_task_repository),
-    project_repo: ProjectRepository = Depends(get_project_repository),
 ) -> list[TaskListResponse]:
-    """Fetch all tasks across projects with optional project and status filtering.
-
-    When filtering by a top-level project_id, tasks from its initiatives are also included.
-    When filtering by an initiative project_id, only that initiative's tasks are returned.
-    """
-    include_initiative_tasks = False
-    if project_id is not None:
-        filtered_project = project_repo.get_by_id(project_id)
-        # Top-level projects (no parent) should also return tasks from their initiatives
-        if filtered_project is not None and filtered_project.parent_project_id is None:
-            include_initiative_tasks = True
-
+    """Fetch all tasks across projects with optional project and status filtering."""
     tasks = task_repo.get_list(
         project_id=project_id,
         statuses=status,
         with_project=True,
-        include_initiative_tasks=include_initiative_tasks,
     )
     return [_build_task_list_response(task) for task in tasks]
 

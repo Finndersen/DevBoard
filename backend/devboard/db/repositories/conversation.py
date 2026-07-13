@@ -31,6 +31,7 @@ class ConversationListRow(TypedDict):
     conversation: Conversation
     parent_entity_name: str
     project_name: str | None
+    initiative_name: str | None
 
 
 class NoActiveConversationError(Exception):
@@ -372,6 +373,7 @@ class ConversationRepository(BaseRepository[Conversation]):
             agent_role: Optional filter by agent role.
         """
         from devboard.db.models.codebase import Codebase
+        from devboard.db.models.initiative import Initiative
         from devboard.db.models.project import Project
         from devboard.db.models.task import Task, TaskStatus
 
@@ -379,6 +381,7 @@ class ConversationRepository(BaseRepository[Conversation]):
         ProjectAlias = aliased(Project)
         TaskProjectAlias = aliased(Project)
         CodebaseAlias = aliased(Codebase)
+        InitiativeAlias = aliased(Initiative)
 
         stmt = (
             select(
@@ -388,6 +391,7 @@ class ConversationRepository(BaseRepository[Conversation]):
                 CodebaseAlias.name.label("codebase_name"),
                 TaskAlias.status.label("task_status"),
                 TaskProjectAlias.name.label("task_project_name"),
+                InitiativeAlias.name.label("task_initiative_name"),
             )
             .outerjoin(
                 TaskAlias,
@@ -407,6 +411,10 @@ class ConversationRepository(BaseRepository[Conversation]):
             .outerjoin(
                 TaskProjectAlias,
                 TaskAlias.project_id == TaskProjectAlias.id,
+            )
+            .outerjoin(
+                InitiativeAlias,
+                TaskAlias.initiative_id == InitiativeAlias.id,
             )
             .where(
                 Conversation.parent_conversation_id.is_(None),
@@ -437,15 +445,22 @@ class ConversationRepository(BaseRepository[Conversation]):
             conversation = row[0]
             entity_type = conversation.parent_entity_type
             project_name: str | None = None
+            initiative_name: str | None = None
             if entity_type == ParentEntityType.TASK:
                 name = row.task_title or ""
                 project_name = row.task_project_name
+                initiative_name = row.task_initiative_name
             elif entity_type == ParentEntityType.PROJECT:
                 name = row.project_name or ""
             else:
                 name = row.codebase_name or ""
             result.append(
-                ConversationListRow(conversation=conversation, parent_entity_name=name, project_name=project_name)
+                ConversationListRow(
+                    conversation=conversation,
+                    parent_entity_name=name,
+                    project_name=project_name,
+                    initiative_name=initiative_name,
+                )
             )
         return result
 

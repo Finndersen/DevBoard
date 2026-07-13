@@ -1,6 +1,7 @@
 """Utility for emitting system LogEntry events for entity lifecycle operations."""
 
 from devboard.db.models.conversation import Conversation
+from devboard.db.models.initiative import Initiative
 from devboard.db.models.log_entry import LogEntry, LogEntrySource, LogEntryStatus
 from devboard.db.models.project import Project
 from devboard.db.models.task import Task
@@ -111,6 +112,30 @@ class SystemEventEmitter:
             pinned=False,
         )
 
+    def emit_initiative_created(self, initiative: Initiative) -> LogEntry:
+        """Emit an initiative.created event."""
+        return self.log_entry_repo.create(
+            source=LogEntrySource.SYSTEM,
+            type="initiative.created",
+            content=f"Initiative '{initiative.name}' was created",
+            project_id=initiative.project_id,
+            entry_metadata={"initiative_name": initiative.name},
+            status=LogEntryStatus.ACTIVE,
+            pinned=False,
+        )
+
+    def emit_initiative_completed(self, initiative: Initiative, summary: str) -> LogEntry:
+        """Emit an initiative.completed event."""
+        return self.log_entry_repo.create(
+            source=LogEntrySource.SYSTEM,
+            type="initiative.completed",
+            content=f"Initiative '{initiative.name}' was marked complete: {summary}",
+            project_id=initiative.project_id,
+            entry_metadata={"initiative_name": initiative.name, "summary": summary},
+            status=LogEntryStatus.ACTIVE,
+            pinned=False,
+        )
+
     def emit_agent_run_completed(
         self,
         conversation: Conversation,
@@ -157,11 +182,13 @@ class SystemEventEmitter:
             pinned=False,
         )
 
-    def emit_document_updated(self, document_parent: Task | Project, document_type: str, edit_summary: str) -> LogEntry:
+    def emit_document_updated(
+        self, document_parent: Task | Project | Initiative, document_type: str, edit_summary: str
+    ) -> LogEntry:
         """Emit a document.updated event.
 
         Args:
-            document_parent: The entity that owns the document (Task or Project)
+            document_parent: The entity that owns the document (Task, Project, or Initiative)
             document_type: The type of document being updated (e.g. "task_specification")
             edit_summary: A concise description of what was changed in the document
         """
@@ -172,6 +199,8 @@ class SystemEventEmitter:
             project_id = document_parent.project_id
         elif isinstance(document_parent, Project):
             project_id = document_parent.id
+        elif isinstance(document_parent, Initiative):
+            project_id = document_parent.project_id
 
         document_type_label = document_type.replace("_", " ").title()
         return self.log_entry_repo.create(

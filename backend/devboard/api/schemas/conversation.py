@@ -36,6 +36,7 @@ class ConversationResponse(BaseModel):
     created_at: datetime.datetime
     parent_entity_name: str | None = None
     project_name: str | None = None
+    initiative_name: str | None = None
 
     model_config = {"from_attributes": True}
 

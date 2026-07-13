@@ -15,7 +15,9 @@ from devboard.agents.tools.project_tools import (
 )
 from devboard.api.schemas import DocumentEdit
 from devboard.db.models import Codebase, Document, Project, Task, TaskStatus
+from devboard.db.models.initiative import Initiative
 from devboard.db.repositories.document import DocumentRepository
+from devboard.db.repositories.initiative import InitiativeRepository
 from devboard.db.repositories.project import ProjectRepository
 from devboard.services.task_service import TaskService
 
@@ -43,10 +45,6 @@ def mock_project(mock_codebase, mock_specification):
     project.description = "A test project description"
     project.codebases = [mock_codebase]
     project.specification = mock_specification
-    project.parent_project_id = None
-    project.parent = None
-    project.initiatives = []
-    project.is_initiative = False
     return project
 
 
@@ -55,6 +53,13 @@ def mock_project_repo(mock_project):
     repo = Mock(spec=ProjectRepository)
     repo.get_all.return_value = [mock_project]
     repo.get_by_id.return_value = mock_project
+    return repo
+
+
+@pytest.fixture
+def mock_initiative_repo():
+    repo = Mock(spec=InitiativeRepository)
+    repo.get_all.return_value = []
     return repo
 
 
@@ -90,11 +95,11 @@ def mock_completed_task():
 
 
 class TestListProjectsTool:
-    def test_returns_root_projects_only(self, mock_project_repo, mock_project):
+    def test_returns_all_projects(self, mock_project_repo, mock_project):
         tool = create_list_projects_tool(mock_project_repo)
         result = tool.function()
 
-        mock_project_repo.get_all.assert_called_once_with(root_only=True)
+        mock_project_repo.get_all.assert_called_once_with()
         data = json.loads(result)
         assert data == [
             {
@@ -126,18 +131,18 @@ class TestListProjectsTool:
 
 
 class TestListProjectInitiativesTool:
-    def test_returns_initiatives_for_project(self, mock_project, mock_project_repo):
-        initiative = Mock(spec=Project)
+    def test_returns_initiatives_for_project(self, mock_project, mock_initiative_repo):
+        initiative = Mock(spec=Initiative)
         initiative.id = 2
         initiative.name = "My Initiative"
         initiative.description = "Initiative description"
         initiative.complete = False
-        mock_project_repo.get_all.return_value = [initiative]
+        mock_initiative_repo.get_all.return_value = [initiative]
 
-        tool = create_list_project_initiatives_tool(mock_project, mock_project_repo)
+        tool = create_list_project_initiatives_tool(mock_project, mock_initiative_repo)
         result = tool.function()
 
-        mock_project_repo.get_all.assert_called_once_with(parent_project_id=mock_project.id)
+        mock_initiative_repo.get_all.assert_called_once_with(project_id=mock_project.id, complete=None)
         data = json.loads(result)
         assert data == [
             {
@@ -148,29 +153,29 @@ class TestListProjectInitiativesTool:
             }
         ]
 
-    def test_shows_complete_status(self, mock_project, mock_project_repo):
-        initiative = Mock(spec=Project)
+    def test_shows_complete_status(self, mock_project, mock_initiative_repo):
+        initiative = Mock(spec=Initiative)
         initiative.id = 3
         initiative.name = "Done Initiative"
-        initiative.description = None
+        initiative.description = "Done description"
         initiative.complete = True
-        mock_project_repo.get_all.return_value = [initiative]
+        mock_initiative_repo.get_all.return_value = [initiative]
 
-        tool = create_list_project_initiatives_tool(mock_project, mock_project_repo)
+        tool = create_list_project_initiatives_tool(mock_project, mock_initiative_repo)
         result = tool.function()
 
         data = json.loads(result)
         assert data[0]["status"] == "complete"
 
-    def test_returns_empty_list_when_no_initiatives(self, mock_project, mock_project_repo):
-        mock_project_repo.get_all.return_value = []
-        tool = create_list_project_initiatives_tool(mock_project, mock_project_repo)
+    def test_returns_empty_list_when_no_initiatives(self, mock_project, mock_initiative_repo):
+        mock_initiative_repo.get_all.return_value = []
+        tool = create_list_project_initiatives_tool(mock_project, mock_initiative_repo)
         result = tool.function()
 
         assert json.loads(result) == []
 
-    def test_tool_name(self, mock_project, mock_project_repo):
-        tool = create_list_project_initiatives_tool(mock_project, mock_project_repo)
+    def test_tool_name(self, mock_project, mock_initiative_repo):
+        tool = create_list_project_initiatives_tool(mock_project, mock_initiative_repo)
         assert tool.name == "list_project_initiatives"
 
 
@@ -184,9 +189,6 @@ class TestViewProjectDetailsTool:
             "id": 1,
             "name": "Test Project",
             "description": "A test project description",
-            "type": "project",
-            "parent_project": None,
-            "initiatives": [],
             "codebases": ["backend"],
             "specification_content": "# Project Spec\n\nThis is the project specification.",
             "active_tasks": [],
@@ -220,6 +222,16 @@ class TestViewProjectDetailsTool:
     def test_tool_name(self, mock_project_repo, mock_task_service):
         tool = create_view_project_details_tool(mock_project_repo, mock_task_service)
         assert tool.name == "view_project_details"
+
+    def test_no_parent_or_type_fields_in_response(self, mock_project_repo, mock_task_service):
+        """Response should not include old hierarchy fields (parent_project, type)."""
+        tool = create_view_project_details_tool(mock_project_repo, mock_task_service)
+        result = tool.function(project_id=1)
+
+        data = json.loads(result)
+        assert "parent_project" not in data
+        assert "type" not in data
+        assert "initiatives" not in data
 
 
 class TestEditProjectSpecificationTool:

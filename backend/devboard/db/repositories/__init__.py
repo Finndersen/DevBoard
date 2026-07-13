@@ -10,6 +10,7 @@ from .conversation import ConversationRepository
 from .custom_field import CustomFieldRepository
 from .document import DocumentRepository
 from .implementation_plan import TaskImplementationPlanRepository
+from .initiative import InitiativeRepository
 from .language_model import LanguageModelRepository
 from .log_entry import LogEntryRepository
 from .mcp_server import MCPServerRepository
@@ -31,6 +32,7 @@ __all__ = [
     "ConversationRepository",
     "DocumentRepository",
     "TaskImplementationPlanRepository",
+    "InitiativeRepository",
     "LanguageModelRepository",
     "MCPServerRepository",
     "OAuthRepository",

@@ -5,7 +5,7 @@ import { useAllTasks, useProjects, useRefetchOnViewActivation, useTaskCounts, us
 import { Button, Card, ErrorMessage } from '../components/ui'
 import { textColors, loadingSpinner, borderColors, statusColors, surfaces, hoverColors, projectColors, initiativeColors } from '../styles/designSystem'
 import { TaskStatus } from '../lib/api'
-import type { TaskListItem, Project } from '../lib/api'
+import type { TaskListItem } from '../lib/api'
 import { useGithubStore } from '../stores/githubStore'
 import ViewHeader from '../components/layout/ViewHeader'
 import { StatusIndicator, ReviewBadge } from '../components/github/PRStatusComponents'
@@ -20,21 +20,6 @@ const STATUS_LABELS: Partial<Record<TaskStatus, string>> = {
   [TaskStatus.MERGED]: 'Merged',
 }
 
-function getStatusColor(status: TaskStatus) {
-  switch (status) {
-    case TaskStatus.PLANNING:
-      return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
-    case TaskStatus.IMPLEMENTING:
-      return 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400'
-    case TaskStatus.PR_OPEN:
-      return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400'
-    case TaskStatus.MERGED:
-    case TaskStatus.COMPLETE:
-      return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-    default:
-      return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
-  }
-}
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -100,21 +85,6 @@ export default function TasksList() {
     if (!archivedLoadedRef.current) return
     refetchArchived()
   }, [archivedPage, selectedProjectId, refetchArchived])
-
-  // Group projects into top-level and initiatives for the filter dropdown
-  const { topLevelProjects, initiativesByParentId } = useMemo(() => {
-    if (!projects) return { topLevelProjects: [] as Project[], initiativesByParentId: new Map<number, Project[]>() }
-    const topLevel = projects.filter(p => !p.parent_project_id)
-    const byParent = new Map<number, Project[]>()
-    for (const p of projects) {
-      if (p.parent_project_id) {
-        const arr = byParent.get(p.parent_project_id) ?? []
-        arr.push(p)
-        byParent.set(p.parent_project_id, arr)
-      }
-    }
-    return { topLevelProjects: topLevel, initiativesByParentId: byParent }
-  }, [projects])
 
   // Group active tasks by status
   const taskGroups = useMemo(() => {
@@ -183,12 +153,9 @@ export default function TasksList() {
                 className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-white/[0.06] text-gray-900 dark:text-white min-w-[180px]"
               >
                 <option value="">All Projects</option>
-                {topLevelProjects.flatMap(project => [
-                  <option key={`project-${project.id}`} value={project.id}>◆ {project.name}</option>,
-                  ...(initiativesByParentId.get(project.id)?.map(initiative => (
-                    <option key={`initiative-${initiative.id}`} value={initiative.id}>  ▸ {initiative.name}</option>
-                  )) ?? []),
-                ])}
+                {(projects ?? []).map(project => (
+                  <option key={project.id} value={project.id}>◆ {project.name}</option>
+                ))}
               </select>
             </div>
             <Button onClick={handleCreateTask} icon={<PlusIcon />}>
@@ -253,22 +220,17 @@ export default function TasksList() {
                             <h4 className="font-medium text-gray-900 dark:text-white text-sm mb-2">
                               {task.title}
                             </h4>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
-                                {task.status}
-                              </span>
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className={`text-xs shrink-0 ${textColors.muted}`}>#{task.id}</span>
-                                {task.initiative_id ? (
-                                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0 max-w-[100px] truncate ${initiativeColors.badge}`} title={task.initiative_name ?? undefined}>
-                                    ▸ {task.initiative_name}
-                                  </span>
-                                ) : (
-                                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0 max-w-[100px] truncate ${projectColors.badge}`} title={task.project_name}>
-                                    ◆ {task.project_name}
-                                  </span>
+                            <div className="flex items-center justify-between gap-1 min-w-0">
+                              <div className="flex items-center gap-1 min-w-0 text-xs overflow-hidden">
+                                <span className={`${projectColors.icon} truncate max-w-[80px]`}>{task.project_name}</span>
+                                {task.initiative_id && (
+                                  <>
+                                    <span className={`shrink-0 ${textColors.muted}`}>›</span>
+                                    <span className={`${initiativeColors.icon} truncate max-w-[80px]`}>{task.initiative_name}</span>
+                                  </>
                                 )}
                               </div>
+                              <span className={`text-xs shrink-0 ${textColors.muted}`}>#{task.id}</span>
                             </div>
                             {pr && (
                               <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -347,14 +309,15 @@ export default function TasksList() {
                         <td className={`py-3 px-3 ${textColors.muted}`}>#{task.id}</td>
                         <td className={`py-3 px-3 ${textColors.primary}`}>{task.title}</td>
                         <td className={`py-3 px-3 ${textColors.secondary}`}>
-                          {task.initiative_id ? (
-                            <span>
-                              {task.project_name}
-                              <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full font-medium ${initiativeColors.badge}`}>
-                                ▸ {task.initiative_name}
-                              </span>
-                            </span>
-                          ) : task.project_name}
+                          <span className="flex items-center gap-1 text-xs">
+                            <span className={`${projectColors.icon} truncate max-w-[100px]`}>{task.project_name}</span>
+                            {task.initiative_id && (
+                              <>
+                                <span className={`shrink-0 ${textColors.muted}`}>›</span>
+                                <span className={`${initiativeColors.icon} truncate max-w-[100px]`}>{task.initiative_name}</span>
+                              </>
+                            )}
+                          </span>
                         </td>
                         <td className={`py-3 px-3 ${textColors.muted}`}>{formatDate(task.updated_at)}</td>
                       </tr>

@@ -84,8 +84,6 @@ export const createMockProject = (overrides = {}) => ({
   default_conversation_id: 1,
   created_at: '2024-01-01T00:00:00Z',
   custom_fields: null,
-  parent_project_id: null,
-  parent_project_name: null,
   complete: false,
   ...overrides,
 })

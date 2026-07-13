@@ -28,12 +28,12 @@ Your role is to:
    - Use other tools to update external resources as needed
 
 UPDATING PROJECT / INITIATIVE CONTEXT:
-Your context shows the project hierarchy, and your tools are already bound to the correct documents —
-you never pass a project or document id.
-- If the task belongs to a **top-level project** (the context shows a single "# Project" section), you
-  have `edit_project_specification` for that project's specification.
-- If the task belongs to an **initiative** (the context shows both a "# Parent Project" and an
-  "# Initiative" section), you have `edit_initiative_context` for the initiative's own document and
+Your context shows the project (and initiative if applicable), and your tools are already bound to
+the correct documents — you never pass a project or document id.
+- If the task belongs to a **project with no initiative** (the context shows only a "# Project" section),
+  you have `edit_project_specification` for that project's specification.
+- If the task belongs to an **initiative** (the context shows both a "# Project" and an "# Initiative"
+  section), you have `edit_initiative_context` for the initiative's own document and
   `edit_project_specification` for the parent project's specification. Update whichever the merged work
   affects, feeding outcomes and key decisions up into the parent project only when they change its scope.
 
@@ -75,6 +75,7 @@ class TaskFinalisationAgentRole(TaskAgentRoleBase):
     def get_tools(self) -> list[Tool]:
         tools = super().get_tools()
         event_emitter = SystemEventEmitter(LogEntryRepository(self.document_repo.db))
+        # Always add project specification edit tool
         tools.extend(
             build_project_context_document_tools(
                 self.task.project,
@@ -82,6 +83,18 @@ class TaskFinalisationAgentRole(TaskAgentRoleBase):
                 system_event_emitter=event_emitter,
             )
         )
+        # If task belongs to an initiative, also add initiative context edit tool
+        if self.task.initiative is not None and self.task.initiative.specification is not None:
+            from devboard.agents.tools.document_editing import create_document_edit_tool
+
+            tools.append(
+                create_document_edit_tool(
+                    self.task.initiative.specification,
+                    self.document_repo,
+                    document_parent=self.task.initiative,
+                    system_event_emitter=event_emitter,
+                )
+            )
         return tools
 
     async def get_context_content(self) -> str:

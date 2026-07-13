@@ -256,32 +256,32 @@ describe('TasksList', () => {
     })
   })
 
-  describe('Task card badges', () => {
-    it('shows purple project badge when task has no initiative', async () => {
+  describe('Task card project/initiative display', () => {
+    it('shows purple project name when task has no initiative', async () => {
       setupHandlers({
         activeTasks: [makeTaskListItem({ id: 10, title: 'Direct Task', status: TaskStatus.PLANNING, project_name: 'My Project', initiative_id: null, initiative_name: null })],
       })
       renderTasksList()
       await waitFor(() => expect(screen.getByText('Direct Task')).toBeInTheDocument())
-      // Purple badge with ◆ symbol
-      const badge = screen.getByTitle('My Project')
-      expect(badge).toBeInTheDocument()
-      expect(badge.textContent).toContain('◆')
-      expect(badge.className).toMatch(/purple/)
+      const projectName = screen.getAllByText('My Project')[0]
+      expect(projectName).toBeInTheDocument()
+      expect(projectName.className).toMatch(/purple/)
+      // No initiative separator
+      expect(screen.queryByText('›')).not.toBeInTheDocument()
     })
 
-    it('shows amber initiative badge when task is in an initiative', async () => {
+    it('shows amber initiative name when task is in an initiative', async () => {
       setupHandlers({
         activeTasks: [makeTaskListItem({ id: 10, title: 'Initiative Task', status: TaskStatus.PLANNING, project_name: 'Parent Project', initiative_id: 5, initiative_name: 'My Initiative' })],
       })
       renderTasksList()
       await waitFor(() => expect(screen.getByText('Initiative Task')).toBeInTheDocument())
-      // Amber badge with ▸ symbol and initiative name
-      const badge = screen.getByTitle('My Initiative')
-      expect(badge).toBeInTheDocument()
-      expect(badge.textContent).toContain('▸')
-      expect(badge.textContent).toContain('My Initiative')
-      expect(badge.className).toMatch(/amber/)
+      // Both project and initiative inline text present
+      expect(screen.getByText('Parent Project')).toBeInTheDocument()
+      expect(screen.getByText('›')).toBeInTheDocument()
+      const initiativeName = screen.getByText('My Initiative')
+      expect(initiativeName).toBeInTheDocument()
+      expect(initiativeName.className).toMatch(/amber/)
     })
   })
 
@@ -332,12 +332,12 @@ describe('TasksList', () => {
       })
     })
 
-    it('renders initiatives indented under their parent projects in the filter dropdown', async () => {
-      const projectsWithHierarchy: Project[] = [
-        { id: 1, name: 'Top Project', specification_document_id: 1, description: '', default_conversation_id: null, created_at: '2026-01-01T00:00:00Z', custom_fields: null, parent_project_id: null, parent_project_name: null, complete: false },
-        { id: 2, name: 'Sub Initiative', specification_document_id: 2, description: '', default_conversation_id: null, created_at: '2026-01-01T00:00:00Z', custom_fields: null, parent_project_id: 1, parent_project_name: 'Top Project', complete: false },
+    it('renders all projects as a flat list in the filter dropdown', async () => {
+      const projects: Project[] = [
+        { id: 1, name: 'Alpha Project', specification_document_id: 1, description: '', default_conversation_id: null, created_at: '2026-01-01T00:00:00Z', custom_fields: null, complete: false },
+        { id: 2, name: 'Beta Project', specification_document_id: 2, description: '', default_conversation_id: null, created_at: '2026-01-01T00:00:00Z', custom_fields: null, complete: false },
       ]
-      setupHandlers({ projects: projectsWithHierarchy })
+      setupHandlers({ projects })
       renderTasksList()
 
       await waitFor(() => expect(screen.getByText('Planning Task')).toBeInTheDocument())
@@ -346,14 +346,15 @@ describe('TasksList', () => {
       const options = select.querySelectorAll('option')
       const optionTexts = Array.from(options).map(o => o.textContent ?? '')
 
-      // Top-level project comes before initiative
-      const topIdx = optionTexts.findIndex(t => t.includes('Top Project'))
-      const subIdx = optionTexts.findIndex(t => t.includes('Sub Initiative'))
-      expect(topIdx).toBeGreaterThan(-1)
-      expect(subIdx).toBeGreaterThan(topIdx)
-      // Top-level has ◆ prefix, initiative has ▸ prefix
-      expect(optionTexts[topIdx]).toContain('◆')
-      expect(optionTexts[subIdx]).toContain('▸')
+      // Both projects appear in the dropdown
+      const alphaIdx = optionTexts.findIndex(t => t.includes('Alpha Project'))
+      const betaIdx = optionTexts.findIndex(t => t.includes('Beta Project'))
+      expect(alphaIdx).toBeGreaterThan(-1)
+      expect(betaIdx).toBeGreaterThan(-1)
+      expect(optionTexts[alphaIdx]).toContain('◆')
+      expect(optionTexts[betaIdx]).toContain('◆')
+      // No ▸ prefix in any option
+      expect(optionTexts.every(t => !t.includes('▸'))).toBe(true)
     })
   })
 })

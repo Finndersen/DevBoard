@@ -9,7 +9,7 @@ from devboard.db.models.task import TaskStatus
 
 
 def _make_mock_task(*, in_initiative: bool = False) -> MagicMock:
-    """Create a mock task. If in_initiative=True, task.project has a parent project."""
+    """Create a mock task. If in_initiative=True, task has an initiative with a parent project."""
     task = MagicMock()
     task.title = "Test Task Title"
     task.status = TaskStatus.PLANNING
@@ -24,30 +24,24 @@ def _make_mock_task(*, in_initiative: bool = False) -> MagicMock:
     task.implementation_plan_structured = None
 
     if in_initiative:
-        parent_project = MagicMock()
-        parent_project.id = 10
-        parent_project.name = "Root Project"
-        parent_project.description = "Root project description"
-        parent_project.specification.content = "# Root Spec\n\nRoot project content."
-        parent_project.parent = None  # root has no parent
+        task.project.id = 10
+        task.project.name = "Root Project"
+        task.project.description = "Root project description"
+        task.project.specification.content = "# Root Spec\n\nRoot project content."
 
         initiative = MagicMock()
         initiative.id = 20
         initiative.name = "My Initiative"
         initiative.description = "Initiative description"
         initiative.specification.content = "## Overview\n\nInitiative overview paragraph.\n\nMore details here."
-        initiative.parent = parent_project
-        initiative.is_initiative = True
-        parent_project.is_initiative = False
 
-        task.project = initiative
+        task.initiative = initiative
     else:
         task.project.id = 1
         task.project.name = "Test Project"
         task.project.description = "Test project description"
         task.project.specification.content = "# Project Spec\n\nProject content."
-        task.project.parent = None
-        task.project.is_initiative = False
+        task.initiative = None
 
     return task
 
@@ -418,55 +412,52 @@ class TestBuildTaskContext:
         assert "# Global Context" not in result
 
     def _make_initiative(self, mock_task: MagicMock) -> None:
-        """Reconfigure the mock task's project to be an initiative under a parent project."""
-        parent = MagicMock()
-        parent.name = "Parent Project"
-        parent.description = "The parent project"
-        parent.specification.content = "# Parent Spec\n\nParent content."
-        mock_task.project.name = "Test Initiative"
-        mock_task.project.description = "A test initiative"
-        mock_task.project.is_initiative = True
-        mock_task.project.parent = parent
+        """Add an initiative to the mock task."""
+        initiative = MagicMock()
+        initiative.name = "Test Initiative"
+        initiative.description = "A test initiative"
+        initiative.specification.content = "# Initiative\n\nInitiative content."
+        mock_task.initiative = initiative
 
-    def test_initiative_renders_parent_and_initiative_blocks(self, mock_task: MagicMock):
-        """An initiative task shows a Parent Project block and an Initiative block with its context."""
+    def test_initiative_renders_project_and_initiative_blocks(self, mock_task: MagicMock):
+        """A task with an initiative shows a Project block and an Initiative block."""
         self._make_initiative(mock_task)
         result = build_task_context(mock_task, working_dir="/tmp/worktree/test")
 
-        assert "# Parent Project" in result
+        assert "# Project" in result
         assert "# Initiative" in result
-        assert "Parent content." in result
-        assert "## Initiative Context" in result
         assert "Project content." in result
-        # Parent block precedes the initiative block
-        assert result.index("# Parent Project") < result.index("# Initiative")
+        assert "## Initiative Context" in result
+        assert "Initiative content." in result
+        # Project block precedes the initiative block
+        assert result.index("# Project") < result.index("# Initiative")
 
     def test_initiative_excludes_specifications_when_disabled(self, mock_task: MagicMock):
-        """Disabling project specification hides both the parent and initiative documents."""
+        """Disabling project specification hides both the project and initiative documents."""
         self._make_initiative(mock_task)
         result = build_task_context(mock_task, working_dir="/tmp/worktree/test", include_project_specification=False)
 
-        assert "# Parent Project" in result
+        assert "# Project" in result
         assert "# Initiative" in result
         assert "## Initiative Context" not in result
         assert "## Project Specification" not in result
-        assert "Parent content." not in result
+        assert "Project content." not in result
 
 
 class TestBuildTaskContextInitiative:
-    """Tests for build_task_context when task belongs to an initiative (sub-project)."""
+    """Tests for build_task_context when task belongs to an initiative."""
 
-    def test_metadata_includes_root_project_and_initiative(self, mock_task_in_initiative: MagicMock):
+    def test_metadata_includes_project_and_initiative(self, mock_task_in_initiative: MagicMock):
         result = build_task_context(mock_task_in_initiative, working_dir="/tmp/worktree/test")
 
-        assert "# Parent Project" in result
+        assert "# Project" in result
         assert "ID: 10" in result
         assert "Name: Root Project" in result
         assert "# Initiative" in result
         assert "ID: 20" in result
         assert "Name: My Initiative" in result
 
-    def test_full_spec_includes_both_root_and_initiative_specs(self, mock_task_in_initiative: MagicMock):
+    def test_full_spec_includes_both_project_and_initiative_specs(self, mock_task_in_initiative: MagicMock):
         result = build_task_context(mock_task_in_initiative, working_dir="/tmp/worktree/test")
 
         assert "## Project Specification" in result
@@ -489,7 +480,7 @@ class TestBuildTaskContextInitiative:
         assert "More details here." not in result
 
     def test_no_spec_flag_skips_initiative_summary_when_spec_empty(self, mock_task_in_initiative: MagicMock):
-        mock_task_in_initiative.project.specification.content = None
+        mock_task_in_initiative.initiative.specification.content = None
         result = build_task_context(
             mock_task_in_initiative, working_dir="/tmp/worktree/test", include_project_specification=False
         )
@@ -498,7 +489,7 @@ class TestBuildTaskContextInitiative:
         assert "## Initiative Context" not in result
 
     def test_no_spec_flag_skips_initiative_summary_when_spec_only_headings(self, mock_task_in_initiative: MagicMock):
-        mock_task_in_initiative.project.specification.content = "# Overview\n\n## Details"
+        mock_task_in_initiative.initiative.specification.content = "# Overview\n\n## Details"
         result = build_task_context(
             mock_task_in_initiative, working_dir="/tmp/worktree/test", include_project_specification=False
         )
@@ -514,14 +505,14 @@ class TestBuildTaskContextInitiative:
     def test_section_order_with_initiative(self, mock_task_in_initiative: MagicMock):
         result = build_task_context(mock_task_in_initiative, working_dir="/tmp/worktree/test")
 
-        parent_pos = result.find("# Parent Project")
+        project_pos = result.find("# Project")
         project_spec_pos = result.find("## Project Specification")
         initiative_context_pos = result.find("## Initiative Context")
         codebase_pos = result.find("# Codebase")
         task_pos = result.find("# Task")
         task_spec_pos = result.find("## Task Specification")
 
-        assert parent_pos < project_spec_pos < initiative_context_pos < codebase_pos < task_pos < task_spec_pos
+        assert project_pos < project_spec_pos < initiative_context_pos < codebase_pos < task_pos < task_spec_pos
 
     def test_initiative_overview_appears_before_codebase(self, mock_task_in_initiative: MagicMock):
         result = build_task_context(

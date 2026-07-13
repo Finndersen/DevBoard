@@ -14,15 +14,12 @@ export interface Project {
   default_conversation_id: number | null
   created_at: string
   custom_fields: Record<string, unknown> | null
-  parent_project_id: number | null
-  parent_project_name: string | null
   complete: boolean
 }
 
 export interface ProjectCreate {
   name: string
   description: string
-  parent_project_id?: number | null
   custom_fields?: Record<string, unknown> | null
 }
 
@@ -809,6 +806,7 @@ export interface ConversationResponse {
   created_at: string
   parent_entity_name: string | null
   project_name: string | null
+  initiative_name: string | null
 }
 
 export interface CreateConversationResponse extends ConversationResponse {
@@ -1109,9 +1107,8 @@ export class ApiClient {
   }
 
   // Projects
-  async getProjects(params?: { parentProjectId?: number; complete?: boolean }): Promise<Project[]> {
+  async getProjects(params?: { complete?: boolean }): Promise<Project[]> {
     const searchParams = new URLSearchParams()
-    if (params?.parentProjectId !== undefined) searchParams.set('parent_project_id', String(params.parentProjectId))
     if (params?.complete !== undefined) searchParams.set('complete', String(params.complete))
     const query = searchParams.toString()
     return this.request<Project[]>(`/api/projects${query ? `?${query}` : ''}`)

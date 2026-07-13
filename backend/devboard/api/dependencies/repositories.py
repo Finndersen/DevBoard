@@ -13,6 +13,7 @@ from devboard.db.repositories import (
     ConversationRepository,
     CustomFieldRepository,
     DocumentRepository,
+    InitiativeRepository,
     LanguageModelRepository,
     LogEntryRepository,
     MCPServerRepository,
@@ -45,6 +46,11 @@ def get_document_repository(db: Session = Depends(get_db)) -> DocumentRepository
 def get_project_repository(db: Session = Depends(get_db)) -> ProjectRepository:
     """Get ProjectRepository instance."""
     return ProjectRepository(db)
+
+
+def get_initiative_repository(db: Session = Depends(get_db)) -> InitiativeRepository:
+    """Get InitiativeRepository instance."""
+    return InitiativeRepository(db)
 
 
 def get_task_repository(db: Session = Depends(get_db)) -> TaskRepository:

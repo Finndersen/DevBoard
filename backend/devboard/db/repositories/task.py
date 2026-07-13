@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
-from devboard.db.models import Codebase, Conversation, Document, ParentEntityType, Project, Task, TaskStatus
+from devboard.db.models import Codebase, Conversation, Document, Initiative, ParentEntityType, Task, TaskStatus
 from devboard.db.models.implementation_plan import ImplementationPlan
 from devboard.db.repositories.base import BaseRepository
 
@@ -103,9 +103,9 @@ class TaskRepository(BaseRepository[Task]):
         Args:
             project_id: Optional project ID to filter by
             statuses: Optional list of task statuses to filter by
-            with_project: If True, eager load project (and its parent) relationship
+            with_project: If True, eager load the project relationship
             include_initiative_tasks: If True and project_id is set, also include tasks
-                from initiatives (sub-projects) under the given project_id
+                from initiatives under the given project_id
             order_by_updated_desc: If True, order results by updated_at descending
             limit: Optional maximum number of results to return
         """
@@ -115,7 +115,7 @@ class TaskRepository(BaseRepository[Task]):
                 stmt = stmt.where(
                     or_(
                         Task.project_id == project_id,
-                        Task.project.has(Project.parent_project_id == project_id),
+                        Task.initiative.has(Initiative.project_id == project_id),
                     )
                 )
             else:
@@ -123,7 +123,7 @@ class TaskRepository(BaseRepository[Task]):
         if statuses:
             stmt = stmt.where(Task.status.in_(statuses))
         if with_project:
-            stmt = stmt.options(joinedload(Task.project).joinedload(Project.parent))
+            stmt = stmt.options(joinedload(Task.project))
         if order_by_updated_desc:
             stmt = stmt.order_by(Task.updated_at.desc())
         if limit is not None:
@@ -216,7 +216,7 @@ class TaskRepository(BaseRepository[Task]):
 
         offset = (page - 1) * page_size
         data_stmt = (
-            base_stmt.options(joinedload(Task.project).joinedload(Project.parent))
+            base_stmt.options(joinedload(Task.project), joinedload(Task.initiative))
             .order_by(Task.created_at.desc())
             .offset(offset)
             .limit(page_size)

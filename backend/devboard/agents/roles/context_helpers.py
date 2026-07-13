@@ -7,20 +7,30 @@ agent roles use to build their context content consistently.
 import logfire
 
 from devboard.db.models import Project, Task
+from devboard.db.models.initiative import Initiative
 
 
-def _format_project_context(project: Project, *, header: str, include_specification: bool) -> str:
-    """Format a project (or initiative) block: id, name, description, and optionally its document.
-
-    The document heading reflects the entity kind — "Initiative Context" for an initiative,
-    "Project Specification" for a top-level project — so the two concepts stay distinct to the agent.
-    The ID is included so agents can reference the correct entity.
-    """
-    lines = [f"# {header}", f"ID: {project.id}", f"Name: {project.name}", f"Description: {project.description}"]
+def _format_project_section(project: Project, *, include_specification: bool) -> str:
+    """Format the project metadata block, optionally including the specification document."""
+    lines = ["# Project", f"ID: {project.id}", f"Name: {project.name}", f"Description: {project.description}"]
     section = "\n".join(lines)
     if include_specification:
-        doc_title = "Initiative Context" if project.is_initiative else "Project Specification"
-        section += "\n\n" + _format_document_section(f"## {doc_title}", project.specification.content)
+        section += "\n\n" + _format_document_section("## Project Specification", project.specification.content)
+    return section
+
+
+def _format_initiative_section(initiative: Initiative, *, include_specification: bool) -> str:
+    """Format the initiative metadata block, optionally including the context document."""
+    lines = [
+        "# Initiative",
+        f"ID: {initiative.id}",
+        f"Name: {initiative.name}",
+        f"Description: {initiative.description}",
+    ]
+    section = "\n".join(lines)
+    if include_specification:
+        spec_content = initiative.specification.content if initiative.specification else None
+        section += "\n\n" + _format_document_section("## Initiative Context", spec_content)
     return section
 
 
@@ -35,8 +45,8 @@ def _extract_first_paragraph(content: str | None) -> str:
     return ""
 
 
-def _format_initiative_summary(initiative: Project) -> str:
-    """Format a brief initiative spec overview (first paragraph only) for implementation agents."""
+def _format_initiative_overview(initiative: Initiative) -> str:
+    """Format a brief initiative overview (first paragraph only) for implementation agents."""
     spec_content = initiative.specification.content if initiative.specification else None
     overview = _extract_first_paragraph(spec_content)
     if not overview:
@@ -201,7 +211,9 @@ def build_task_context(
         task: Task instance with eager-loaded relationships
         working_dir: Working directory path for the task's codebase
         global_context: Optional workspace-level global context to prepend
-        include_project_specification: Whether to include the full project specification document
+        include_project_specification: Whether to include the full project and initiative
+            specification documents. When False and task has an initiative, a brief
+            initiative overview (first paragraph) is included instead.
         include_step_outcomes: Whether to include full step outcomes in the structured plan
         include_implementation_plan: Whether to include the implementation plan section
         include_step_status: Whether to include step status in the structured plan summary
@@ -217,28 +229,20 @@ def build_task_context(
 
     sections.append("You are working on a task associated with a project and a codebase repository.")
 
-    project = task.project
-    if project.parent is not None:
+    sections.append(_format_project_section(task.project, include_specification=include_project_specification))
+
+    if task.initiative is not None:
         sections.append(
-            _format_project_context(
-                project.parent, header="Parent Project", include_specification=include_project_specification
-            )
-        )
-        sections.append(
-            _format_project_context(project, header="Initiative", include_specification=include_project_specification)
-        )
-    else:
-        sections.append(
-            _format_project_context(project, header="Project", include_specification=include_project_specification)
+            _format_initiative_section(task.initiative, include_specification=include_project_specification)
         )
 
     if task.custom_fields:
         sections.append(_format_custom_fields(task))
 
-    if not include_project_specification and project.parent is not None:
-        summary = _format_initiative_summary(project)
-        if summary:
-            sections.append(summary)
+    if not include_project_specification and task.initiative is not None:
+        overview = _format_initiative_overview(task.initiative)
+        if overview:
+            sections.append(overview)
 
     sections.append(_format_codebase_info(task, working_dir))
     sections.append(_format_task_metadata(task))
